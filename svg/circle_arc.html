@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Html5 Canvas</title>
+    <meta charset="utf-8">
+    <style type="text/css">
+    </style>
+    <script type="text/javascript">
+var arc={
+    cx:150, cy:150,
+    innerRadius:40, outerRadius:50,
+    startAngle:((176 +90)* Math.PI) / 180, endAngle:((207+90) * Math.PI) / 180
+}
+
+
+function drawArc(a, fill, stroke, strokewidth) {
+    var ctx = document.getElementById('myCanvas').getContext("2d");
+    ctx.beginPath();
+
+    // Swap startAngle and endAngle to draw in the opposite direction
+    ctx.arc(a.cx, a.cy, a.outerRadius, a.startAngle, a.endAngle, true);
+    ctx.arc(a.cx, a.cy, a.innerRadius, a.endAngle, a.startAngle);
+
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = strokewidth;
+    ctx.fill();
+    ctx.stroke();
+    // Set the dash pattern
+    ctx.setLineDash([5, 2]);
+
+    // Draw a dash line from the center to the outer radius at the start angle
+    ctx.moveTo(a.cx, a.cy);
+    ctx.lineTo(
+        a.cx + Math.cos(a.startAngle) * (a.outerRadius * 2),
+        a.cy + Math.sin(a.startAngle) * (a.outerRadius * 2)
+    );
+
+    // Draw a dash line from the center to the outer radius at the end angle
+    ctx.moveTo(a.cx, a.cy);
+    ctx.lineTo(
+        a.cx + Math.cos(a.endAngle) * (a.outerRadius * 2),
+        a.cy + Math.sin(a.endAngle) * (a.outerRadius * 2)
+    );
+
+    ctx.stroke();
+
+    // Reset the dash pattern to default (solid line)
+    ctx.setLineDash([]);
+}
+
+    </script>
+ 
+</head>
+<body onload="drawArc(arc,'#F4DA48','black',1);">
+ 
+    <canvas id="myCanvas" height="480" width="640">
+    </canvas>
+</body> 
+</html>

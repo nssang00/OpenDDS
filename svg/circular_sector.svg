@@ -1,0 +1,15 @@
+
+<svg width="500" height="500" viewBox="0 0 500 500"
+     xmlns="http://www.w3.org/2000/svg" version="1.1">
+
+<g transform="translate(100,100)" stroke="#000" stroke-width="2">
+  <path d="M300,200 h-150 a150,150 0 1,0 150,-150 z" fill="red"  />
+
+<path d="M0 0 70-70A99 99 0 0 1 70 70Z" fill="#dd0"/>
+
+<path d="M100 190A90 90 0 0 136.360389709472656 163.6396026611328L100 100z" fill="#dd0"/>
+
+<path d="M100,100 L200,100 A100,100 0 0,1 100,200 Z" fill="none" stroke="black" />
+
+</g>
+</svg>
