@@ -1,0 +1,15 @@
+union MyUnion switch (long) {
+    case 1:
+      long long_branch;
+    case 3:
+      float float_branch;
+    case 4:
+      char  char_branch;
+};
+
+
+//<union_def> ::= "union" <identifier> "switch" "(" <switch_type_spec> ")" "{" <switch_body> "}"
+(51) <switch_type_spec> ::= <integer_type> | <char_type> | <boolean_type> | <scoped_name>
+(52) <switch_body> ::= <case>+
+(53) <case> ::= <case_label>+ <type_spec> <declarator> ";"
+(54) <case_label> ::= "case" <const_expr> ":" | "default" ":"
