@@ -1,0 +1,11 @@
+/*  This file was automatically generated.
+     Modify the type definition to fit your needs
+*/
+union UnionType switch (long) {
+ case 11:
+    long long_data;
+ case 22:
+    float float_data;
+ case 33:
+    string<255> string_data;
+};
