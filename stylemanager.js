@@ -1,22 +1,47 @@
-// XML 예제
-// <Layers>
-//   <Layer id="1" name="Layer1">
-//     <Style color="red" width="2"/>
-//   </Layer>
-//   <Layer id="2" name="Layer2">
-//     <Style color="blue" width="3"/>
-//   </Layer>
-// </Layers>
+function parseXML(xmlString) {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+  return xmlDoc;
+}
+
+function getLayersAndStyles(xmlDoc) {
+  const layers = xmlDoc.getElementsByTagName("Layer");
+  const styles = xmlDoc.getElementsByTagName("Style");
+
+  // 레이어와 스타일 정보 파싱 로직 구현
+  // 예: 각 레이어의 id, 이름, 필터 조건 등
+  // 예: 각 스타일의 id, 색상, 선 굵기 등
+
+  return { layers, styles };
+}
+
+function filterStylesByLayer(layers, styles) {
+  const styledLayers = layers.map(layer => {
+    // 레이어 필터 조건에 따라 스타일 필터링
+    const layerStyles = styles.filter(style => {
+      // 예: 레이어의 필터 조건과 스타일의 속성을 비교
+      return true; // 조건에 맞는 경우
+    });
+
+    return {
+      layer,
+      styles: layerStyles
+    };
+  });
+
+  return styledLayers;
+}
 
 class StyleManager {
   constructor(xmlString) {
-    this.xmlString = xmlString;
-    this.doc = this.parseXML(xmlString);
+    this.xmlDoc = parseXML(xmlString);
+    const { layers, styles } = getLayersAndStyles(this.xmlDoc);
+    this.layers = layers;
+    this.styles = styles;
   }
 
-  parseXML(xmlString) {
-    const parser = new DOMParser();
-    return parser.parseFromString(xmlString, "application/xml");
+  getStyledLayers() {
+    return filterStylesByLayer(this.layers, this.styles);
   }
 
   getLayers() {
@@ -47,17 +72,8 @@ class StyleManager {
 }
 
 // 사용 예시
-const xmlString = `
-<Layers>
-  <Layer id="1" name="Layer1">
-    <Style color="red" width="2"/>
-  </Layer>
-  <Layer id="2" name="Layer2">
-    <Style color="blue" width="3"/>
-  </Layer>
-</Layers>
-`;
-
+const xmlString = `여기에 XML 문자열 입력`;
 const styleManager = new StyleManager(xmlString);
-const filteredStyles = styleManager.getFilteredStyles();
-console.log(filteredStyles);
+const styledLayers = styleManager.getStyledLayers();
+
+console.log(styledLayers); 
