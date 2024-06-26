@@ -180,3 +180,17 @@ const xmlDoc = parser.parseFromString(xmlString, "text/xml");
 const json = xmlToJson(xmlDoc);
 
 console.log(json);
+//////
+
+
+import MapParser from './MapParser.js';
+
+// MapParser 인스턴스 생성
+const mapParser = new MapParser();
+
+// 예제 레이어 데이터 및 그룹 데이터
+const layerData = { /* 레이어 데이터 예시 */ };
+const groupData = { /* 그룹 데이터 예시 */ };
+
+// 레이어 데이터 파싱
+const parsedLayer = mapParser.parseLayer(layerData);
