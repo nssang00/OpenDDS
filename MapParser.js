@@ -1,4 +1,4 @@
-class MapParser {
+export default class MapParser {
   constructor() {
       this.domParser = new DOMParser();
       this.mapData = {};
