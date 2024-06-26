@@ -4,6 +4,24 @@ export default class MapParser {
       this.mapData = {};
   }
 
+  async loadMap(mapLayerXML, mapStyleXML) {
+    try {
+      const mapLayerData = await this.fetchAndParseXML(mapLayerXML);
+      const mapStyleData = await this.fetchAndParseXML(mapStyleXML);
+      this.parseMap(mapLayerData, mapStyleData);
+      return this.getMapData();
+    } catch (error) {
+      console.error('Error loading map:', error);
+      throw error;
+    }
+  }
+
+  async fetchAndParseXML(url) {
+    const response = await fetch(url);
+    const xml = await response.text();
+    return this.domParser.parseFromString(xml, 'application/xml');
+  }
+
   parseMap(mapLayerXML, mapStyleXML) {
       this.mapData['layers'] = this.parseMapLayer(mapLayerXML);
       this.mapData['styles'] = this.parseMapStyle(mapStyleXML);
@@ -128,6 +146,7 @@ export default class MapParser {
       return this.mapData;
   }
 }
+
 
 
 function xmlToJson(xml) {
