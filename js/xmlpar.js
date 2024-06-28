@@ -1,9 +1,66 @@
+const xmlString = `<MapStyle Version="1.0">	
+<Style name="BB010T03" type="Label">
+		<Font>굴림</Font>
+		<Size>8</Size>
+		<Color>255, 97, 17, 146</Color>
+		<Bold>false</Bold>
+		<Italic>false</Italic>
+		<Underline>false</Underline>
+		<Outline>false</Outline>
+		<OutlineColor>255, 0, 0, 0</OutlineColor>
+		<Box>false</Box>
+		<BoxColor>255, 0, 0, 0</BoxColor>
+		<SeaWaterLevel>false</SeaWaterLevel>
+		<Decimal>-1</Decimal>
+		<Prefix></Prefix>
+		<Postfix></Postfix>
+		<OffsetX>23</OffsetX>
+		<OffsetY>-2</OffsetY>
+		<Align>4</Align>
+        <Dash>
+        <DashItem>6</DashItem>
+        <DashItem>3</DashItem>
+        <DashItem>6</DashItem>
+        <DashItem>3</DashItem>
+        </Dash>
+	</Style>
+	<Style name="Agg" type="point">
+		<OffsetX>0</OffsetX>
+		<OffsetY>0</OffsetY>
+		<PointLayer type="PICTURE">
+			<Picture>ddd.png</Picture>
+		</PointLayer>
+	</Style>
+</MapStyle>`;
+
 function parseXML(xmlString) {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
 
-  // Style 태그 찾기
-  const styleTag = xmlDoc.getElementsByTagName('Style')[0];
+         let styles = [];
+        const styleNodes = xmlDoc.getElementsByTagName("Style");
+        for (let style of styleNodes) {
+            let styleObj = {
+                name: style.getAttribute("name"),
+                type: style.getAttribute("type")
+            };
+
+            // 스타일 타입에 따라 적절한 파싱 함수 호출
+            if (styleObj.type === "point") {
+                console.log('pointlayer')
+            } else if (styleObj.type === "line") {
+                 console.log('linelayer')
+            } else if (styleObj.type === "polygon") {
+                console.log('polygonlayer')
+            } else if (styleObj.type === "Label") {
+             // let a = convertToJSON(style)
+                parseLabelLayer(style);
+             // const json = JSON.stringify(a);
+              
+            }
+  
+            styles.push(styleObj);
+        }
 
   // 각 레이어 태그에 대한 파싱 함수
   function parsePointLayer(pointLayer) {
@@ -17,64 +74,29 @@ function parseXML(xmlString) {
   function parsePolygonLayer(polygonLayer) {
     // PolygonLayer 파싱 로직
   }
+  function parseLabelLayer(xmlNode) {
+    const jsonObject = {};
 
-  // Style 태그 내의 모든 자식 노드 순회
-  Array.from(styleTag.children).forEach(child => {
-    switch (child.tagName) {
-      case 'PointLayer':
-        parsePointLayer(child);
-        break;
-      case 'LineLayer':
-        parseLineLayer(child);
-        break;
-      case 'PolygonLayer':
-        parsePolygonLayer(child);
-        break;
-      default:
-        // 기타 태그들은 JSON 객체로 변환
-        convertToJSON(child);
-    }
-  });
-}
+    for(let child of xmlNode.children) {
+      let value;
 
-function convertToJSON(xmlNode) {
-  // 객체를 생성합니다.
-  let obj = {};
-
-  // 텍스트 콘텐츠 처리
-  if (xmlNode.nodeType === 3) {
-    obj = xmlNode.nodeValue;
-  }
-
-  // 자식 노드 처리
-  if (xmlNode.hasChildNodes()) {
-    for (let i = 0; i < xmlNode.childNodes.length; i++) {
-      let item = xmlNode.childNodes.item(i);
-      let nodeName = item.nodeName;
-      if (typeof(obj[nodeName]) === "undefined") {
-        obj[nodeName] = convertToJSON(item);
-      } else {
-        if (typeof(obj[nodeName].push) === "undefined") {
-          let old = obj[nodeName];
-          obj[nodeName] = [];
-          obj[nodeName].push(old);
+      if(child.children.length > 1)
+      {
+        const dashItem = [];
+        for(const item of child.children) {
+          dashItem.push(item.textContent);
         }
-        obj[nodeName].push(convertToJSON(item));
+        value = dashItem;
       }
+      else {
+        value = child.textContent;
+      }      
+      jsonObject[child.tagName] = value;
+      console.log(child.tagName + ' : ' + value)
     }
   }
-  return obj;
+
 }
 
-// XML 문자열 예시
-const xmlString = `
-<Style>
-  <PointLayer>...</PointLayer>
-  <LineLayer>...</LineLayer>
-  <PolygonLayer>...</PolygonLayer>
-  <!-- 기타 태그들 -->
-</Style>
-`;
 
-// XML 파싱 실행
 parseXML(xmlString);
