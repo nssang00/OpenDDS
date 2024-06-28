@@ -6,14 +6,6 @@ const xmlString = `<MapStyle Version="1.0">
 		<Bold>false</Bold>
 		<Italic>false</Italic>
 		<Underline>false</Underline>
-		<Outline>false</Outline>
-		<OutlineColor>255, 0, 0, 0</OutlineColor>
-		<Box>false</Box>
-		<BoxColor>255, 0, 0, 0</BoxColor>
-		<SeaWaterLevel>false</SeaWaterLevel>
-		<Decimal>-1</Decimal>
-		<Prefix></Prefix>
-		<Postfix></Postfix>
 		<OffsetX>23</OffsetX>
 		<OffsetY>-2</OffsetY>
 		<Align>4</Align>
@@ -31,6 +23,25 @@ const xmlString = `<MapStyle Version="1.0">
 			<Picture>ddd.png</Picture>
 		</PointLayer>
 	</Style>
+	<Style name="Adfs" type="line">
+		<LineLayer type="DASH">
+			<Color>255, 0, 0, 0</Color>
+			<Width>1</Width>
+			<JoinType>2</JoinType>
+			<Dash>
+				<DashItem>6</DashItem>
+				<DashItem>3</DashItem>
+				<DashItem>6</DashItem>
+				<DashItem>3</DashItem>
+			</Dash>
+		</LineLayer>
+		<LineLayer type="PICTURE">
+			<Picture>dfd.png</Picture>
+			<TextureLine>false</TextureLine>
+			<Width>8</Width>
+		</LineLayer>		
+	</Style>
+ 
 </MapStyle>`;
 
 function parseXML(xmlString) {
