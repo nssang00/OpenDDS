@@ -100,3 +100,22 @@ if ('stroke-width' in style) {
     expressionToGlsl(vertContext, style['stroke-width'], NumberType),
   );
 }
+
+
+
+
+
+fragContext.functions['sampleStrokePattern'] =
+  `vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
+  float currentLengthScaled = currentLengthPx * sampleSize.y / lineWidth;
+  float spacingScaled = spacingPx * sampleSize.y / lineWidth;
+  float uCoordPx = mod(currentLengthScaled, (sampleSize.x + spacingScaled));
+  // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+  // 여기서 vCoordPx를 수정하여 라인의 너비에 걸쳐 패턴이 반복되도록 합니다.
+  float vCoordPx = mod(currentLengthPx, sampleSize.y); // 이 부분을 수정합니다.
+  vCoordPx = clamp(vCoordPx, 0.5, sampleSize.y - 0.5); // vCoordPx를 적절히 조정합니다.
+  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+  return samplePremultiplied(texture, texCoord);
+}`;
+
