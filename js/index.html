@@ -8,8 +8,24 @@
   <body>
     <div id="app"></div>
     <script>
-const xmlString = `<MapStyle Version="1.0">	
-<Style name="BB010T03" type="Label">
+const xmlMapStyle = `<MapStyle Version="1.0">	
+	<Style name="Agg" type="point">
+		<OffsetX>0</OffsetX>
+		<OffsetY>0</OffsetY>
+		<PointLayer type="PICTURE">
+			<Picture>ddd.png</Picture>
+		</PointLayer>
+	</Style>  
+	<Style name="Agg2" type="point">
+		<OffsetX>0</OffsetX>
+		<OffsetY>0</OffsetY>
+    <PointLayer type="SIMPLE">
+    <Color>255, 0, 99, 198</Color>
+    <Size>6</Size>
+    <Shape>0</Shape>
+		</PointLayer>
+	</Style>    
+  <Style name="BB010T03" type="Label">
 		<Font>굴림</Font>
 		<Size>8</Size>
 		<Color>255, 97, 17, 146</Color>
@@ -20,13 +36,7 @@ const xmlString = `<MapStyle Version="1.0">
 		<OffsetY>-2</OffsetY>
 		<Align>4</Align>
 	</Style>
-	<Style name="Agg" type="point">
-		<OffsetX>0</OffsetX>
-		<OffsetY>0</OffsetY>
-		<PointLayer type="PICTURE">
-			<Picture>ddd.png</Picture>
-		</PointLayer>
-	</Style>
+
 	<Style name="Adfs" type="line">
 		<LineLayer type="DASH">
 			<Color>255, 0, 0, 0</Color>
@@ -57,7 +67,7 @@ const xmlString = `<MapStyle Version="1.0">
   </Style>
 </MapStyle>`;
 
-const xmlString2 = `<MapLayer Version="1.0">
+const xmlMapLayer = `<MapLayer Version="1.0">
 	<Layer Category="경계" Name="해안선" FACC="BA010" GeometryType="Line" SHPSource="LBA010" GDBSource="CoastL" Map="250K,500K,1M" DisplayType="Geometry">
 		<Feature Name="사구" Description="설명" GeometryStyle="BA010L01">
 			<VVTStyle ACC="0" SLT="0,10,11,13"></VVTStyle>
@@ -88,7 +98,7 @@ const xmlString2 = `<MapLayer Version="1.0">
 
 
 
-function parseXML(xmlString) {
+function parseMapStyle(xmlString) {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
 
@@ -108,11 +118,10 @@ function parseXML(xmlString) {
 
     let children = [];
     for (let child of node.children) {
-      if (child.tagName === 'PointLayer' || 
-          child.tagName === 'LineLayer' || 
-          child.tagName === 'PolygonLayer') {
+
+      if(['PointLayer', 'LineLayer', 'PolygonLayer'].includes(child.tagName)) {
         children.push(parseStyleNode(child));
-      } else {
+      }  else {
         if (child.children.length === 0) {
           nodeObj[child.tagName] = child.textContent;
         } else {//Dash
@@ -133,7 +142,7 @@ function parseXML(xmlString) {
 }
 
 
-function parseXML2(xmlString) {
+function parseMapLayer(xmlString) {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
 
@@ -143,10 +152,8 @@ function parseXML2(xmlString) {
   for (const child of xmlDoc.documentElement.children) {
     let nodeObj = parseLayerNode(child);
     if (child.tagName === "Group") {
-      //groups.push(parseGroup(child));
       groups.push(nodeObj);
     } else if (child.tagName === "Layer") {
-      //layers.push(parseLayer(child));
       layers.push(nodeObj);
     }
   }
@@ -164,12 +171,15 @@ function parseXML2(xmlString) {
 
     let children = [];
     for (let child of node.children) {
-      if (child.tagName === "Feature") {
-        //nodeObj.features = parseFeature(child);
-        children.push(parseFeature(child));
-      } else {
-        //nodeObj.layers.push(parseLayerNode(child));
+
+      if(child.children.length > 0) {
         children.push(parseLayerNode(child));
+      } else {
+        const childObj = {};
+        for(const attr of child.attributes) {
+          childObj[attr.name] = attr.value;
+        }
+        nodeObj[child.tagName] = childObj;        
       }
     }
 
@@ -179,33 +189,182 @@ function parseXML2(xmlString) {
       } else if (node.tagName === "Layer") {
         nodeObj.features = children;
       }
+
     }
     return nodeObj;
-  }  
-
-  function parseFeature(node) {
-
-    const nodeObj = {};
-    for(const attr of node.attributes) {
-      nodeObj[attr.name] = attr.value;
-    }
-    for (const child of node.children) {
-      const filterObj = {};
-      for(const attr of child.attributes) {
-        filterObj[attr.name] = attr.value;
-      }
-      nodeObj[child.tagName] = filterObj;
-    }
-
-    return nodeObj; 
-  }
+  }   
 }
 
-let results = parseXML(xmlString);
+function toOlStyle(styles) {
 
+  for (const styleObj of styles) {
+    switch (styleObj.type) {
+      case "point":
+        toOlPointStyle(styleObj);
+        break;
+      case "line":
+        //symbolizers = parseLineLayers(styleNode);
+        break;
+      case "polygon":
+        //symbolizers = parsePolygonLayers(styleNode);
+        break;
+      case "Label":
+        //symbolizers = parseLabelLayers(styleNode);
+        break;
+      default:
+        break;
+    }
+  }
+/*
+  {
+    "name": "Agg",
+    "type": "point",
+    "OffsetX": "0",
+    "OffsetY": "0",
+    "symbolizers": [
+      {
+        "type": "PICTURE",
+        "Picture": "ddd.png"
+      }
+    ]
+  },
+  {
+    "name": "Agg2",
+    "type": "point",
+    "OffsetX": "0",
+    "OffsetY": "0",
+    "symbolizers": [
+      {
+        "type": "SIMPLE",
+        "Color": "255, 0, 0, 0",
+        "Size": "6",
+        "Shape": "1"
+      }
+    ]
+  },  
+*/
+  function toOlPointStyle(pointObj) {
+
+    const offset = [Number(pointObj.OffsetX), Number(pointObj.OffsetY)];    
+    for(const symbolizer of pointObj.symbolizers)
+    {
+      switch (symbolizer.type) {
+        case "SIMPLE":
+          let [a, r, g, b] = symbolizer.Color.split(',').map(Number);
+          const rgba = [r, g, b, parseFloat(a/255).toFixed(2)];
+          if(symbolizer.Shape === "0")//Circle
+          {
+            return {//<Shape> : 0
+              'circle-radius': symbolizer.Size,//<Size>
+              'circle-fill-color': rgba,//<Color>
+              'circle-displacement': offset,//<OffsetX>, <OffsetY>
+            };
+          }
+          else if(symbolizer.Shape === "1")//Rectangle
+          {
+            return {//<Shape> : 1
+              'shape-points': 4,
+              'shape-radius': symbolizer.Size,//<Size>
+              'shape-fill-color': rgba,//<Color>
+              'shape-displacement': offset,//<OffsetX>, <OffsetY>
+              'shape-angle': Math.PI / 4,
+            };
+          }
+          break;
+        case "PICTURE":
+          return {
+            'icon-src': symbolizer.Picture,//<Picture>
+            'icon-displacement': offset,//<OffsetX>, <OffsetY>
+            //'icon-width': 20,
+            //'icon-height': 20,
+          };
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+
+  {
+    "name": "Adfs",
+    "type": "line",
+    "symbolizers": [
+      {
+        "type": "DASH",
+        "Color": "255, 0, 0, 0",
+        "Width": "1",
+        "JoinType": "2",
+        "Dash": [
+          "6",
+          "3",
+          "6",
+          "3"
+        ]
+      },
+      {
+        "type": "PICTURE",
+        "Picture": "dfd.png",
+        "TextureLine": "false",
+        "Width": "8"
+      }
+    ]
+  },  
+
+
+  //SIMPLE, DASH, PICTURE, VERTICAL, DOUBLELINE
+  function toOlLineStyle(lineObj) {
+
+    let lines = [];
+    for(const symbolizer of lineObj.symbolizers)
+    {
+      switch (symbolizer.type) {
+        case "SIMPLE":
+          lines.push({
+            'stroke-color': [0, 99, 198, 1],//<Color>
+            'stroke-width': 1,//<Width>
+            'stroke-line-join': 'miter',//<JoinType> 0:miter, 1:bevel, 2:round
+            'stroke-line-cap': 'butt',//<StartCap>, <EndCap> 0:butt, 1:square, 2:round
+          });          
+          break;
+        case "DASH":
+          lines.push({
+            'stroke-color': [97, 17, 146, 1],//<Color>
+            'stroke-width': 1,//<Width>
+            'stroke-line-join': 'miter',//<JoinType> 0:miter, 1:bevel, 2:round
+            'stroke-line-cap': 'butt',//<DashCap> 0:butt, 1:round
+            'stroke-line-dash-offset': 0,//<DashOffset>  
+            'stroke-line-dash': [14, 5],//<Dash><DashItem>
+          });      
+          break;
+        case "PICTURE":
+
+          lines.push({
+            'stroke-pattern-src': 'local://file/dist/strike_circle.png',//<Picture>
+            'stroke-width': 20,//<Width>
+            'stroke-pattern-start-offset':17, //<StartPos>  
+            'stroke-pattern-spacing': 20,//<Interval>  
+          });        
+
+          break;
+        case "VERTICAL":
+          break;         
+        case "DOUBLELINE":
+          break;                 
+        default:
+          break;
+      }
+    }
+  }  
+
+}
+
+let results = parseMapStyle(xmlMapStyle);
+
+toOlStyle(results);
 console.log(JSON.stringify(results, null, 2));
 
-let results2 = parseXML2(xmlString2);
+let results2 = parseMapLayer(xmlMapLayer);
 
 console.log(JSON.stringify(results2, null, 2));
 
