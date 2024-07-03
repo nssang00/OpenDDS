@@ -57,3 +57,25 @@ if ('stroke-pattern-src' in style) {
       expressionToGlsl(vertContext, style['stroke-width'], NumberType),
     );
   }
+
+
+//////
+
+fragContext.functions['sampleStrokePattern'] =
+  `vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
+    float numRepeats = ceil(lineWidth / sampleSize.y);
+    vec4 color = vec4(0.0);
+    for (float i = 0.0; i < numRepeats; i++) {
+      float uCoordPx = mod(currentLengthPx, (sampleSize.x + spacingPx * numRepeats));
+      // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
+      uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+      float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y * (i + 1.0);
+      vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+      color += samplePremultiplied(texture, texCoord);
+    }
+    return color / numRepeats;
+  }`;
+
+builder.setStrokeColorExpression(
+  `${tintExpression} * sampleStrokePattern(${textureName}, ${sizeExpression}, ${offsetExpression}, ${sampleSizeExpression * lineWidth / sampleSize.y}, ${spacingExpression}, currentLengthPx, currentRadiusRatio, v_width)`,
+);
