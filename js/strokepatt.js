@@ -1,0 +1,39 @@
+fragContext.functions['sampleStrokePattern'] =
+  `vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float currentLengthPx, float currentRadiusRatio) {
+  float currentLengthScaled = currentLengthPx / sampleSize.y;
+  float spacingScaled = spacingPx / sampleSize.y;
+  float uCoordPx = mod(currentLengthScaled, (sampleSize.x + spacingScaled));
+  // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+  float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
+  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+  return samplePremultiplied(texture, texCoord);
+}`;
+
+
+/////if ('stroke-pattern-src' in style) {
+  // ... 기존 코드 ...
+
+  // 패턴의 크기를 라인의 너비에 맞게 조정
+  if ('stroke-width' in style) {
+    const lineWidthExpression = expressionToGlsl(
+      vertContext,
+      style['stroke-width'],
+      NumberType,
+    );
+    sampleSizeExpression = `vec2(${sampleSizeExpression}.x * ${lineWidthExpression}, ${sampleSizeExpression}.y * ${lineWidthExpression})`;
+  }
+
+  // 패턴의 위치를 조정
+  if ('stroke-pattern-offset' in style) {
+    offsetExpression = parseImageOffsetProperties(
+      style,
+      'stroke-pattern-',
+      fragContext,
+      sizeExpression,
+      sampleSizeExpression,
+    );
+  }
+
+  // ... 기존 코드 ...
+}
