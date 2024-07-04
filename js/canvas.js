@@ -1,4 +1,4 @@
-function drawVerticalLine(width, length) {
+function drawVerticalLine(width, length, color) {
   // canvas 요소 생성
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -9,7 +9,7 @@ function drawVerticalLine(width, length) {
 
   // 선 스타일 설정
   ctx.lineWidth = width;
-  ctx.strokeStyle = 'black';
+  ctx.strokeStyle = color;
 
   // 선 그리기
   ctx.beginPath();
