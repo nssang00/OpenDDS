@@ -37,7 +37,10 @@ if ('stroke-pattern-src' in style) {
   float spacingScaled = spacingPx * sampleSize.y / lineWidth;
   float uCoordPx = mod(currentLengthScaled, (sampleSize.x + spacingScaled));
   // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
-  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 1.5); // Adjusted clamp range
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+  if (uCoordPx >= sampleSize.x) {
+    uCoordPx = sampleSize.x - 1.0;
+  }
   float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
   vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
   return samplePremultiplied(texture, texCoord);
