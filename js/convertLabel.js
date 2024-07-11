@@ -1,17 +1,18 @@
 function convertLabel(label) {
   let text = label.text;
- // let result = label.prefix + label.text + label.postfix;
 
-  if (label.decimal >= 0 || label.subscript >= 1) {
-    let num = parseFloat(text);
-    if (!isNaN(num)) {
-      if(label.decimal >= 0)
-        text = num.toFixed(label.decimal);
+  let num = parseFloat(text);  
+  if (!isNaN(num)) {  
+    if(label.decimal >= 0)
+      text = num.toFixed(label.decimal);
+    if(label.subscript)
+    {
       const [integerPart, decimalPart] = text.split('.');
       const subscriptNumbers = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
-      const subscriptDecimal = decimalPart.split('').map(char => subscriptNumbers[parseInt(char)]).join('');  
-
-      text = integerPart + '.' + subscriptDecimal;
+      text = integerPart;
+      const subscriptDecimal = decimalPart?.split('').map(char => subscriptNumbers[parseInt(char)]).join(''); 
+      if(subscriptDecimal)
+        text = text + '.' + subscriptDecimal;
     }
   }
 
@@ -23,9 +24,10 @@ function convertLabel(label) {
 }
 
 let res = convertLabel({
-  text: '35.234',
+  text: '35.253',
   prefix: '',
   postfix: '',
-  decimal: 2,
-  underline: false,
+  decimal: -1,
+  underline: true,
+  subscript: true,
 });
