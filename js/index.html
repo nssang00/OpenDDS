@@ -461,8 +461,7 @@ function toOlStyle(styles) {
   function toOlPolygonStyle(polygonObj) {
  
     const styles = [];
-    for(const symbolizer of polygonObj.symbolizers)
-    {
+    for(const symbolizer of polygonObj.symbolizers) {
 
       if(symbolizer.type === "SIMPLE")
       {
@@ -533,18 +532,21 @@ function toOlStyle(styles) {
       'label-prefix': labelObj.Prefix,
       'label-postfix': labelObj.Postfix,
     }
+
     if(Boolean(labelObj.Outline))
     {
       let [a, r, g, b] = symbolizer.OutlineColor.split(',').map(Number);
       const outlineColor = [r, g, b, parseFloat(a/255).toFixed(2)];      
       labelStyleObj['text-stroke-color'] = outlineColor
     }
+
     if(Boolean(labelObj.Box))
     {
       let [a, r, g, b] = symbolizer.BoxColor.split(',').map(Number);
       const boxColor = [r, g, b, parseFloat(a/255).toFixed(2)];      
       labelStyleObj['text-background-fill-color'] = boxColor
     }
+
     const picture = symbolizer?.Picture;
     if(picture)
     {
@@ -558,41 +560,6 @@ function toOlStyle(styles) {
 
 }
 
-const textAligns = [
-  ['left',      'top'],      //0
-  ['center',    'top'],    //1
-  ['right',     'top'],     //2
-  ['left',   'middle'],   //3
-  ['center', 'middle'], //4
-  ['right',   'middle'],  //5
-  ['left',    'bottom'],   //6
-  ['center',  'bottom'], //7
-  ['right',   'bottom'],  //8   
-];
-
-
-
-  
-
-function formatString(input, prefix, postfix, decimal, underline) {
-  let result = prefix + input + postfix;
-
-  if (decimal >= 0) {
-    const num = parseFloat(input);
-    if (!isNaN(num)) {
-      result = prefix + num.toFixed(decimal) + postfix;
-    }
-  }
-
-  if (underline) {
-    result = result.split('').map(char => char + '\u0332').join('');
-  }
-  return result;
-}
-
-function createFontString(bold, italic, size, font) {
-  return (bold ? 'bold ':'') + (italic ? 'italic ':'') + size + 'px ' + font;
-}
 
 let results = parseMapStyle(xmlMapStyle);
 
