@@ -39,3 +39,12 @@
 ['<=', ['get', 'number'], 41],
   ],
 
+
+  static getResolutionForScale (scale) {
+    let dpi = 25.4 / 0.28;
+    //let mpu = METERS_PER_UNIT[units];
+    let inchesPerMeter = 39.37;
+
+    return parseFloat(scale) / (inchesPerMeter * dpi);
+  }
+
