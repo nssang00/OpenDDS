@@ -152,7 +152,7 @@ function parseMapLayer(xmlString) {
   for (const child of xmlDoc.documentElement.children) {
     let nodeObj = parseLayerNode(child);
     if (child.tagName === "Group") {
-      groups.push(nodeObj);
+      layers.push(nodeObj);
     } else if (child.tagName === "Layer") {
       layers.push(nodeObj);
     }
@@ -195,26 +195,27 @@ function parseMapLayer(xmlString) {
   }   
 }
 
-function toOlStyle(styles) {
-
-  for (const styleObj of styles) {
+function toOlStyle(stylesObj) {
+  const olStyles = {};
+  for (const styleObj of stylesObj) {
     switch (styleObj.type) {
       case "point":
-        toOlPointStyle(styleObj);
+        olStyles[styleObj.name] = toOlPointStyle(styleObj);
         break;
       case "line":
-        //symbolizers = parseLineLayers(styleNode);
+        olStyles[styleObj.name] = toOlLineStyle(styleObj);
         break;
       case "polygon":
-        //symbolizers = parsePolygonLayers(styleNode);
+        olStyles[styleObj.name] = toOlPolygonStyle(styleObj);
         break;
       case "Label":
-        //symbolizers = parseLabelLayers(styleNode);
+        olStyles[styleObj.name] = toOlLabelStyle(styleObj);
         break;
       default:
         break;
     }
   }
+  return olStyles;
 /*
   {
     "name": "Agg",
@@ -243,10 +244,10 @@ function toOlStyle(styles) {
     ]
   },  
 */
-  function toOlPointStyle(pointObj) {
+  function toOlPointStyle(pointStyleObj) {
 
-    const offset = [Number(pointObj.OffsetX), Number(pointObj.OffsetY)];    
-    for(const symbolizer of pointObj.symbolizers)
+    const offset = [Number(pointStyleObj.OffsetX), Number(pointStyleObj.OffsetY)];    
+    for(const symbolizer of pointStyleObj.symbolizers)
     {
       switch (symbolizer.type) {
         case "SIMPLE":
@@ -309,160 +310,169 @@ function toOlStyle(styles) {
 
 
   //SIMPLE, DASH, PICTURE, VERTICAL, DOUBLELINE
-  function toOlLineStyle(lineObj) {
+  function toOlLineStyle(lineStyleObj) {
+
+    const olStyles = [];
+    for(const symbolizer of lineStyleObj.symbolizers)
+    {
+      olStyles.push(toOlLineSymbolizer(symbolizer));
+    }
+    return olStyles;
+  }  
+
+  function toOlLineSymbolizer(symbolizer) {
 
     const lineJoins = ['miter', 'bevel', 'round'];//JoinType
     const lineCaps = ['butt', 'square', 'round'];//StartCap
 
     let rgba;
-    if(symbolizer.Color)
+    const color = symbolizer?.Color;
+    if(symbolizer?.Color)
     {
-      const [a, r, g, b] = symbolizer.Color.split(',').map(Number);
+      const [a, r, g, b] = color.split(',').map(Number);
       rgba = [r, g, b, parseFloat(a/255).toFixed(2)];  
     }
 
-    const styles = [];
-    for(const symbolizer of lineObj.symbolizers)
-    {
-      switch (symbolizer.type) {
-        case "SIMPLE":        
-          styles.push({
-            'stroke-color': rgba,//<Color>
+    let olSymbolizer;
+    switch (symbolizer.type) {
+      case "SIMPLE":        
+        olSymbolizer = {
+          'stroke-color': rgba,//<Color>
+          'stroke-width': symbolizer.Width,//<Width>
+          'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+          'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//<StartCap>, <EndCap> 0:butt, 1:square, 2:round
+        };          
+        break;
+      case "DASH":
+        olSymbolizer = {
+          'stroke-color': rgba,//<Color>
+          'stroke-width': symbolizer.Width,//<Width>
+          'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+          'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//<DashCap> 0:butt, 1:round
+          'stroke-line-dash-offset': symbolizer.DashOffset,//<DashOffset>  
+          'stroke-line-dash': symbolizer.Dash.map(Number),//<Dash><DashItem>
+        };      
+        break;
+      case "PICTURE":
+        if(symbolizer.TextureLine === "false")//
+        {
+          olSymbolizer = {
+            'symbol-picture-texture-line': false,//<TextureLine>
+            'stroke-pattern-src': symbolizer.Picture,//<Picture>
             'stroke-width': symbolizer.Width,//<Width>
-            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-            'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//<StartCap>, <EndCap> 0:butt, 1:square, 2:round
-          });          
-          break;
-        case "DASH":
-          let dasharray = symbolizer.Dash.map(Number);
-          styles.push({
-            'stroke-color': rgba,//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-            'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//<DashCap> 0:butt, 1:round
-            'stroke-line-dash-offset': symbolizer.DashOffset,//<DashOffset>  
-            'stroke-line-dash': dasharray,//<Dash><DashItem>
-          });      
-          break;
-        case "PICTURE":
-          if(symbolizer.TextureLine === "false")//
-          {
-            styles.push({
-              'symbol-picture-texture-line': false,//<TextureLine>
-              'stroke-pattern-src': symbolizer.Picture,//<Picture>
-              'stroke-width': symbolizer.Width,//<Width>
-              'stroke-pattern-start-offset': Number(symbolizer.StartPos), //<StartPos>  
-              'stroke-pattern-spacing': Number(symbolizer.Interval),//<Interval>  
-            });        
-          }
-          else if(symbolizer.TextureLine === "true")//StrokePattern, stylefunction, canvas
-          {
-            styles.push({
-              'symbol-picture-texture-line': true,//<TextureLine>              
-              'stroke-pattern-src': symbolizer.Picture,//<Picture>
-              //'icon-src': symbolizer.Picture,//<Picture>
-              'stroke-width': Number(symbolizer.Width),//<Width>
-              'stroke-line-join': lineJoin[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-              'stroke-line-cap': lineCap[Number(symbolizer.StartCap)],//<DashCap> 0:butt, 1:round
-            });     
-          }
-          break;
-        case "VERTICAL":
-          styles.push({
-            'symbol-vertical-color': `rgba(${rgba.join('')})`,//<Color>
-            'symbol-vertical-width': Number(symbolizer.Width),//<Width>
-            'symbol-vertical-vertical-type': Number(symbolizer.VerticalType),//<VerticalType>
-            'symbol-vertical-left-length': Number(symbolizer.leftLength),//<LeftLength>
-            'symbol-vertical-right-length': Number(symbolizer.rightLength),//<RightLength>
-            'symbol-vertical-line-cap': Number(symbolizer?.StartCap),//<StartCap>, <EndCap>
-            'symbol-vertical-start-pos': Number(symbolizer?.StartPos),//<StartPos>  
-            'symbol-vertical-interval': Number(symbolizer?.Interval),//<Interval>                     
-          });              
+            'stroke-pattern-start-offset': Number(symbolizer.StartPos), //<StartPos>  
+            'stroke-pattern-spacing': Number(symbolizer.Interval),//<Interval>  
+          };        
+        }
+        else if(symbolizer.TextureLine === "true")//StrokePattern, stylefunction, canvas
+        {
+          olSymbolizer = {
+            'symbol-picture-texture-line': true,//<TextureLine>              
+            'stroke-pattern-src': symbolizer.Picture,//<Picture>
+            //'icon-src': symbolizer.Picture,//<Picture>
+            'stroke-width': Number(symbolizer.Width),//<Width>
+            'stroke-line-join': lineJoin[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+            'stroke-line-cap': lineCap[Number(symbolizer.StartCap)],//<DashCap> 0:butt, 1:round
+          };     
+        }
+        break;
+      case "VERTICAL":
+        olSymbolizer = {
+          'symbol-vertical-color': `rgba(${rgba.join('')})`,//<Color>
+          'symbol-vertical-width': Number(symbolizer.Width),//<Width>
+          'symbol-vertical-vertical-type': Number(symbolizer.VerticalType),//<VerticalType>
+          'symbol-vertical-left-length': Number(symbolizer.leftLength),//<LeftLength>
+          'symbol-vertical-right-length': Number(symbolizer.rightLength),//<RightLength>
+          'symbol-vertical-line-cap': Number(symbolizer?.StartCap),//<StartCap>, <EndCap>
+          'symbol-vertical-start-pos': Number(symbolizer?.StartPos),//<StartPos>  
+          'symbol-vertical-interval': Number(symbolizer?.Interval),//<Interval>                     
+        };              
 /*
-          const symbol = drawVerticalSymbol({
-            color: `rgba(${rgba.join('')})`,//<Color>
-            width: symbolizer.Width,//<Width>
-            verticalType: symbolizer.VerticalType,//<VerticalType>
-            leftLength: symbolizer.leftLength,//<LeftLength>
-            rightLength: symbolizer.rightLength, //<RightLength>
-            lineCap: symbolizer?.StartCap,//<StartCap>, <EndCap>
-          });
+        const symbol = drawVerticalSymbol({
+          color: `rgba(${rgba.join('')})`,//<Color>
+          width: symbolizer.Width,//<Width>
+          verticalType: symbolizer.VerticalType,//<VerticalType>
+          leftLength: symbolizer.leftLength,//<LeftLength>
+          rightLength: symbolizer.rightLength, //<RightLength>
+          lineCap: symbolizer?.StartCap,//<StartCap>, <EndCap>
+        });
+        lines.push({
+          'stroke-pattern-src': symbol.src,
+          'stroke-width': symbol.strokeWidth,
+          'stroke-offset': 0,
+          'stroke-pattern-start-offset': symbolizer.StartPos, //<StartPos>  
+          'stroke-pattern-spacing': symbolizer.Interval,//<Interval>    
+        });
+        */
+        break;         
+      case "DOUBLELINE":
+        olSymbolizer = {
+          'symbol-double-line-color': rgba,//<Color>
+          'symbol-double-line-width': symbolizer.Width,//<Width>
+          'symbol-double-line-type': symbolizer.Type,//<Type>
+          'symbol-double-line-space': Number(symbolizer.Shape), //<Space>
+          'symbol-double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+        };        
+        /*      
+        if(symbolizer.Type === 0)//Simple
+        {           
+          
           lines.push({
-            'stroke-pattern-src': symbol.src,
-            'stroke-width': symbol.strokeWidth,
-            'stroke-offset': 0,
-            'stroke-pattern-start-offset': symbolizer.StartPos, //<StartPos>  
-            'stroke-pattern-spacing': symbolizer.Interval,//<Interval>    
-          });
-          */
-          break;         
-        case "DOUBLELINE":
-          styles.push({
-            'symbol-double-line-color': rgba,//<Color>
-            'symbol-double-line-width': symbolizer.Width,//<Width>
-            'symbol-double-line-type': symbolizer.Type,//<Type>
-            'symbol-double-line-space': Number(symbolizer.Shape), //<Space>
-            'symbol-double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-          });        
-          /*      
-          if(symbolizer.Type === 0)//Simple
-          {           
-            
-            lines.push({
-              'stroke-color': rgba,//<Color>
-              'stroke-width': symbolizer.Width,//<Width>
-              'stroke-offset': Number(symbolizer.Shape)/2, //<Space>/2
-              'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-            });   
-            lines.push({
-              'stroke-color': rgba,//<Color>
-              'stroke-width': symbolizer.Width,//<Width>
-              'stroke-offset': -Number(symbolizer.Shape)/2, //<Space>/2
-              'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-            }); 
-          }
-          else if(symbolizer.Type === 2)//Bridge //StrokePattern, stylefunction, canva, + doubleline(simple)
-          {
+            'stroke-color': rgba,//<Color>
+            'stroke-width': symbolizer.Width,//<Width>
+            'stroke-offset': Number(symbolizer.Shape)/2, //<Space>/2
+            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+          };   
+          lines.push({
+            'stroke-color': rgba,//<Color>
+            'stroke-width': symbolizer.Width,//<Width>
+            'stroke-offset': -Number(symbolizer.Shape)/2, //<Space>/2
+            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+          }; 
+        }
+        else if(symbolizer.Type === 2)//Bridge //StrokePattern, stylefunction, canva, + doubleline(simple)
+        {
 
-          }
-          else if(symbolizer.Type === 3)//Left Only
-          {
-            lines.push({
-              'stroke-color': rgba,//<Color>
-              'stroke-width': symbolizer.Width,//<Width>
-              'stroke-offset': Number(symbolizer.Shape)/2, //<Space>/2
-              'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-            });   
-          }
-          else if(symbolizer.Type === 4)//Right Only
-          {
-            lines.push({
-              'stroke-color': rgba,//<Color>
-              'stroke-width': symbolizer.Width,//<Width>
-              'stroke-offset': -Number(symbolizer.Shape)/2, //<Space>/2
-              'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-            });  
-          }
-          else if(symbolizer.Type === 5)//Tunnel //StrokePattern, stylefunction, canva
-          {
-            
-          }
-          else if(symbolizer.Type === 6)//PipeLine //StrokePattern, stylefunction, canva
-          {
-            
-          } */     
-          break;                 
-        default:
-          break;
-      }
+        }
+        else if(symbolizer.Type === 3)//Left Only
+        {
+          lines.push({
+            'stroke-color': rgba,//<Color>
+            'stroke-width': symbolizer.Width,//<Width>
+            'stroke-offset': Number(symbolizer.Shape)/2, //<Space>/2
+            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+          };   
+        }
+        else if(symbolizer.Type === 4)//Right Only
+        {
+          lines.push({
+            'stroke-color': rgba,//<Color>
+            'stroke-width': symbolizer.Width,//<Width>
+            'stroke-offset': -Number(symbolizer.Shape)/2, //<Space>/2
+            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+          };  
+        }
+        else if(symbolizer.Type === 5)//Tunnel //StrokePattern, stylefunction, canva
+        {
+          
+        }
+        else if(symbolizer.Type === 6)//PipeLine //StrokePattern, stylefunction, canva
+        {
+          
+        } */     
+        break;                 
+      default:
+        break;
     }
-  }  
+    return olSymbolizer;
+  }
 
-  function toOlPolygonStyle(polygonObj) {
+  function toOlPolygonStyle(polygonStyleObj) {
  
-    const styles = [];
-    for(const symbolizer of polygonObj.symbolizers) {
+    const olStyles = [];
+    for(const symbolizer of polygonStyleObj.symbolizers) {
 
+      let olPolygonStyleObj = {};
       if(symbolizer.type === "SIMPLE")
       {
         let [a, r, g, b] = symbolizer.Color.split(',').map(Number);
@@ -471,36 +481,28 @@ function toOlStyle(styles) {
         if(symbolizer.Transparent === "true")
           rgba[3] = 0;//alpha -> 0
         
-        let polygonStyleObj = 
-        {
-          'fill-color': rgba,
-        };
-        Object.assign(polygonStyleObj, toOlLineLayer(symbolizer.symbolizers));
-        styles.push(polygonStyleObj);
+        olPolygonStyleObj['fill-color'] = rgba;
       }
       else if(symbolizer.type === "PICTURE")
       {
-        let polygonStyleObj = 
-        {
-          'fill-pattern-src': symbolizer.Picture,//<Picture>
-          'symbol-picture-texture-fill': symbolizer.TextureFill//<TextureFill>
-        };
-        Object.assign(polygonStyleObj, toOlLineLayer(symbolizer.symbolizers));
-        styles.push(polygonStyleObj);
+        olPolygonStyleObj['fill-pattern-src'] = symbolizer.Picture;//<Picture>
+        olPolygonStyleObj['symbol-picture-texture-fill'] = symbolizer.TextureFill;//<TextureFill>
       }
+      Object.assign(olPolygonStyleObj, toOlLineSymbolizer(symbolizer.symbolizers[0]));
+      olStyles.push(olPolygonStyleObj);
     }
-    return styles;
+    return olStyles;
   }
 
-  function toOlLabelStyle(labelObj) {
-
-    const size = Number(labelObj.Size);
-    const offsetX = Number(labelObj.OffsetX);
-    const offsetY = Number(labelObj.OffsetY);
-    const bold = Boolean(labelObj.Bold);
-    const italic = Boolean(labelObj.Italic);
-    const underline = Boolean(labelObj.Underline)
-    const textAlign = Number(labelObj.Align);
+  function toOlLabelStyle(labelStyleObj) {
+    const font = labelStyleObj.Font;
+    const size = Number(labelStyleObj.Size);
+    const offsetX = Number(labelStyleObj.OffsetX);
+    const offsetY = Number(labelStyleObj.OffsetY);
+    const bold = Boolean(labelStyleObj.Bold);
+    const italic = Boolean(labelStyleObj.Italic);
+    const underline = Boolean(labelStyleObj.Underline)
+    const textAlign = Number(labelStyleObj.Align);
     const textAligns = [
       ['left', 'top'],      //0
       ['center', 'top'],    //1
@@ -515,10 +517,10 @@ function toOlStyle(styles) {
     const align = textAligns[textAlign][0];
     const baseline = textAligns[textAlign][1];
 
-    let [a, r, g, b] = symbolizer.Color.split(',').map(Number);
+    let [a, r, g, b] = labelStyleObj.Color.split(',').map(Number);
     const fillColor = [r, g, b, parseFloat(a/255).toFixed(2)];
     
-    const labelStyleObj = {
+    const olLabelStyleObj = {
       'text-font': (bold ? 'bold ':'') + (italic ? 'italic ':'') + size + 'px ' + font,//Font, Size, Bold, Italic
       'text-fill-color': fillColor,//Color
       'text-align': align,//Align
@@ -527,48 +529,68 @@ function toOlStyle(styles) {
       'text-offset-y': offsetY,//OffsetY
 
       'label-underline': underline,
-      'label-sea-water-level': Boolean(labelObj.SeaWaterLevel),
-      'label-decimal': Number(labelObj.Decimal),
-      'label-prefix': labelObj.Prefix,
-      'label-postfix': labelObj.Postfix,
+      'label-sea-water-level': Boolean(labelStyleObj.SeaWaterLevel),
+      'label-decimal': Number(labelStyleObj.Decimal),
+      'label-prefix': labelStyleObj.Prefix,
+      'label-postfix': labelStyleObj.Postfix,
     }
 
-    if(Boolean(labelObj.Outline))
+    if(Boolean(labelStyleObj.Outline))
     {
       let [a, r, g, b] = symbolizer.OutlineColor.split(',').map(Number);
       const outlineColor = [r, g, b, parseFloat(a/255).toFixed(2)];      
-      labelStyleObj['text-stroke-color'] = outlineColor
+      olLabelStyleObj['text-stroke-color'] = outlineColor
     }
 
-    if(Boolean(labelObj.Box))
+    if(Boolean(labelStyleObj.Box))
     {
-      let [a, r, g, b] = symbolizer.BoxColor.split(',').map(Number);
+      let [a, r, g, b] = labelStyleObj.BoxColor.split(',').map(Number);
       const boxColor = [r, g, b, parseFloat(a/255).toFixed(2)];      
-      labelStyleObj['text-background-fill-color'] = boxColor
+      olLabelStyleObj['text-background-fill-color'] = boxColor
     }
 
-    const picture = symbolizer?.Picture;
+    const picture = labelStyleObj?.Picture;
     if(picture)
     {
-      labelStyleObj['icon-src'] = picture;
-      labelStyleObj['icon-displacement'] = [Number(symbolizer.ImageOffsetX), Number(pointObj.ImageOffsetY)];  
-      labelStyleObj['label-image-align'] = picture;symbolizer.ImageAlign
+      olLabelStyleObj['icon-src'] = picture;
+      olLabelStyleObj['icon-displacement'] = [Number(labelStyleObj.ImageOffsetX), Number(labelStyleObj.ImageOffsetY)];  
+      olLabelStyleObj['label-image-align'] = labelStyleObj.ImageAlign
     }
 
-    return labelStyleObj;
+    return olLabelStyleObj;
   }  
 
 }
 
+function toOlLayer(layersObj) {
+  const olLayers = {};
+  for (const layerObj of layersObj) {
+    console.log(layerObj.Name)
+    //olLayers[layerObj.Name] = toOlPointStyle(layerObj);
+  }
+  return olLayers;
+}
+function getResolutionForScale (scale) {
+    let dpi = 25.4 / 0.28;
+    //let mpu = METERS_PER_UNIT[units];
+    let inchesPerMeter = 39.37;
+
+    return parseFloat(scale) / (inchesPerMeter * dpi);
+  }
+console.log(getResolutionForScale(22737))
 
 let results = parseMapStyle(xmlMapStyle);
 
-toOlStyle(results);
-console.log(JSON.stringify(results, null, 2));
+let olResult = toOlStyle(results);
+console.log(JSON.stringify(olResult, null, 2));
 
 let results2 = parseMapLayer(xmlMapLayer);
 
+let olResultStyle = toOlLayer(results2);
+
 console.log(JSON.stringify(results2, null, 2));
+
+
 
     </script>
   </body>
