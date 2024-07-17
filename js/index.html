@@ -70,10 +70,10 @@ const xmlMapStyle = `<MapStyle Version="1.0">
 const xmlMapLayer = `<MapLayer Version="1.0">
 	<Layer Category="경계" Name="해안선" FACC="BA010" GeometryType="Line" SHPSource="LBA010" GDBSource="CoastL" Map="250K,500K,1M" DisplayType="Geometry">
 		<Feature Name="사구" Description="설명" GeometryStyle="BA010L01">
-			<VVTStyle ACC="0" SLT="0,10,11,13"></VVTStyle>
+			<VVTStyle ACC="0" SLT="1,10,11,13"></VVTStyle>
 		</Feature>
 		<Feature Name="사구" Description="설명" GeometryStyle="BA010L02">
-			<VVTStyle ACC="0" SLT="0,10,11,13"></VVTStyle>
+			<VVTStyle ACC="0" SLT="2,10,11,13"></VVTStyle>
 		</Feature>
 	</Layer>
 	<Layer Category="고도" Name="표고점" FACC="CA030" GeometryType="Point" SHPSource="PCA010" GDBSource="ElevP" Map="250K,500K,1M" DisplayType="Both" LabelColumn="ZV2">
@@ -96,7 +96,11 @@ const xmlMapLayer = `<MapLayer Version="1.0">
 	</Group>  
 </MapLayer>`;
 
-
+function toRGBAArray(rgbaString)
+{
+  const [a, r, g, b] = rgbaString.split(',').map(Number);
+  return [r, g, b, Number(parseFloat(a/255).toFixed(2))];
+}
 
 function parseMapStyle(xmlString) {
   const parser = new DOMParser();
@@ -147,27 +151,27 @@ function parseMapLayer(xmlString) {
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
 
   const layers = [];
-  const groups = [];
-
   for (const child of xmlDoc.documentElement.children) {
+    /*
     let nodeObj = parseLayerNode(child);
+    
     if (child.tagName === "Group") {
       layers.push(nodeObj);
     } else if (child.tagName === "Layer") {
       layers.push(nodeObj);
     }
+    */
+    layers.push(parseLayerNode(child));
   }
 
-  return {
-    layers,
-    groups
-  };
+  return layers;
 
   function parseLayerNode(node) {
-    const nodeObj = {};
+    const nodeObj = {type: node.tagName};
     for (const attr of node.attributes) {
       nodeObj[attr.name] = attr.value;
     }
+    
 
     let children = [];
     for (let child of node.children) {
@@ -251,13 +255,11 @@ function toOlStyle(stylesObj) {
     {
       switch (symbolizer.type) {
         case "SIMPLE":
-          let [a, r, g, b] = symbolizer.Color.split(',').map(Number);
-          const rgba = [r, g, b, parseFloat(a/255).toFixed(2)];
           if(symbolizer.Shape === "0")//Circle
           {
             return {//<Shape> : 0
               'circle-radius': symbolizer.Size,//<Size>
-              'circle-fill-color': rgba,//<Color>
+              'circle-fill-color': toRGBAArray(symbolizer.Color),//<Color>
               'circle-displacement': offset,//<OffsetX>, <OffsetY>
             };
           }
@@ -266,7 +268,7 @@ function toOlStyle(stylesObj) {
             return {//<Shape> : 1
               'shape-points': 4,
               'shape-radius': symbolizer.Size,//<Size>
-              'shape-fill-color': rgba,//<Color>
+              'shape-fill-color': toRGBAArray(symbolizer.Color),//<Color>
               'shape-displacement': offset,//<OffsetX>, <OffsetY>
               'shape-angle': Math.PI / 4,
             };
@@ -325,19 +327,12 @@ function toOlStyle(stylesObj) {
     const lineJoins = ['miter', 'bevel', 'round'];//JoinType
     const lineCaps = ['butt', 'square', 'round'];//StartCap
 
-    let rgba;
-    const color = symbolizer?.Color;
-    if(symbolizer?.Color)
-    {
-      const [a, r, g, b] = color.split(',').map(Number);
-      rgba = [r, g, b, parseFloat(a/255).toFixed(2)];  
-    }
 
     let olSymbolizer;
     switch (symbolizer.type) {
       case "SIMPLE":        
         olSymbolizer = {
-          'stroke-color': rgba,//<Color>
+          'stroke-color': toRGBAArray(symbolizer.Color),//<Color>
           'stroke-width': symbolizer.Width,//<Width>
           'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
           'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//<StartCap>, <EndCap> 0:butt, 1:square, 2:round
@@ -345,7 +340,7 @@ function toOlStyle(stylesObj) {
         break;
       case "DASH":
         olSymbolizer = {
-          'stroke-color': rgba,//<Color>
+          'stroke-color': toRGBAArray(symbolizer.Color),//<Color>
           'stroke-width': symbolizer.Width,//<Width>
           'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
           'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//<DashCap> 0:butt, 1:round
@@ -357,6 +352,7 @@ function toOlStyle(stylesObj) {
         if(symbolizer.TextureLine === "false")//
         {
           olSymbolizer = {
+            'symbol-type': 'picture',
             'symbol-picture-texture-line': false,//<TextureLine>
             'stroke-pattern-src': symbolizer.Picture,//<Picture>
             'stroke-width': symbolizer.Width,//<Width>
@@ -367,6 +363,7 @@ function toOlStyle(stylesObj) {
         else if(symbolizer.TextureLine === "true")//StrokePattern, stylefunction, canvas
         {
           olSymbolizer = {
+            'symbol-type': 'picture',
             'symbol-picture-texture-line': true,//<TextureLine>              
             'stroke-pattern-src': symbolizer.Picture,//<Picture>
             //'icon-src': symbolizer.Picture,//<Picture>
@@ -378,6 +375,7 @@ function toOlStyle(stylesObj) {
         break;
       case "VERTICAL":
         olSymbolizer = {
+          'symbol-type': 'vertical',
           'symbol-vertical-color': `rgba(${rgba.join('')})`,//<Color>
           'symbol-vertical-width': Number(symbolizer.Width),//<Width>
           'symbol-vertical-vertical-type': Number(symbolizer.VerticalType),//<VerticalType>
@@ -407,6 +405,7 @@ function toOlStyle(stylesObj) {
         break;         
       case "DOUBLELINE":
         olSymbolizer = {
+          'symbol-type': 'double-line',
           'symbol-double-line-color': rgba,//<Color>
           'symbol-double-line-width': symbolizer.Width,//<Width>
           'symbol-double-line-type': symbolizer.Type,//<Type>
@@ -475,8 +474,7 @@ function toOlStyle(stylesObj) {
       let olPolygonStyleObj = {};
       if(symbolizer.type === "SIMPLE")
       {
-        let [a, r, g, b] = symbolizer.Color.split(',').map(Number);
-        const rgba = [r, g, b, parseFloat(a/255).toFixed(2)];
+        const rgba = toRGBAArray(symbolizer.Color);
 
         if(symbolizer.Transparent === "true")
           rgba[3] = 0;//alpha -> 0
@@ -504,49 +502,43 @@ function toOlStyle(stylesObj) {
     const underline = Boolean(labelStyleObj.Underline)
     const textAlign = Number(labelStyleObj.Align);
     const textAligns = [
-      ['left', 'top'],      //0
-      ['center', 'top'],    //1
-      ['right', 'top'],     //2
-      ['left', 'middle'],   //3
-      ['center', 'middle'], //4
-      ['right', 'middle'],  //5
-      ['left', 'bottom'],   //6
-      ['center', 'bottom'], //7
-      ['right', 'bottom'],  //8   
+      ['left', 'top'],    ['center', 'top'],    ['right', 'top'],    //0, 1, 2
+      ['left', 'middle'], ['center', 'middle'], ['right', 'middle'], //3, 4, 5
+      ['left', 'bottom'], ['center', 'bottom'], ['right', 'bottom'], //6, 7, 8
     ];
+
+    const anchors = [
+      [1, 1],   [0.5, 1],   [0, 1],     //0, 1, 2
+      [1, 0.5], [0.5, 0.5], [0.5, 0.5], //3, 4, 5
+      [1, 0],   [0.5, 0],   [0, 0],     //6, 7, 8
+    ];    
+
     const align = textAligns[textAlign][0];
     const baseline = textAligns[textAlign][1];
 
-    let [a, r, g, b] = labelStyleObj.Color.split(',').map(Number);
-    const fillColor = [r, g, b, parseFloat(a/255).toFixed(2)];
-    
     const olLabelStyleObj = {
+      'symbol-type': 'label',
+      'symbol-label-underline': underline,
+      'symbol-label-sea-water-level': Boolean(labelStyleObj.SeaWaterLevel),
+      'symbol-label-decimal': Number(labelStyleObj.Decimal),
+      'symbol-label-prefix': labelStyleObj.Prefix,
+      'symbol-label-postfix': labelStyleObj.Postfix,      
       'text-font': (bold ? 'bold ':'') + (italic ? 'italic ':'') + size + 'px ' + font,//Font, Size, Bold, Italic
-      'text-fill-color': fillColor,//Color
+      'text-fill-color': toRGBAArray(labelStyleObj.Color),//Color
       'text-align': align,//Align
       'text-baseline': baseline,//Align
       'text-offset-x': offsetX,//OffsetX
       'text-offset-y': offsetY,//OffsetY
-
-      'label-underline': underline,
-      'label-sea-water-level': Boolean(labelStyleObj.SeaWaterLevel),
-      'label-decimal': Number(labelStyleObj.Decimal),
-      'label-prefix': labelStyleObj.Prefix,
-      'label-postfix': labelStyleObj.Postfix,
     }
 
     if(Boolean(labelStyleObj.Outline))
-    {
-      let [a, r, g, b] = symbolizer.OutlineColor.split(',').map(Number);
-      const outlineColor = [r, g, b, parseFloat(a/255).toFixed(2)];      
-      olLabelStyleObj['text-stroke-color'] = outlineColor
+    {    
+      olLabelStyleObj['text-stroke-color'] = toRGBAArray(symbolizer.OutlineColor);
     }
 
     if(Boolean(labelStyleObj.Box))
-    {
-      let [a, r, g, b] = labelStyleObj.BoxColor.split(',').map(Number);
-      const boxColor = [r, g, b, parseFloat(a/255).toFixed(2)];      
-      olLabelStyleObj['text-background-fill-color'] = boxColor
+    {    
+      olLabelStyleObj['text-background-fill-color'] = toRGBAArray(labelStyleObj.BoxColor);
     }
 
     const picture = labelStyleObj?.Picture;
@@ -554,7 +546,7 @@ function toOlStyle(stylesObj) {
     {
       olLabelStyleObj['icon-src'] = picture;
       olLabelStyleObj['icon-displacement'] = [Number(labelStyleObj.ImageOffsetX), Number(labelStyleObj.ImageOffsetY)];  
-      olLabelStyleObj['label-image-align'] = labelStyleObj.ImageAlign
+      olLabelStyleObj['icon-anchor'] = anchors[Number(labelStyleObj.ImageAlign)];
     }
 
     return olLabelStyleObj;
@@ -562,22 +554,97 @@ function toOlStyle(stylesObj) {
 
 }
 
-function toOlLayer(layersObj) {
+function toOlMapLayer(layersObj) {
   const olLayers = {};
   for (const layerObj of layersObj) {
-    console.log(layerObj.Name)
-    //olLayers[layerObj.Name] = toOlPointStyle(layerObj);
+    if(layerObj.type === "Group") {
+      olLayers[layerObj.Name] = toOlGroup(layerObj);
+    }
+    else if(layerObj.type === "Layer") {
+      olLayers[layerObj.Name] = toOlLayer(layerObj);
+    }
   }
   return olLayers;
-}
-function getResolutionForScale (scale) {
-    let dpi = 25.4 / 0.28;
-    //let mpu = METERS_PER_UNIT[units];
-    let inchesPerMeter = 39.37;
 
-    return parseFloat(scale) / (inchesPerMeter * dpi);
+  function toOlGroup(groupObj)
+  {
+    const olLayers = {};
+    for (const layerObj of groupObj.layers) {
+      olLayers[layerObj.Name] = toOlLayer(layerObj);
+    }
+    return olLayers;
   }
-console.log(getResolutionForScale(22737))
+
+  function toOlLayer(layerObj)
+  {
+
+    const scaleMap = {
+      "25K": 9.554628535647032,
+      "50K": 19.109257071294063,
+      "100K": 38.21851414258813,
+      "250K": 152.8740565703525,
+      "500K": 305.748113140705,
+      "1M": 611.49622628141
+    };
+
+    const resolutions = layerObj.Map.split(',').map(v => scaleMap[v.trim()]);
+
+    const olFilters = [
+      'all',
+      ['<=', ['resolution'], Math.max(...resolutions)],     
+      ['>', ['resolution'], Math.min(...resolutions)], 
+    ];
+
+    const olStyles = {};
+    for (const featureObj of layerObj.features) {
+      const {styles, filters} = toOlFeature(featureObj);
+      olFilters.push(...filters);
+
+    }    
+
+    return {
+      source : layerObj.SHPSource,
+
+    }
+
+  }
+
+  function toOlFeature(featureObj)
+  {
+    const styles = [
+      featureObj.GeometryStyle,
+      featureObj.LabelStyle
+    ].filter(Boolean);
+
+    const filters = [];
+    for (const prop in featureObj.VVTStyle) {
+      const [, operator, valuesPart] = featureObj.VVTStyle[prop]
+                                              .replace(/&lt;/g, '<')
+                                              .replace(/&gt;/g, '>')
+                                              .replace(/<>/g, '!')
+                                              .match(/([<>=!]+)?([\w+,]+)/);
+
+      if(valuesPart.includes(','))
+      {
+        const values = valuesPart.split(',').map(value => isNaN(Number(value)) ? value : Number(value));
+        const filter = ['in', ['get', prop], isNaN(values[0]) ? ['literal', values] : values];
+        filters.push(operator === '!' ? ['!', filter]: filter);
+      }
+      else
+      {
+        const finalOperator = !operator ? '==' : operator ==='!' ? '!=' : operator;
+        filters.push([finalOperator, ['get', prop], Number(valuesPart)]);
+
+      }
+    }
+
+    return {
+      styles,
+      filters,
+    };
+  }
+}
+
 
 let results = parseMapStyle(xmlMapStyle);
 
@@ -586,7 +653,7 @@ console.log(JSON.stringify(olResult, null, 2));
 
 let results2 = parseMapLayer(xmlMapLayer);
 
-let olResultStyle = toOlLayer(results2);
+let olResultStyle = toOlMapLayer(results2);
 
 console.log(JSON.stringify(results2, null, 2));
 
