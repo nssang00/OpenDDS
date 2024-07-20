@@ -152,15 +152,6 @@ function parseMapLayer(xmlString) {
 
   const layers = [];
   for (const child of xmlDoc.documentElement.children) {
-    /*
-    let nodeObj = parseLayerNode(child);
-    
-    if (child.tagName === "Group") {
-      layers.push(nodeObj);
-    } else if (child.tagName === "Layer") {
-      layers.push(nodeObj);
-    }
-    */
     layers.push(parseLayerNode(child));
   }
 
@@ -220,34 +211,7 @@ function toOlStyle(stylesObj) {
     }
   }
   return olStyles;
-/*
-  {
-    "name": "Agg",
-    "type": "point",
-    "OffsetX": "0",
-    "OffsetY": "0",
-    "symbolizers": [
-      {
-        "type": "PICTURE",
-        "Picture": "ddd.png"
-      }
-    ]
-  },
-  {
-    "name": "Agg2",
-    "type": "point",
-    "OffsetX": "0",
-    "OffsetY": "0",
-    "symbolizers": [
-      {
-        "type": "SIMPLE",
-        "Color": "255, 0, 0, 0",
-        "Size": "6",
-        "Shape": "1"
-      }
-    ]
-  },  
-*/
+
   function toOlPointStyle(pointStyleObj) {
 
     const offset = [Number(pointStyleObj.OffsetX), Number(pointStyleObj.OffsetY)];    
@@ -293,29 +257,6 @@ function toOlStyle(stylesObj) {
       }
     }
   }
-
-/*
-  {
-    "name": "Adfs",
-    "type": "line",
-    "symbolizers": [
-      {
-        "type": "DASH",
-        "Color": "255, 0, 0, 0",
-        "Width": "1",
-        "JoinType": "2",
-        "Dash": ["6","3","6","3"]
-      },
-      {
-        "type": "PICTURE",
-        "Picture": "dfd.png",
-        "TextureLine": "false",
-        "Width": "8"
-      }
-    ]
-  },  
-*/
-
 
   //SIMPLE, DASH, PICTURE, VERTICAL, DOUBLELINE
   function toOlLineStyle(lineStyleObj) {
@@ -399,23 +340,7 @@ function toOlStyle(stylesObj) {
           'symbol-vertical-start-pos': Number(symbolizer?.StartPos),//<StartPos>  
           'symbol-vertical-interval': Number(symbolizer?.Interval),//<Interval>                     
         };              
-/*
-        const symbol = drawVerticalSymbol({
-          color: `rgba(${rgba.join('')})`,//<Color>
-          width: symbolizer.Width,//<Width>
-          verticalType: symbolizer.VerticalType,//<VerticalType>
-          leftLength: symbolizer.leftLength,//<LeftLength>
-          rightLength: symbolizer.rightLength, //<RightLength>
-          lineCap: symbolizer?.StartCap,//<StartCap>, <EndCap>
-        });
-        lines.push({
-          'stroke-pattern-src': symbol.src,
-          'stroke-width': symbol.strokeWidth,
-          'stroke-offset': 0,
-          'stroke-pattern-start-offset': symbolizer.StartPos, //<StartPos>  
-          'stroke-pattern-spacing': symbolizer.Interval,//<Interval>    
-        });
-        */
+
         break;         
       case "DOUBLELINE":
         olSymbolizer = {
@@ -425,54 +350,7 @@ function toOlStyle(stylesObj) {
           'symbol-double-line-type': symbolizer.Type,//<Type>
           'symbol-double-line-space': Number(symbolizer.Shape), //<Space>
           'symbol-double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-        };        
-        /*      
-        if(symbolizer.Type === 0)//Simple
-        {           
-          
-          lines.push({
-            'stroke-color': rgba,//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-offset': Number(symbolizer.Shape)/2, //<Space>/2
-            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-          };   
-          lines.push({
-            'stroke-color': rgba,//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-offset': -Number(symbolizer.Shape)/2, //<Space>/2
-            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-          }; 
-        }
-        else if(symbolizer.Type === 2)//Bridge //StrokePattern, stylefunction, canva, + doubleline(simple)
-        {
-
-        }
-        else if(symbolizer.Type === 3)//Left Only
-        {
-          lines.push({
-            'stroke-color': rgba,//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-offset': Number(symbolizer.Shape)/2, //<Space>/2
-            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-          };   
-        }
-        else if(symbolizer.Type === 4)//Right Only
-        {
-          lines.push({
-            'stroke-color': rgba,//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-offset': -Number(symbolizer.Shape)/2, //<Space>/2
-            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
-          };  
-        }
-        else if(symbolizer.Type === 5)//Tunnel //StrokePattern, stylefunction, canva
-        {
-          
-        }
-        else if(symbolizer.Type === 6)//PipeLine //StrokePattern, stylefunction, canva
-        {
-          
-        } */     
+        };            
         break;                 
       default:
         break;
