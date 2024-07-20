@@ -522,7 +522,8 @@ function toOlStyle(stylesObj) {
       'symbol-label-sea-water-level': Boolean(labelStyleObj.SeaWaterLevel),
       'symbol-label-decimal': Number(labelStyleObj.Decimal),
       'symbol-label-prefix': labelStyleObj.Prefix,
-      'symbol-label-postfix': labelStyleObj.Postfix,      
+      'symbol-label-postfix': labelStyleObj.Postfix,
+      'text-value': ['var', 'text'],  
       'text-font': (bold ? 'bold ':'') + (italic ? 'italic ':'') + size + 'px ' + font,//Font, Size, Bold, Italic
       'text-fill-color': toRGBAArray(labelStyleObj.Color),//Color
       'text-align': align,//Align
@@ -533,7 +534,7 @@ function toOlStyle(stylesObj) {
 
     if(Boolean(labelStyleObj.Outline))
     {    
-      olLabelStyleObj['text-stroke-color'] = toRGBAArray(symbolizer.OutlineColor);
+      olLabelStyleObj['text-stroke-color'] = toRGBAArray(labelStyleObj.OutlineColor);
     }
 
     if(Boolean(labelStyleObj.Box))
@@ -557,27 +558,19 @@ function toOlStyle(stylesObj) {
 function toOlMapLayer(layersObj) {
   const olLayers = {};
   for (const layerObj of layersObj) {
-    if(layerObj.type === "Group") {
-      olLayers[layerObj.Name] = toOlGroup(layerObj);
-    }
-    else if(layerObj.type === "Layer") {
-      olLayers[layerObj.Name] = toOlLayer(layerObj);
-    }
+    olLayers[layerObj.Name] = layerObj.type === "Group" 
+            ? toOlGroup(layerObj) 
+            : toOlLayer(layerObj);
   }
   return olLayers;
 
   function toOlGroup(groupObj)
   {
-    const olLayers = {};
-    for (const layerObj of groupObj.layers) {
-      olLayers[layerObj.Name] = toOlLayer(layerObj);
-    }
-    return olLayers;
+    return toOlMapLayer(groupObj.layers);
   }
 
   function toOlLayer(layerObj)
   {
-
     const scaleMap = {
       "25K": 9.554628535647032,
       "50K": 19.109257071294063,
@@ -619,10 +612,10 @@ function toOlMapLayer(layersObj) {
     const filters = [];
     for (const prop in featureObj.VVTStyle) {
       const [, operator, valuesPart] = featureObj.VVTStyle[prop]
-                                              .replace(/&lt;/g, '<')
-                                              .replace(/&gt;/g, '>')
-                                              .replace(/<>/g, '!')
-                                              .match(/([<>=!]+)?([\w+,]+)/);
+                                      .replace(/&lt;/g, '<')
+                                      .replace(/&gt;/g, '>')
+                                      .replace(/<>/g, '!')
+                                      .match(/([<>=!]+)?([\w+,]+)/);
 
       if(valuesPart.includes(','))
       {
@@ -634,7 +627,6 @@ function toOlMapLayer(layersObj) {
       {
         const finalOperator = !operator ? '==' : operator ==='!' ? '!=' : operator;
         filters.push([finalOperator, ['get', prop], Number(valuesPart)]);
-
       }
     }
 
