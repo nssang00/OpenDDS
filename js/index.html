@@ -258,28 +258,34 @@ function toOlStyle(stylesObj) {
           if(symbolizer.Shape === "0")//Circle
           {
             return {//<Shape> : 0
+              style: {
               'circle-radius': symbolizer.Size,//<Size>
               'circle-fill-color': toRGBAArray(symbolizer.Color),//<Color>
               'circle-displacement': offset,//<OffsetX>, <OffsetY>
+              }
             };
           }
           else if(symbolizer.Shape === "1")//Rectangle
           {
             return {//<Shape> : 1
+              style: {
               'shape-points': 4,
               'shape-radius': symbolizer.Size,//<Size>
               'shape-fill-color': toRGBAArray(symbolizer.Color),//<Color>
               'shape-displacement': offset,//<OffsetX>, <OffsetY>
               'shape-angle': Math.PI / 4,
+              }
             };
           }
           break;
         case "PICTURE":
           return {
+            style: {
             'icon-src': symbolizer.Picture,//<Picture>
             'icon-displacement': offset,//<OffsetX>, <OffsetY>
             //'icon-width': 20,
             //'icon-height': 20,
+            }
           };
           break;
         default:
@@ -332,20 +338,24 @@ function toOlStyle(stylesObj) {
     switch (symbolizer.type) {
       case "SIMPLE":        
         olSymbolizer = {
+          style: {
           'stroke-color': toRGBAArray(symbolizer.Color),//<Color>
           'stroke-width': symbolizer.Width,//<Width>
           'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
           'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//<StartCap>, <EndCap> 0:butt, 1:square, 2:round
+          }
         };          
         break;
       case "DASH":
         olSymbolizer = {
+          style: {
           'stroke-color': toRGBAArray(symbolizer.Color),//<Color>
           'stroke-width': symbolizer.Width,//<Width>
           'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
           'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//<DashCap> 0:butt, 1:round
           'stroke-line-dash-offset': symbolizer.DashOffset,//<DashOffset>  
           'stroke-line-dash': symbolizer.Dash.map(Number),//<Dash><DashItem>
+          }
         };      
         break;
       case "PICTURE":
@@ -354,22 +364,26 @@ function toOlStyle(stylesObj) {
           olSymbolizer = {
             'symbol-type': 'picture',
             'symbol-picture-texture-line': false,//<TextureLine>
+            style: {
             'stroke-pattern-src': symbolizer.Picture,//<Picture>
             'stroke-width': symbolizer.Width,//<Width>
             'stroke-pattern-start-offset': Number(symbolizer.StartPos), //<StartPos>  
             'stroke-pattern-spacing': Number(symbolizer.Interval),//<Interval>  
+            }
           };        
         }
         else if(symbolizer.TextureLine === "true")//StrokePattern, stylefunction, canvas
         {
           olSymbolizer = {
             'symbol-type': 'picture',
-            'symbol-picture-texture-line': true,//<TextureLine>              
+            'symbol-picture-texture-line': true,//<TextureLine>     
+            style: {
             'stroke-pattern-src': symbolizer.Picture,//<Picture>
             //'icon-src': symbolizer.Picture,//<Picture>
             'stroke-width': Number(symbolizer.Width),//<Width>
             'stroke-line-join': lineJoin[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
             'stroke-line-cap': lineCap[Number(symbolizer.StartCap)],//<DashCap> 0:butt, 1:round
+            }
           };     
         }
         break;
@@ -471,7 +485,7 @@ function toOlStyle(stylesObj) {
     const olStyles = [];
     for(const symbolizer of polygonStyleObj.symbolizers) {
 
-      let olPolygonStyleObj = {};
+      let olPolygonStyleObj = {style:{}};
       if(symbolizer.type === "SIMPLE")
       {
         const rgba = toRGBAArray(symbolizer.Color);
@@ -479,11 +493,11 @@ function toOlStyle(stylesObj) {
         if(symbolizer.Transparent === "true")
           rgba[3] = 0;//alpha -> 0
         
-        olPolygonStyleObj['fill-color'] = rgba;
+        olPolygonStyleObj.style['fill-color'] = rgba;
       }
       else if(symbolizer.type === "PICTURE")
       {
-        olPolygonStyleObj['fill-pattern-src'] = symbolizer.Picture;//<Picture>
+        olPolygonStyleObj.style['fill-pattern-src'] = symbolizer.Picture;//<Picture>
         olPolygonStyleObj['symbol-picture-texture-fill'] = symbolizer.TextureFill;//<TextureFill>
       }
       Object.assign(olPolygonStyleObj, toOlLineSymbolizer(symbolizer.symbolizers[0]));
@@ -523,6 +537,7 @@ function toOlStyle(stylesObj) {
       'symbol-label-decimal': Number(labelStyleObj.Decimal),
       'symbol-label-prefix': labelStyleObj.Prefix,
       'symbol-label-postfix': labelStyleObj.Postfix,
+      style: {
       'text-value': ['var', 'text'],  
       'text-font': (bold ? 'bold ':'') + (italic ? 'italic ':'') + size + 'px ' + font,//Font, Size, Bold, Italic
       'text-fill-color': toRGBAArray(labelStyleObj.Color),//Color
@@ -530,24 +545,25 @@ function toOlStyle(stylesObj) {
       'text-baseline': baseline,//Align
       'text-offset-x': offsetX,//OffsetX
       'text-offset-y': offsetY,//OffsetY
+      }
     }
 
     if(Boolean(labelStyleObj.Outline))
     {    
-      olLabelStyleObj['text-stroke-color'] = toRGBAArray(labelStyleObj.OutlineColor);
+      olLabelStyleObj.style['text-stroke-color'] = toRGBAArray(labelStyleObj.OutlineColor);
     }
 
     if(Boolean(labelStyleObj.Box))
     {    
-      olLabelStyleObj['text-background-fill-color'] = toRGBAArray(labelStyleObj.BoxColor);
+      olLabelStyleObj.style['text-background-fill-color'] = toRGBAArray(labelStyleObj.BoxColor);
     }
 
     const picture = labelStyleObj?.Picture;
     if(picture)
     {
-      olLabelStyleObj['icon-src'] = picture;
-      olLabelStyleObj['icon-displacement'] = [Number(labelStyleObj.ImageOffsetX), Number(labelStyleObj.ImageOffsetY)];  
-      olLabelStyleObj['icon-anchor'] = anchors[Number(labelStyleObj.ImageAlign)];
+      olLabelStyleObj.style['icon-src'] = picture;
+      olLabelStyleObj.style['icon-displacement'] = [Number(labelStyleObj.ImageOffsetX), Number(labelStyleObj.ImageOffsetY)];  
+      olLabelStyleObj.style['icon-anchor'] = anchors[Number(labelStyleObj.ImageAlign)];
     }
 
     return olLabelStyleObj;
