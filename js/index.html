@@ -103,16 +103,15 @@ function toRGBAArray(rgbaString)
 }
 
 function parseMapStyle(xmlString) {
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-
+  const xmlDoc = new DOMParser().parseFromString(xmlString, "text/xml");
+/*
   let styles = [];
-
   for (const styleNode of xmlDoc.documentElement.children) {//Style
     styles.push(parseStyleNode(styleNode));
   }
-
   return styles;
+*/
+  return Array.from(xmlDoc.documentElement.children).map(parseStyleNode);
 
   function parseStyleNode(node) {
     const nodeObj = {};
@@ -147,15 +146,15 @@ function parseMapStyle(xmlString) {
 
 
 function parseMapLayer(xmlString) {
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-
+  const xmlDoc = new DOMParser().parseFromString(xmlString, "text/xml");
+/*
   const layers = [];
   for (const child of xmlDoc.documentElement.children) {
     layers.push(parseLayerNode(child));
   }
-
   return layers;
+*/
+  return Array.from(xmlDoc.documentElement.children).map(parseLayerNode);
 
   function parseLayerNode(node) {
     const nodeObj = {type: node.tagName};
@@ -163,7 +162,6 @@ function parseMapLayer(xmlString) {
       nodeObj[attr.name] = attr.value;
     }
     
-
     let children = [];
     for (let child of node.children) {
 
@@ -179,12 +177,14 @@ function parseMapLayer(xmlString) {
     }
 
     if (children.length > 0) {
+      /*
       if (node.tagName === "Group") {
         nodeObj.layers = children;
       } else if (node.tagName === "Layer") {
         nodeObj.features = children;
       }
-
+      */
+      nodeObj[node.tagName === "Group" ? "layers" : "features"] = children;
     }
     return nodeObj;
   }   
@@ -259,6 +259,7 @@ function toOlStyle(stylesObj) {
   }
 
   //SIMPLE, DASH, PICTURE, VERTICAL, DOUBLELINE
+  /*
   function toOlLineStyle(lineStyleObj) {
 
     const olStyles = [];
@@ -267,13 +268,15 @@ function toOlStyle(stylesObj) {
       olStyles.push(toOlLineSymbolizer(symbolizer));
     }
     return olStyles;
-  }  
+  } */
+  function toOlLineStyle(lineStyleObj) {
+    return lineStyleObj.symbolizers.map(symbolizer => toOlLineSymbolizer(symbolizer));
+  }
 
   function toOlLineSymbolizer(symbolizer) {
 
     const lineJoins = ['miter', 'bevel', 'round'];//JoinType
     const lineCaps = ['butt', 'square', 'round'];//StartCap
-
 
     let olSymbolizer;
     switch (symbolizer.type) {
@@ -357,7 +360,7 @@ function toOlStyle(stylesObj) {
     }
     return olSymbolizer;
   }
-
+/*
   function toOlPolygonStyle(polygonStyleObj) {
  
     const olStyles = [];
@@ -382,6 +385,23 @@ function toOlStyle(stylesObj) {
       olStyles.push(olPolygonStyleObj);
     }
     return olStyles;
+  }*/
+  function toOlPolygonStyle(polygonStyleObj) {
+    return polygonStyleObj.symbolizers.map(symbolizer => {
+      const olPolygonStyleObj = { style: {} };
+
+      if (symbolizer.type === "SIMPLE") {
+        const rgba = toRGBAArray(symbolizer.Color);
+        rgba[3] = symbolizer.Transparent === "true" ? 0 : rgba[3]; // alpha 설정
+        olPolygonStyleObj.style['fill-color'] = rgba;
+      } else if (symbolizer.type === "PICTURE") {
+        olPolygonStyleObj.style['fill-pattern-src'] = symbolizer.Picture; // <Picture>
+        olPolygonStyleObj['symbol-picture-texture-fill'] = symbolizer.TextureFill; // <TextureFill>
+      }
+
+      Object.assign(olPolygonStyleObj, toOlLineSymbolizer(symbolizer.symbolizers[0]));
+      return olPolygonStyleObj;
+    });
   }
 
   function toOlLabelStyle(labelStyleObj) {
@@ -498,10 +518,7 @@ function toOlMapLayer(layersObj) {
 
   function toOlFeature(featureObj)
   {
-    const styles = [
-      featureObj.GeometryStyle,
-      featureObj.LabelStyle
-    ].filter(Boolean);
+    const styles = [featureObj.GeometryStyle, featureObj.LabelStyle].filter(Boolean);
 
     const filters = [];
     for (const prop in featureObj.VVTStyle) {
