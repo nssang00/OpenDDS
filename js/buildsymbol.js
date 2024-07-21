@@ -17,7 +17,7 @@ function buildFormatter(options) {
       }
     }
   
-    let result = label.prefix + text + label.postfix;
+    let result = (label?.prefix ? label.prefix : '') + text + (label?.postfix ? label.postfix : '');
     if (label.underline) {
       result = result.split('').map((char) => char + '\u0332').join('');
     }
@@ -29,6 +29,7 @@ function rulesToStyleFunction(rules) {
   const parsingContext = {
     variables: new Set(),
     properties: new Set(),
+    geometryType: false,
     style: {},
   };
   let labelFormatter;
@@ -46,7 +47,7 @@ function rulesToStyleFunction(rules) {
           subscript: rule['symbol-label-sea-water-level'],
         });
       }
-      else if(symbolType ===)
+
     }
 
   }
@@ -60,11 +61,14 @@ function rulesToStyleFunction(rules) {
   return function (feature, resolution) {
     evaluationContext.properties = feature.getPropertiesInternal();
     evaluationContext.resolution = resolution;
+    if (parsingContext.geometryType) {
+      const type = feature.getGeometry().getType();
+      evaluationContext.geometryType = type.startsWith("Multi") ? type.substring(5) : type;;
+    }
     evaluationContext.variables['text'] = labelFormatter(feature.get('class'));
     return evaluator(evaluationContext);
   };
 }
-
 
 
 function buildSymbol(styles)
@@ -87,8 +91,12 @@ function buildSymbol(styles)
       default:
         break;                
     }
-
   }
+  return function (feature) {
+
+      const type = feature.getGeometry().getType();
+    return ;
+  };
 }
 
 function buildPicture(style)
@@ -122,59 +130,101 @@ function buildVertical(style)
 
 function buildDoubleLine(style)
 {
-        /*      
-          style['symbol-double-line-color']: rgba,//<Color>
-          style['symbol-double-line-width']: symbolizer.Width,//<Width>
-          style['symbol-double-line-type']: symbolizer.Type,//<Type>
-          style['symbol-double-line-space']: Number(symbolizer.Shape), //<Space>
-          style['symbol-double-line-line-join']: lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
 
-        if(symbolizer.Type === 0)//Simple
-        {           
-          
-          lines.push({
-            'stroke-color': style['symbol-double-line-color'],//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-offset': Number(symbolizer.Shape)/2, //<Space>/2
-            'stroke-line-join': style['symbol-double-line-line-join'],//<JoinType> 0:miter, 1:bevel, 2:round
-          };   
-          lines.push({
-            'stroke-color': style['symbol-double-line-color'],//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-offset': -Number(symbolizer.Shape)/2, //<Space>/2
-            'stroke-line-join': style['symbol-double-line-line-join'],//<JoinType> 0:miter, 1:bevel, 2:round
-          }; 
-        }
-        else if(symbolizer.Type === 2)//Bridge //StrokePattern, stylefunction, canva, + doubleline(simple)
-        {
+  switch(style['symbol-double-line-type']) {
+    case 0://Simple
 
-        }
-        else if(symbolizer.Type === 3)//Left Only
-        {
-          lines.push({
-            'stroke-color': style['symbol-double-line-color'],//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-offset': Number(symbolizer.Shape)/2, //<Space>/2
-            'stroke-line-join': style['symbol-double-line-line-join'],//<JoinType> 0:miter, 1:bevel, 2:round
-          };   
-        }
-        else if(symbolizer.Type === 4)//Right Only
-        {
-          lines.push({
-            'stroke-color': style['symbol-double-line-color'],//<Color>
-            'stroke-width': symbolizer.Width,//<Width>
-            'stroke-offset': -Number(symbolizer.Shape)/2, //<Space>/2
-            'stroke-line-join': style['symbol-double-line-line-join'],//<JoinType> 0:miter, 1:bevel, 2:round
-          };  
-        }
-        else if(symbolizer.Type === 5)//Tunnel //StrokePattern, stylefunction, canva
-        {
-          
-        }
-        else if(symbolizer.Type === 6)//PipeLine //StrokePattern, stylefunction, canva
-        {
-          
-        } */    
+      break;
+    case 1:
+
+      break;
+    case 2://Bridge
+
+      break;
+    case 3://Left Only
+
+      break;
+    case 4://Right Only
+
+      break;
+    case 5://Tunnel //StrokePattern, stylefunction, canvas
+
+      break;     
+    case 6://PipeLine //StrokePattern, stylefunction, canvas
+
+      break;           
+    default:
+      break;                
+  }  
+
+
+  /*      
+    style['symbol-double-line-color']: rgba,//<Color>
+    style['symbol-double-line-width']: symbolizer.Width,//<Width>
+    style['symbol-double-line-type']: symbolizer.Type,//<Type>
+    style['symbol-double-line-space']: Number(symbolizer.Space), //<Space>
+    style['symbol-double-line-line-join']: lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round
+
+  if(symbolizer.Type === 0)//Simple
+  {           
+    //for (let i = -1; i <= 1; i += 2) {
+      //'stroke-offset': (style['symbol-double-line-space'] / 2) * i,
+    lines.push({
+      'stroke-color': style['symbol-double-line-color'],//<Color>
+      'stroke-width': style['symbol-double-line-width'],//<Width>
+      'stroke-offset': style['symbol-double-line-space']/2, //<Space>/2
+      'stroke-line-join': style['symbol-double-line-line-join'],//<JoinType> 0:miter, 1:bevel, 2:round
+    };   
+    lines.push({
+      'stroke-color': style['symbol-double-line-color'],//<Color>
+      'stroke-width': style['symbol-double-line-width'],//<Width>
+      'stroke-offset': -(style['symbol-double-line-space']/2), //<Space>/2
+      'stroke-line-join': style['symbol-double-line-line-join'],//<JoinType> 0:miter, 1:bevel, 2:round
+    }; 
+  }
+  else if(symbolizer.Type === 2)//Bridge //StrokePattern, stylefunction, canva, + doubleline(simple)
+  {
+    const symbol = drawDoubleLineSymbol({
+      color: style['symbol-double-line-color'],//<Color>
+      width: style['symbol-double-line-width'],//<Width>
+      type: style['symbol-double-line-type'],//<Type>
+      space: style['symbol-double-line-space'],//<Space>
+      lineJoin: style['symbol-double-line-line-join'], //<JoinType>
+    });
+    lines.push({
+      'stroke-pattern-src': symbol.src,
+      'stroke-width': symbol.strokeWidth,
+      'stroke-offset': 0,
+      'stroke-pattern-start-offset': style['symbol-vertical-start-pos'], //<StartPos>  
+      'stroke-pattern-spacing': style['symbol-vertical-interval'],//<Interval>    
+    });    
+  }
+  else if(symbolizer.Type === 3)//Left Only
+  {
+    lines.push({
+      'stroke-color': style['symbol-double-line-color'],//<Color>
+      'stroke-width': style['symbol-double-line-width'],//<Width>
+      'stroke-offset': style['symbol-double-line-space']/2, //<Space>/2
+      'stroke-line-join': style['symbol-double-line-line-join'],//<JoinType> 0:miter, 1:bevel, 2:round
+    };   
+  }
+  else if(symbolizer.Type === 4)//Right Only
+  {
+    lines.push({
+      'stroke-color': style['symbol-double-line-color'],//<Color>
+      'stroke-width': style['symbol-double-line-width'],//<Width>
+      'stroke-offset': -(style['symbol-double-line-space']/2), //<Space>/2
+      'stroke-line-join': style['symbol-double-line-line-join'],//<JoinType> 0:miter, 1:bevel, 2:round
+    };  
+  }
+  else if(symbolizer.Type === 5)//Tunnel //StrokePattern, stylefunction, canvas
+  {
+    
+  }
+  else if(symbolizer.Type === 6)//PipeLine //StrokePattern, stylefunction, canvas
+  {
+    
+  } */    
 }
 
 function buildLabel(style)
