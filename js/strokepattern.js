@@ -41,56 +41,50 @@ createStrokePatternStyle(strokepattenstyle).then(style => {
 });
 
 
+//////
 function createStrokePatternStyle(strokepattenstyle) {
     const { 'stroke-pattern-src': imageSrc, 'stroke-width': width } = strokepattenstyle;
 
-    // 이미지 객체 생성
-    const img = new Image();
-    img.src = imageSrc;
+    // 이미지 로드를 위한 내부 함수
+    const loadImage = (src) => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.src = src;
 
-    // 이미지 로드 대기
-    const patternCanvas = document.createElement('canvas');
-    patternCanvas.width = 16;  // 패턴의 너비
-    patternCanvas.height = 16;  // 패턴의 높이
-    const ctx = patternCanvas.getContext('2d');
+            img.onload = () => {
+                resolve(img);
+            };
 
-    // 이미지가 로드될 때까지 대기
-    const loadImageSynchronously = () => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('GET', imageSrc, false);  // 동기 요청
-        xhr.responseType = 'blob';
-
-        try {
-            xhr.send();
-            if (xhr.status === 200) {
-                const blob = xhr.response;
-                const objectUrl = URL.createObjectURL(blob);
-                img.src = objectUrl;
-
-                img.onload = function() {
-                    ctx.drawImage(img, 0, 0, patternCanvas.width, patternCanvas.height);
-                    const pattern = ctx.createPattern(patternCanvas, 'repeat');
-                    return {
-                        'stroke-color': pattern,
-                        'stroke-width': width
-                    };
-                };
-            } else {
-                throw new Error('이미지를 로드할 수 없습니다.');
-            }
-        } catch (error) {
-            console.error(error);
-            return null;
-        }
+            img.onerror = () => {
+                reject(new Error('이미지를 로드할 수 없습니다.'));
+            };
+        });
     };
 
-    loadImageSynchronously();
+    // 이미지 로드를 기다리고 패턴을 생성
+    const img = loadImage(imageSrc);
+    let patternStyle;
 
-    // 이미지가 동기적으로 로드되면서 반환
-    return {
-        'stroke-color': ctx.createPattern(patternCanvas, 'repeat'),
-        'stroke-width': width
-    };
+    img.then((image) => {
+        const patternCanvas = document.createElement('canvas');
+        patternCanvas.width = 16;  // 패턴의 너비
+        patternCanvas.height = 16;  // 패턴의 높이
+        const ctx = patternCanvas.getContext('2d');
+
+        ctx.drawImage(image, 0, 0, patternCanvas.width, patternCanvas.height);
+        const pattern = ctx.createPattern(patternCanvas, 'repeat');
+
+        patternStyle = {
+            'stroke-color': pattern,
+            'stroke-width': width
+        };
+    }).catch((error) => {
+        console.error(error);
+        patternStyle = null;  // 에러 발생 시 null 설정
+    });
+
+    // 동기적으로 결과를 반환 (초기값)
+    return patternStyle;
 }
 
 // 사용 예시
@@ -99,5 +93,8 @@ const strokepattenstyle = {
     'stroke-width': 1.5,
 };
 
+// 동기적으로 호출
 const style = createStrokePatternStyle(strokepattenstyle);
-console.log(style);
+console.log(style);  // 초기값인 null 또는 undefined가 출력될 수 있음
+
+// 실제 사용 예시에서는 Promise를 사용하거나, 이후에 결과를 처리해야 함
