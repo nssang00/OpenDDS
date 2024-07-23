@@ -98,3 +98,53 @@ const style = createStrokePatternStyle(strokepattenstyle);
 console.log(style);  // 초기값인 null 또는 undefined가 출력될 수 있음
 
 // 실제 사용 예시에서는 Promise를 사용하거나, 이후에 결과를 처리해야 함
+
+
+///////
+function createStrokePatternStyle(strokepattenstyle) {
+    const { 'stroke-pattern-src': imageSrc, 'stroke-width': width } = strokepattenstyle;
+
+    // 동기적으로 기본값을 반환
+    let patternStyle = null;
+
+    // 이미지 로드 및 패턴 생성
+    (async () => {
+        const img = new Image();
+        img.src = imageSrc;
+
+        img.onload = () => {
+            const patternCanvas = document.createElement('canvas');
+            patternCanvas.width = 16;  // 패턴의 너비
+            patternCanvas.height = 16;  // 패턴의 높이
+            const ctx = patternCanvas.getContext('2d');
+
+            ctx.drawImage(img, 0, 0, patternCanvas.width, patternCanvas.height);
+            const pattern = ctx.createPattern(patternCanvas, 'repeat');
+
+            patternStyle = {
+                'stroke-color': pattern,
+                'stroke-width': width
+            };
+        };
+
+        img.onerror = () => {
+            console.error('이미지를 로드할 수 없습니다.');
+            patternStyle = null;  // 에러 발생 시 null 설정
+        };
+    })();
+
+    // 동기적으로 기본값 반환
+    return patternStyle; // 초기값이므로 null이 반환될 수 있음
+}
+
+// 사용 예시
+const strokepattenstyle = {
+    'stroke-pattern-src': 'path/to/your/image.png',  // 이미지 경로
+    'stroke-width': 1.5,
+};
+
+// 동기적으로 호출
+const style = createStrokePatternStyle(strokepattenstyle);
+console.log(style);  // 초기값인 null 또는 undefined가 출력될 수 있음
+
+// 실제 사용 예시에서는 Promise를 사용하거나, 이후에 결과를 처리해야 함
