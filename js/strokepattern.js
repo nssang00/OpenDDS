@@ -148,3 +148,47 @@ const style = createStrokePatternStyle(strokepattenstyle);
 console.log(style);  // 초기값인 null 또는 undefined가 출력될 수 있음
 
 // 실제 사용 예시에서는 Promise를 사용하거나, 이후에 결과를 처리해야 함
+//////
+async function createStrokePatternStyle(strokepattenstyle) {
+    const { 'stroke-width': width } = strokepattenstyle;
+
+    const img = new Image();
+    img.src = 'path/to/your/image.png'; // 이미지 경로를 직접 지정
+
+    // 이미지를 로드하는 Promise 반환
+    const pattern = await new Promise((resolve, reject) => {
+        img.onload = () => {
+            const patternCanvas = document.createElement('canvas');
+            patternCanvas.width = 16;  // 패턴의 너비
+            patternCanvas.height = 16;  // 패턴의 높이
+            const ctx = patternCanvas.getContext('2d');
+
+            ctx.drawImage(img, 0, 0, patternCanvas.width, patternCanvas.height);
+            resolve(ctx.createPattern(patternCanvas, 'repeat'));
+        };
+
+        img.onerror = () => {
+            reject(new Error('이미지를 로드할 수 없습니다.'));
+        };
+    });
+
+    // 패턴 스타일 반환
+    return {
+        'stroke-color': pattern,
+        'stroke-width': width
+    };
+}
+
+// 사용 예시
+(async () => {
+    const strokepattenstyle = {
+        'stroke-width': 1.5,
+    };
+
+    try {
+        const style = await createStrokePatternStyle(strokepattenstyle);
+        console.log(style);  // 패턴 스타일이 출력됨
+    } catch (error) {
+        console.error(error.message);
+    }
+})();
