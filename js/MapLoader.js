@@ -4,30 +4,28 @@ class MapLoader {
         this.layerData = null;
     }
 
-    async loadMap(styleUrl, layerUrl) {
-        try {
-            const [styleResponse, layerResponse] = await Promise.all([
-                fetch(styleUrl),
-                fetch(layerUrl)
-            ]);
+async loadMap(styleUrl, layerUrl) {
+    try {
+        const urls = [styleUrl, layerUrl];
+        const responses = await Promise.all(urls.map(url => fetch(url)));
 
-            if (!styleResponse.ok || !layerResponse.ok) {
-                throw new Error('Failed to fetch one or both files');
-            }
-
-            const styleText = await styleResponse.text();
-            const layerText = await layerResponse.text();
-
-            this.parseMap(styleText, layerText);
-
-            console.log('Style Data:', this.styleData);
-            console.log('Layer Data:', this.layerData);
-
-            this.applyStylesAndLayers();  // Apply the parsed styles and layers to the map
-        } catch (error) {
-            console.error('Error loading map:', error);
+        if (!responses[0].ok || !responses[1].ok) {
+            throw new Error('Failed to fetch one or both files');
         }
+
+        // styleText와 layerText를 Promise.all을 사용하여 병렬로 처리
+        const [styleText, layerText] = await Promise.all(responses.map(response => response.text()));
+
+        this.parseMap(styleText, layerText);
+
+        console.log('Style Data:', this.styleData);
+        console.log('Layer Data:', this.layerData);
+
+        this.applyMap();  // Apply the parsed styles and layers to the map
+    } catch (error) {
+        console.error('Error loading map:', error);
     }
+}
 
     parseMap(styleText, layerText) {
         this.styleData = this.parseMapStyle(styleText);
@@ -70,7 +68,7 @@ class MapLoader {
         return layers;
     }
 
-    applyStylesAndLayers() {
+    applyMap() {
         // Assuming you have an OpenLayers map object available
         const map = ...; // Your OpenLayers map instance
 
