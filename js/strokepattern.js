@@ -192,3 +192,52 @@ async function createStrokePatternStyle(strokepattenstyle) {
         console.error(error.message);
     }
 })();
+
+
+
+// 동기 함수: 비동기 함수 호출 및 결과 반환
+function loadAndReturnImage(src) {
+    let pattern;
+
+    (async () => {
+        // 비동기 함수: 이미지 로드를 기다림
+        const loadImage = (src) => {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    pattern = ctx.createPattern(img, 'repeat');
+                    resolve(pattern);
+                };
+                img.onerror = reject;
+                img.src = src;
+            });
+        };
+
+        try {
+            await loadImage(src);
+        } catch (error) {
+            console.error('이미지를 로드하는 동안 오류가 발생했습니다:', error);
+        }
+    })();
+
+    return pattern;
+}
+
+// 사용 예시
+const imageUrl = 'https://example.com/path/to/image.jpg';
+const pattern = loadAndReturnImage(imageUrl);
+
+// pattern은 아직 null이므로 이후 적절한 시점에 pattern을 사용해야 함
+// 예: 패턴 생성이 완료된 후 pattern에 접근
+setTimeout(() => {
+    if (pattern) {
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+        console.log('패턴 생성 실패');
+    }
+}, 1000);
