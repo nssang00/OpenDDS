@@ -45,14 +45,28 @@ createStrokePatternStyle(strokepattenstyle).then(style => {
 function createStrokePatternStyle(strokepattenstyle) {
     const { 'stroke-pattern-src': imageSrc, 'stroke-width': width } = strokepattenstyle;
 
+    // 동기적으로 기본값을 반환
+    let patternStyle = null;
+
     // 이미지 로드를 위한 내부 함수
-    const loadImage = (src) => {
+    const loadImageAndCreatePattern = (src) => {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.src = src;
 
             img.onload = () => {
-                resolve(img);
+                const patternCanvas = document.createElement('canvas');
+                patternCanvas.width = 16;  // 패턴의 너비
+                patternCanvas.height = 16;  // 패턴의 높이
+                const ctx = patternCanvas.getContext('2d');
+
+                ctx.drawImage(img, 0, 0, patternCanvas.width, patternCanvas.height);
+                const pattern = ctx.createPattern(patternCanvas, 'repeat');
+
+                resolve({
+                    'stroke-color': pattern,
+                    'stroke-width': width
+                });
             };
 
             img.onerror = () => {
@@ -61,30 +75,16 @@ function createStrokePatternStyle(strokepattenstyle) {
         });
     };
 
-    // 이미지 로드를 기다리고 패턴을 생성
-    const img = loadImage(imageSrc);
-    let patternStyle;
-
-    img.then((image) => {
-        const patternCanvas = document.createElement('canvas');
-        patternCanvas.width = 16;  // 패턴의 너비
-        patternCanvas.height = 16;  // 패턴의 높이
-        const ctx = patternCanvas.getContext('2d');
-
-        ctx.drawImage(image, 0, 0, patternCanvas.width, patternCanvas.height);
-        const pattern = ctx.createPattern(patternCanvas, 'repeat');
-
-        patternStyle = {
-            'stroke-color': pattern,
-            'stroke-width': width
-        };
+    // 비동기적으로 패턴을 생성하고 결과를 반환
+    loadImageAndCreatePattern(imageSrc).then((style) => {
+        patternStyle = style; // 패턴 스타일 설정
     }).catch((error) => {
         console.error(error);
         patternStyle = null;  // 에러 발생 시 null 설정
     });
 
-    // 동기적으로 결과를 반환 (초기값)
-    return patternStyle;
+    // 동기적으로 기본값 반환
+    return patternStyle; // 초기값이므로 null이 반환될 수 있음
 }
 
 // 사용 예시
