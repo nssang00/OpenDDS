@@ -297,10 +297,10 @@ function toOlStyle(stylesObj) {
         if(symbolizer.TextureLine === "false")//
         {
           olSymbolizer = {
-            symbol: {
-              'type': 'picture',
-              'picture-texture-line': false,//<TextureLine>
-            },
+            //symbol: {
+            //  'type': 'picture',
+            //  'picture-texture-line': false,//<TextureLine>
+            //},
             style: {
               'stroke-pattern-src': symbolizer.Picture,//<Picture>
               'stroke-width': Number(symbolizer.Width),//<Width>
