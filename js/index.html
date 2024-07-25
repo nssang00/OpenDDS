@@ -338,7 +338,8 @@ function toOlStyle(stylesObj) {
             'vertical-line-cap': Number(symbolizer?.StartCap),//<StartCap>, <EndCap>
             'vertical-start-pos': Number(symbolizer?.StartPos),//<StartPos>  
             'vertical-interval': Number(symbolizer?.Interval),//<Interval>        
-          },                        
+          },
+	  style: {}
         };              
 
         break;         
@@ -351,7 +352,8 @@ function toOlStyle(stylesObj) {
             'double-line-type': Number(symbolizer.Type),//<Type>
             'double-line-space': Number(symbolizer.Space), //<Space>
             'double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round 
-          },  
+          },
+	  style:{}
         };            
         break;                 
       default:
