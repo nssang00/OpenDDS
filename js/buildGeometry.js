@@ -12,39 +12,13 @@ function buildGeometry(flatStyle, context) {
     context,
   );
 
-  const text = new Text({declutterMode});
   let geometry;
   
 
   return function (context) {
-    text.setText(evaluateValue(context));
+    
 
-    if (evaluateFill) {
-      text.setFill(evaluateFill(context));
-    }
-
-    if (evaluateBackgroundFill) {
-      text.setBackgroundFill(evaluateBackgroundFill(context));
-    }
-
-    if (evaluateStroke) {
-      text.setStroke(evaluateStroke(context));
-    }
-
-    if (evaluateBackgroundStroke) {
-      text.setBackgroundStroke(evaluateBackgroundStroke(context));
-    }
-
-    if (evaluateFont) {
-      text.setFont(evaluateFont(context));
-    }
-
-    if (evaluateMaxAngle) {
-      text.setMaxAngle(evaluateMaxAngle(context));
-    }
-
-
-    return text;
+    return gometry;
   };
 }
 /////////
