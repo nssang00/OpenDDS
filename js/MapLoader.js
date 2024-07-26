@@ -67,58 +67,49 @@ async loadMap(styleUrl, layerUrl) {
 
         return layers;
     }
-
-    applyMap(map) {
-    // Apply styles to the map
+applyMap(map) {
+    // 스타일 데이터 처리
+    const styles = {};
     for (const style of this.styleData) {
-        const olStyle = new ol.style.Style({
+        styles[style.id] = new ol.style.Style({
             stroke: new ol.style.Stroke({
                 color: style.color,
-                width: parseInt(style.width, 10)
+                width: parseInt(style.width)
             })
         });
-
-        // Create a vector layer with the style
-        const olLayer = new ol.layer.VectorTile({
-            source: new ol.source.VectorTile({
-                // Define your vector tile source
-            }),
-            style: olStyle
-        });
-
-        // Add the layer to the map
-        map.addLayer(olLayer);
     }
 
-    // Apply layers to the map
+    // 레이어 데이터 처리
     for (const layer of this.layerData) {
-        let olSource;
-        switch (layer.type) {
-            case 'vectortile':
-                olSource = new ol.source.VectorTile({
-                    // Define your vector tile source
-                });
-                break;
-            case 'webglvectortile':
-                olSource = new ol.source.WebGLVectorTile({
-                    // Define your WebGL vector tile source
-                });
-                break;
-            // Add more cases for other layer types as needed
-            default:
-                console.error(`Unsupported layer type: ${layer.type}`);
-                return;
+        let source;
+        if (layer.type === 'VectorTile') {
+            source = new ol.source.VectorTile({
+                format: new ol.format.MVT(),
+                url: layer.SHPSource
+            });
+        } else if (layer.type === 'WebGLVector') {
+            source = new ol.source.WebGLVector({
+                format: new ol.format.MVT(),
+                url: layer.SHPSource
+            });
         }
 
-        const olLayer = new ol.layer[layer.type.charAt(0).toUpperCase() + layer.type.slice(1)]({
-            source: olSource,
-            // Add any additional layer properties as needed
-        });
+        const layerOptions = {
+            source: source,
+            style: (feature, resolution) => {
+                const geometryStyle = feature.get('GeometryStyle');
+                return styles[geometryStyle];
+            }
+        };
 
-        // Add the layer to the map
+        const olLayer = layer.type === 'VectorTile'
+            ? new ol.layer.VectorTile(layerOptions)
+            : new ol.layer.WebGLVector(layerOptions);
+
         map.addLayer(olLayer);
     }
 }
+    
 }
 
 const styleUrl = "path/to/STYLE.xml";
