@@ -68,37 +68,77 @@ async loadMap(styleUrl, layerUrl) {
         return layers;
     }
 
-    applyMap() {
-        // Assuming you have an OpenLayers map object available
-        const map = ...; // Your OpenLayers map instance
-
-        // Apply styles to the map (example code, replace with your logic)
-        this.styleData.forEach(style => {
-            const olStyle = new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: style.color,
-                    width: parseInt(style.width, 10)
-                })
-            });
-            // Add style to your map or layer
+    applyMap(map) {
+    // Apply styles to the map
+    for (const style of this.styleData) {
+        const olStyle = new ol.style.Style({
+            stroke: new ol.style.Stroke({
+                color: style.color,
+                width: parseInt(style.width, 10)
+            })
         });
 
-        // Apply layers to the map (example code, replace with your logic)
-        this.layerData.forEach(layer => {
-            const olLayer = new ol.layer.Vector({
-                source: new ol.source.Vector({
-                    // Define your vector source
-                }),
-                style: ... // Define or retrieve the corresponding style
-            });
-            map.addLayer(olLayer);
+        // Create a vector layer with the style
+        const olLayer = new ol.layer.VectorTile({
+            source: new ol.source.VectorTile({
+                // Define your vector tile source
+            }),
+            style: olStyle
         });
+
+        // Add the layer to the map
+        map.addLayer(olLayer);
+    }
+
+    // Apply layers to the map
+    for (const layer of this.layerData) {
+        let olSource;
+        switch (layer.type) {
+            case 'vectortile':
+                olSource = new ol.source.VectorTile({
+                    // Define your vector tile source
+                });
+                break;
+            case 'webglvectortile':
+                olSource = new ol.source.WebGLVectorTile({
+                    // Define your WebGL vector tile source
+                });
+                break;
+            // Add more cases for other layer types as needed
+            default:
+                console.error(`Unsupported layer type: ${layer.type}`);
+                return;
+        }
+
+        const olLayer = new ol.layer[layer.type.charAt(0).toUpperCase() + layer.type.slice(1)]({
+            source: olSource,
+            // Add any additional layer properties as needed
+        });
+
+        // Add the layer to the map
+        map.addLayer(olLayer);
     }
 }
+}
 
-// Example usage:
-const styleUrl = 'path/to/STYLE.xml';
-const layerUrl = 'path/to/LAYER.xml';
+const styleUrl = "path/to/STYLE.xml";
+const layerUrl = "path/to/LAYER.xml";
 
 const mapLoader = new MapLoader();
-mapLoader.loadMap(styleUrl, layerUrl);
+
+(async () => {
+  try {
+    // Load the map
+    await mapLoader.loadMap(styleUrl, layerUrl);
+
+    // Assuming you have an OpenLayers map object available
+    const map = new ol.Map({
+      // Your map configuration
+    });
+
+    // Apply the loaded map to the OpenLayers map
+    mapLoader.applyMap(map);
+  } catch (error) {
+    console.error("Error loading and applying map:", error);
+  }
+})();
