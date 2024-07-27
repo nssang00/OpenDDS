@@ -46,3 +46,31 @@ const map = new Map({
     zoom: 2
   })
 });
+
+function createVectorTileLayers(vtSourceUrl, stylesArray) {
+  const vectorTileSource = new VectorTileSource({
+    format: new MVT(),
+    url: vtSourceUrl
+  });
+
+  return stylesArray.map((style) => {
+    if (typeof style === 'function') {
+      // 스타일이 함수일 경우 Canvas 방식으로 레이어 생성
+      return new VectorTileLayer({
+        source: vectorTileSource,
+        style: style, 
+      });
+    } else {
+      // 스타일이 함수가 아닐 경우 WebGL 방식으로 레이어 생성
+      return new (class extends VectorTileLayer {
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: style // 객체형 스타일
+          });
+        }
+      })({
+        source: vectorTileSource,
+      });
+    }
+  });
+}
