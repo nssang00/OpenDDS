@@ -80,7 +80,7 @@ class MapLoader {
     
 }
 
-function createVectorTileLayer(vtSourceUrl, style, useWebGL) {
+function createVectorTileLayer(vtSourceUrl, styles, useWebGL) {
   const vectorTileSource = new VectorTileSource({
     format: new MVT(),
     url: vtSourceUrl
