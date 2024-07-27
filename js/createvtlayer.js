@@ -14,18 +14,16 @@ function createVectorTileLayer(useWebGL, vectorSourceUrl, style) {
   });
 
   if (useWebGL) {
-    class WebGLVectorTileLayer extends VectorTileLayer {
+    return new (class extends VectorTileLayer {
       createRenderer() {
         return new WebGLVectorTileLayerRenderer(this, {
           style: styles
         });
       }
-    }
-
-    return new WebGLVectorTileLayer({
+    })({
       source: vectorTileSource,
     });
-  } else {
+  }  else {
     return new VectorTileLayer({
       source: vectorTileSource,
       style: styles
