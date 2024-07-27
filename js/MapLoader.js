@@ -4,28 +4,24 @@ class MapLoader {
         this.layerData = null;
     }
 
-async loadMap(styleUrl, layerUrl) {
-    try {
-        const urls = [styleUrl, layerUrl];
-        const responses = await Promise.all(urls.map(url => fetch(url)));
+    async loadMap(styleUrl, layerUrl) {
+        try {
+            const urls = [styleUrl, layerUrl];
+            const responses = await Promise.all(urls.map(url => fetch(url)));
 
-        if (!responses[0].ok || !responses[1].ok) {
-            throw new Error('Failed to fetch one or both files');
+            if (!responses[0].ok || !responses[1].ok) {
+                throw new Error('Failed to fetch one or both files');
+            }
+
+            // styleText와 layerText를 Promise.all을 사용하여 병렬로 처리
+            const [styleText, layerText] = await Promise.all(responses.map(response => response.text()));
+
+            this.parseMap(styleText, layerText);
+
+        } catch (error) {
+            console.error('Error loading map:', error);
         }
-
-        // styleText와 layerText를 Promise.all을 사용하여 병렬로 처리
-        const [styleText, layerText] = await Promise.all(responses.map(response => response.text()));
-
-        this.parseMap(styleText, layerText);
-
-        console.log('Style Data:', this.styleData);
-        console.log('Layer Data:', this.layerData);
-
-        this.applyMap();  // Apply the parsed styles and layers to the map
-    } catch (error) {
-        console.error('Error loading map:', error);
     }
-}
 
     parseMap(styleText, layerText) {
         this.styleData = this.parseMapStyle(styleText);
@@ -67,48 +63,20 @@ async loadMap(styleUrl, layerUrl) {
 
         return layers;
     }
-applyMap(map) {
-    // 스타일 데이터 처리
-    const styles = {};
-    for (const style of this.styleData) {
-        styles[style.id] = new ol.style.Style({
-            stroke: new ol.style.Stroke({
-                color: style.color,
-                width: parseInt(style.width)
-            })
-        });
-    }
-
-    // 레이어 데이터 처리
-    for (const layer of this.layerData) {
-        let source;
-        if (layer.type === 'VectorTile') {
-            source = new ol.source.VectorTile({
-                format: new ol.format.MVT(),
-                url: layer.SHPSource
-            });
-        } else if (layer.type === 'WebGLVector') {
-            source = new ol.source.WebGLVector({
-                format: new ol.format.MVT(),
-                url: layer.SHPSource
-            });
+        
+    applyMap(map) {
+        // 스타일 데이터 처리
+        const styles = {};
+        for (const style of this.styleData) {
+            styles[style.id] = this.createStyle(style);
         }
-
-        const layerOptions = {
-            source: source,
-            style: (feature, resolution) => {
-                const geometryStyle = feature.get('GeometryStyle');
-                return styles[geometryStyle];
-            }
-        };
-
-        const olLayer = layer.type === 'VectorTile'
-            ? new ol.layer.VectorTile(layerOptions)
-            : new ol.layer.WebGLVector(layerOptions);
-
-        map.addLayer(olLayer);
+    
+        // 레이어 데이터 처리
+        for (const layer of this.layerData) {
+            const olLayer = this.createLayer(layer.type, layer.SHPSource, styles);
+            map.addLayer(olLayer);
+        }
     }
-}
     
 }
 
