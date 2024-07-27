@@ -73,11 +73,35 @@ class MapLoader {
     
         // 레이어 데이터 처리
         for (const layer of this.layerData) {
-            const olLayer = this.createLayer(layer.type, layer.SHPSource, styles);
+            const olLayer = createVectorTileLayer(layer.SHPSource, styles, useWebGl);
             map.addLayer(olLayer);
         }
     }
     
+}
+
+function createVectorTileLayer(vtSourceUrl, style, useWebGL) {
+  const vectorTileSource = new VectorTileSource({
+    format: new MVT(),
+    url: vtSourceUrl
+  });
+
+  if (useWebGL) {
+    return new (class extends VectorTileLayer {
+      createRenderer() {
+        return new WebGLVectorTileLayerRenderer(this, {
+          style: styles
+        });
+      }
+    })({
+      source: vectorTileSource,
+    });
+  }  else {
+    return new VectorTileLayer({
+      source: vectorTileSource,
+      style: styles
+    });
+  }
 }
 
 const styleUrl = "path/to/STYLE.xml";
