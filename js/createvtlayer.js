@@ -4,23 +4,12 @@ import View from 'ol/View';
 import {Tile as TileLayer, VectorTile as VectorTileLayer} from 'ol/layer';
 import {OSM, VectorTile as VectorTileSource} from 'ol/source';
 import MVT from 'ol/format/MVT';
-import {Fill, Stroke, Style} from 'ol/style';
 import {WebGLVectorLayerRenderer} from 'ol/renderer/webgl/VectorLayer';
 
-function createVectorTileLayer(useWebGL) {
+function createVectorTileLayer(useWebGL, vectorSourceUrl, style) {
   const vectorTileSource = new VectorTileSource({
     format: new MVT(),
-    url: 'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.pbf'
-  });
-
-  const style = new Style({
-    fill: new Fill({
-      color: 'rgba(255, 255, 255, 0.6)'
-    }),
-    stroke: new Stroke({
-      color: '#319FD3',
-      width: 1
-    })
+    url: vectorSourceUrl
   });
 
   const vectorTileLayer = new VectorTileLayer({
@@ -42,7 +31,15 @@ const map = new Map({
     new TileLayer({
       source: new OSM()
     }),
-    createVectorTileLayer(true) // WebGL 사용 여부를 true 또는 false로 설정
+    createVectorTileLayer(true, 'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.pbf', new Style({
+      fill: new Fill({
+        color: 'rgba(255, 255, 255, 0.6)'
+      }),
+      stroke: new Stroke({
+        color: '#319FD3',
+        width: 1
+      })
+    }))
   ],
   view: new View({
     center: [0, 0],
