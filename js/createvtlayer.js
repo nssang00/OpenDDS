@@ -4,7 +4,8 @@ import View from 'ol/View';
 import {Tile as TileLayer, VectorTile as VectorTileLayer} from 'ol/layer';
 import {OSM, VectorTile as VectorTileSource} from 'ol/source';
 import MVT from 'ol/format/MVT';
-import {WebGLVectorLayerRenderer} from 'ol/renderer/webgl/VectorLayer';
+import {Fill, Stroke, Style} from 'ol/style';
+import {WebGLVectorTileLayerRenderer} from 'ol/renderer/webgl/VectorTileLayer';
 
 function createVectorTileLayer(useWebGL, vectorSourceUrl, style) {
   const vectorTileSource = new VectorTileSource({
@@ -12,18 +13,26 @@ function createVectorTileLayer(useWebGL, vectorSourceUrl, style) {
     url: vectorSourceUrl
   });
 
-  const vectorTileLayer = new VectorTileLayer({
-    source: vectorTileSource,
-    style: style,
-    renderMode: useWebGL ? 'vector' : 'image'
-  });
-
   if (useWebGL) {
-    vectorTileLayer.setRenderer(new WebGLVectorLayerRenderer(vectorTileLayer));
-  }
+    class WebGLVectorTileLayer extends VectorTileLayer {
+      createRenderer() {
+        return new WebGLVectorTileLayerRenderer(this, {
+          style: styles
+        });
+      }
+    }
 
-  return vectorTileLayer;
+    return new WebGLVectorTileLayer({
+      source: vectorTileSource,
+    });
+  } else {
+    return new VectorTileLayer({
+      source: vectorTileSource,
+      style: styles
+    });
+  }
 }
+
 
 const map = new Map({
   target: 'map',
@@ -31,15 +40,8 @@ const map = new Map({
     new TileLayer({
       source: new OSM()
     }),
-    createVectorTileLayer(true, 'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.pbf', new Style({
-      fill: new Fill({
-        color: 'rgba(255, 255, 255, 0.6)'
-      }),
-      stroke: new Stroke({
-        color: '#319FD3',
-        width: 1
-      })
-    }))
+    createVectorTileLayer(true, 'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.pbf', webGLStyle),
+    createVectorTileLayer(false, 'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.pbf', canvasStyle)
   ],
   view: new View({
     center: [0, 0],
