@@ -47,7 +47,7 @@ const map = new Map({
   })
 });
 
-function createVectorTileLayers(vtSourceUrl, stylesArray) {
+function createStyledLayers(vtSourceUrl, stylesArray) {
   const vectorTileSource = new VectorTileSource({
     format: new MVT(),
     url: vtSourceUrl
