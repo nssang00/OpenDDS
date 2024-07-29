@@ -105,3 +105,42 @@ const vtSourceUrl = 'https://your-vector-tile-source-url/{z}/{x}/{y}.pbf'; // ë²
         vectorLayers.forEach(layer => {
             map.addLayer(layer);
         });
+//////
+
+import VectorTileLayer from 'ol/layer/VectorTile';
+import VectorTileSource from 'ol/source/VectorTile';
+import MVT from 'ol/format/MVT';
+import WebGLVectorTileLayerRenderer from 'ol/renderer/webgl/VectorTileLayer';
+
+function createLayersFromStyles(vtSourceUrl, stylesArray) {
+  const vectorTileSource = new VectorTileSource({
+    format: new MVT(),
+    url: vtSourceUrl
+  });
+
+  const layers = stylesArray.map((style) => {
+    if (typeof style === 'function') {
+      // If the style is a function, create a Canvas-based VectorTileLayer
+      return new VectorTileLayer({
+        source: vectorTileSource,
+        style: style,
+      });
+    } else {
+      // If the style is not a function, create a WebGL-based VectorTileLayer
+      return new (class extends VectorTileLayer {
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: style, // Object-based style
+          });
+        }
+      })({
+        source: vectorTileSource,
+      });
+    }
+  });
+
+  return {
+    vectorTileSource,
+    layers,
+  };
+}
