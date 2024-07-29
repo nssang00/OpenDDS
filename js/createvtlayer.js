@@ -74,3 +74,34 @@ function createVectorTileLayers(vtSourceUrl, stylesArray) {
     }
   });
 }
+
+
+const vtSourceUrl = 'https://your-vector-tile-source-url/{z}/{x}/{y}.pbf'; // 벡터 타일 소스 URL
+        const styles = [
+            function(feature, resolution) {
+                return new ol.style.Style({
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 255, 255, 0.6)'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: '#319FD3',
+                        width: 1
+                    })
+                });
+            },
+            {
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 0, 0, 0.6)'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#000',
+                    width: 1
+                })
+            }
+        ];
+
+        // 벡터 타일 레이어 추가
+        const vectorLayers = createVectorTileLayers(vtSourceUrl, styles);
+        vectorLayers.forEach(layer => {
+            map.addLayer(layer);
+        });
