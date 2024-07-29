@@ -73,35 +73,65 @@ class MapLoader {
     
         // 레이어 데이터 처리
         for (const layer of this.layerData) {
-            const olLayer = createVectorTileLayer(layer.SHPSource, styles, useWebGl);
-            map.addLayer(olLayer);
+            const { source, styles } = processLayers(layer);
+            const vectorLayers = createStyledLayers(source, styles);
+            for (const layer of vectorLayers) {
+                map.addLayer(layer);
+            }
+
         }
+        
     }
+
+    processLayers(layer) {
+        // 레이어 정보에 따라 source와 styles를 생성하는 로직
+        const source = {
+            // 예시: layer의 id를 사용하여 source를 생성
+            type: 'vector', // 또는 필요한 타입
+            url: `https://example.com/data/${layer.id}`, // 실제 데이터 URL
+        };
+
+        const styles = {
+            // 예시: 레이어의 스타일 정보를 기반으로 styles를 생성
+            [layer.styleId]: {
+                // 스타일 속성
+                color: layer.color || '#000000', // 기본 색상
+                weight: layer.weight || 1, // 기본 두께
+                // 추가 스타일 속성...
+            }
+        };
+
+        return { source, styles }; 
+    }    
     
 }
 
-function createVectorTileLayer(vtSourceUrl, styles, useWebGL) {
+function createStyledLayers(vtSourceUrl, stylesArray) {
   const vectorTileSource = new VectorTileSource({
     format: new MVT(),
     url: vtSourceUrl
   });
 
-  if (useWebGL) {
-    return new (class extends VectorTileLayer {
-      createRenderer() {
-        return new WebGLVectorTileLayerRenderer(this, {
-          style: styles
-        });
-      }
-    })({
-      source: vectorTileSource,
-    });
-  }  else {
-    return new VectorTileLayer({
-      source: vectorTileSource,
-      style: styles
-    });
-  }
+  return stylesArray.map((style) => {
+    if (typeof style === 'function') {
+      // If the style is a function, create a Canvas-based VectorTileLayer
+      return new VectorTileLayer({
+        source: vectorTileSource,
+        style: style, 
+      });
+    } else {
+      // If the style is not a function, create a WebGL-based VectorTileLayer
+      return new (class extends VectorTileLayer {
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: style // flat styles
+          });
+        }
+      })({
+        source: vectorTileSource,
+      });
+    }
+  });
 }
 
 const styleUrl = "path/to/STYLE.xml";
