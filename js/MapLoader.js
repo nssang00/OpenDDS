@@ -119,7 +119,7 @@ function createStyledLayers(vtSourceUrl, stylesArray) {
         source: vectorTileSource,
         style: style, 
       });
-    } else {
+    } else {//useWebGL
       // If the style is not a function, create a WebGL-based VectorTileLayer
       return new (class extends VectorTileLayer {
         createRenderer() {
