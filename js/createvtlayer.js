@@ -8,8 +8,6 @@ import {Fill, Stroke, Style} from 'ol/style';
 import {WebGLVectorTileLayerRenderer} from 'ol/renderer/webgl/VectorTileLayer';
 
 
-
-
 function createStyledLayers(vtSourceUrl, stylesArray) {
   const vectorTileSource = new VectorTileSource({
     format: new MVT(),
@@ -38,7 +36,6 @@ function createStyledLayers(vtSourceUrl, stylesArray) {
   });
 }
 
-const vtSourceUrl = 'https://your-vector-tile-source-url/{z}/{x}/{y}.pbf'; // 벡터 타일 소스 URL
 const styles = [
   function(feature, resolution) {
     return new ol.style.Style({
@@ -62,6 +59,27 @@ const styles = [
   }
 ];
 
+const strokeStyle = {
+  variables: variables,
+  //filter: ['==', ['get', 'layer'], 'waterway'],
+  filter: [
+    'all',
+    ['<', ['resolution'], 600],    
+    ['in', ['get', 'class'], ['literal', ['lake', 'river']]],
+    ['==', ['get', 'layer'], 'waterway'],
+    //['==', ['geometry-type'], 'Polygon'],
+  ],  
+  'stroke-color': 'green',
+  'stroke-width': 2,
+  'fill-color' : 'red',
+};
+
+const flatStyles = [
+  strokeStyle, 
+  rulesToStyleFunction(rules)
+];
+
+const vtSourceUrl = 'https://your-vector-tile-source-url/{z}/{x}/{y}.pbf'; // 벡터 타일 소스 URL
 const vectorLayers = createStyledLayers(vtSourceUrl, styles);
 for (const layer of vectorLayers) {
     map.addLayer(layer);
