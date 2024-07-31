@@ -17,3 +17,21 @@ function toOlStyle(stylesObj) {
 
   return olStyles;
 }
+
+
+function toOlStyle(stylesObj) {
+  const styleTypeMap = {
+    point: toOlPointStyle,
+    line: toOlLineStyle,
+    polygon: toOlPolygonStyle,
+    Label: toOlLabelStyle
+  };
+
+  return stylesObj.reduce((olStyles, styleObj) => {
+    const styleFunction = styleTypeMap[styleObj.type];
+    if (styleFunction) {
+      olStyles[styleObj.name] = styleFunction(styleObj);
+    }
+    return olStyles;
+  }, {});
+}
