@@ -185,30 +185,25 @@ function parseMapLayer(xmlString) {
     }
 
     if (children.length > 0) {
-      nodeObj[node.tagName === "Group" ? "layers" : "features"] = children;
+      nodeObj[node.tagName === "Layer" ? "features" : "layers"] = children;
     }
     return nodeObj;
   }   
 }
 
 function toOlStyle(stylesObj) {
+  const olStyleFunctionMap = {
+    point: toOlPointStyle,
+    line: toOlLineStyle,
+    polygon: toOlPolygonStyle,
+    Label: toOlLabelStyle
+  };
+
   const olStyles = {};
   for (const styleObj of stylesObj) {
-    switch (styleObj.type) {
-      case "point":
-        olStyles[styleObj.name] = toOlPointStyle(styleObj);
-        break;
-      case "line":
-        olStyles[styleObj.name] = toOlLineStyle(styleObj);
-        break;
-      case "polygon":
-        olStyles[styleObj.name] = toOlPolygonStyle(styleObj);
-        break;
-      case "Label":
-        olStyles[styleObj.name] = toOlLabelStyle(styleObj);
-        break;
-      default:
-        break;
+    const olStyleFunction = olStyleFunctionMap[styleObj.type];
+    if (olStyleFunction) {
+      olStyles[styleObj.name] = olStyleFunction(styleObj);
     }
   }
   return olStyles;
@@ -297,10 +292,10 @@ function toOlStyle(stylesObj) {
         if(symbolizer.TextureLine === "false")//
         {
           olSymbolizer = {
-            //symbol: {
-            //  'type': 'picture',
-            //  'picture-texture-line': false,//<TextureLine>
-            //},
+            symbol: {
+              'type': 'picture',
+              'picture-texture-line': false,//<TextureLine>
+            },
             style: {
               'stroke-pattern-src': symbolizer.Picture,//<Picture>
               'stroke-width': Number(symbolizer.Width),//<Width>
@@ -338,8 +333,7 @@ function toOlStyle(stylesObj) {
             'vertical-line-cap': Number(symbolizer?.StartCap),//<StartCap>, <EndCap>
             'vertical-start-pos': Number(symbolizer?.StartPos),//<StartPos>  
             'vertical-interval': Number(symbolizer?.Interval),//<Interval>        
-          },
-	  style: {}
+          },                        
         };              
 
         break;         
@@ -352,8 +346,7 @@ function toOlStyle(stylesObj) {
             'double-line-type': Number(symbolizer.Type),//<Type>
             'double-line-space': Number(symbolizer.Space), //<Space>
             'double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//<JoinType> 0:miter, 1:bevel, 2:round 
-          },
-	  style:{}
+          },  
         };            
         break;                 
       default:
@@ -456,16 +449,11 @@ function toOlStyle(stylesObj) {
 function toOlMapLayer(layersObj) {
   const olLayers = {};
   for (const layerObj of layersObj) {
-    olLayers[layerObj.Name] = layerObj.type === "Group" 
-            ? toOlGroup(layerObj) 
-            : toOlLayer(layerObj);
+    olLayers[layerObj.Name] = layerObj.type === "Layer" 
+            ? toOlLayer(layerObj)
+            : toOlMapLayer(layerObj.layers);
   }
   return olLayers;
-
-  function toOlGroup(groupObj)
-  {
-    return toOlMapLayer(groupObj.layers);
-  }
 
   function toOlLayer(layerObj)
   {
@@ -495,7 +483,8 @@ function toOlMapLayer(layersObj) {
 
     return {
       source : layerObj.SHPSource,
-
+      filters: olFilters,
+      styles: olStyles
     }
 
   }
@@ -507,19 +496,16 @@ function toOlMapLayer(layersObj) {
     const filters = [];
     for (const prop in featureObj.VVTStyle) {
       const [, operator, valuesPart] = featureObj.VVTStyle[prop]
-                                      .replace(/&lt;/g, '<')
-                                      .replace(/&gt;/g, '>')
-                                      .replace(/<>/g, '!')
-                                      .match(/([<>=!]+)?([\w+,]+)/);
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/<>/g, '!')
+        .match(/([<>=!]+)?([\w+,]+)/);
 
-      if(valuesPart.includes(','))
-      {
+      if(valuesPart.includes(',')) {
         const values = valuesPart.split(',').map(value => isNaN(Number(value)) ? value : Number(value));
         const filter = ['in', ['get', prop], isNaN(values[0]) ? ['literal', values] : values];
         filters.push(operator === '!' ? ['!', filter]: filter);
-      }
-      else
-      {
+      } else {
         const finalOperator = !operator ? '==' : operator ==='!' ? '!=' : operator;
         filters.push([finalOperator, ['get', prop], Number(valuesPart)]);
       }
