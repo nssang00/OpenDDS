@@ -105,7 +105,7 @@ const xmlMapLayer = `<MapLayer Version="1.0">
 	</Layer>	    
 	</Group>  
 </MapLayer>`;
-class MapLoader {
+export default class MapLoader {
   constructor() {
     this.parsedStyles = null;
     this.parsedLayers = null;
