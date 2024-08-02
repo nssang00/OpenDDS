@@ -40,3 +40,20 @@ async loadMap(styleUrl, layerUrl) {
     console.error('Error loading map:', error);
   }
 }
+
+
+async function fetchXmlString(url) {
+  try {
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const xmlString = await response.text();
+    return xmlString;
+  } catch (error) {
+    console.error('Error fetching XML:', error);
+    throw error;
+  }
+}
