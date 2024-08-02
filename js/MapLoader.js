@@ -1,4 +1,4 @@
-class MapLoader {
+export default class MapLoader {
   constructor() {
     this.parsedStyles = null;
     this.parsedLayers = null;
