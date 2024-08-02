@@ -107,7 +107,33 @@ const xmlMapLayer = `<MapLayer Version="1.0">
 </MapLayer>`;
 class MapLoader {
   constructor() {
-    // 생성자에서 필요한 초기화 작업 수행 (현재는 없음)
+    this.parsedStyles = null;
+    this.parsedLayers = null;
+    this.olStyles = null;
+  }
+
+  async loadMap(styleUrl, layerUrl) {
+    try {
+      const urls = [styleUrl, layerUrl];
+      const responses = await Promise.all(urls.map(url => fetch(url)));
+
+      if (!responses[0].ok || !responses[1].ok) {
+          throw new Error('Failed to fetch one or both files');
+      }
+
+      // styleText와 layerText를 Promise.all을 사용하여 병렬로 처리
+      const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
+
+      this.parseMap(styleXmlString, layerXmlString);
+
+    } catch (error) {
+      console.error('Error loading map:', error);
+    }
+  }
+
+  parseMap(styleXmlString, layerXmlString) {
+    this.parsedStyles = this.parseMapStyle(styleXmlString);
+    this.parsedLayers = this.parseMapLayer(layerXmlString);
   }
 
   // RGBA 문자열을 배열로 변환하는 함수
@@ -118,7 +144,7 @@ class MapLoader {
 
   // XML 문자열에서 스타일 정보를 파싱하는 함수
   parseMapStyle(xmlString) {
-    const xmlDoc = new DOMParser().parseFromString(xmlString, "text/xml");
+    const xmlDoc = new DOMParser().parseFromString(xmlString, "application/xml");
 
     let styles = [];
     for (const styleNode of xmlDoc.documentElement.children) {
@@ -160,7 +186,7 @@ class MapLoader {
 
   // XML 문자열에서 레이어 정보를 파싱하는 함수
   parseMapLayer(xmlString) {
-    const xmlDoc = new DOMParser().parseFromString(xmlString, "text/xml");
+    const xmlDoc = new DOMParser().parseFromString(xmlString, "application/xml");
 
     const layers = [];
     for (const child of xmlDoc.documentElement.children) {
@@ -197,7 +223,7 @@ class MapLoader {
   }
 
   // 스타일 객체를 OpenLayers 스타일로 변환하는 함수
-  toOlStyle(stylesObj) {
+  toOlMapStyle(stylesObj) {
     const olStyleFunctionMap = {
       point: this.toOlPointStyle,
       line: this.toOlLineStyle,
@@ -215,17 +241,6 @@ class MapLoader {
     return olStyles;
   }
 
-  // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
-  toOlMapLayer(layersObj) {
-    const olLayers = {};
-    for (const layerObj of layersObj) {
-      olLayers[layerObj.Name] = layerObj.type === "Layer" 
-        ? this.toOlLayer(layerObj)
-        : this.toOlMapLayer(layerObj.layers);
-    }
-    return olLayers;
-  }
-
   // Point 스타일 객체를 OpenLayers 스타일로 변환하는 함수
   toOlPointStyle(pointStyleObj) {
     const offset = [Number(pointStyleObj.OffsetX), Number(pointStyleObj.OffsetY)];
@@ -237,7 +252,7 @@ class MapLoader {
               style: {
                 'circle-radius': symbolizer.Size,
                 'circle-fill-color': this.toRGBAArray(symbolizer.Color),
-                'circle-displacement': offset
+                'circle-displacement': offset,
               }
             };
           } else if (symbolizer.Shape === "1") { // Rectangle
@@ -247,7 +262,7 @@ class MapLoader {
                 'shape-radius': symbolizer.Size,
                 'shape-fill-color': this.toRGBAArray(symbolizer.Color),
                 'shape-displacement': offset,
-                'shape-angle': Math.PI / 4
+                'shape-angle': Math.PI / 4,
               }
             };
           }
@@ -256,10 +271,9 @@ class MapLoader {
           return {
             style: {
               'icon-src': symbolizer.Picture,
-              'icon-displacement': offset
+              'icon-displacement': offset,
             }
           };
-          break;
         default:
           break;
       }
@@ -284,7 +298,7 @@ class MapLoader {
             'stroke-color': this.toRGBAArray(symbolizer.Color),
             'stroke-width': symbolizer.Width,
             'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],
-            'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)]
+            'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],
           }
         };
         break;
@@ -296,7 +310,7 @@ class MapLoader {
             'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],
             'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],
             'stroke-line-dash-offset': symbolizer.DashOffset,
-            'stroke-line-dash': symbolizer.Dash.map(Number)
+            'stroke-line-dash': symbolizer.Dash.map(Number),
           }
         };
         break;
@@ -305,26 +319,26 @@ class MapLoader {
           olSymbolizer = {
             symbol: {
               'type': 'picture',
-              'picture-texture-line': false
+              'picture-texture-line': false,
             },
             style: {
               'stroke-pattern-src': symbolizer.Picture,
               'stroke-width': Number(symbolizer.Width),
               'stroke-pattern-start-offset': Number(symbolizer.StartPos),
-              'stroke-pattern-spacing': Number(symbolizer.Interval)
+              'stroke-pattern-spacing': Number(symbolizer.Interval),
             }
           };
         } else if (symbolizer.TextureLine === "true") {
           olSymbolizer = {
             symbol: {
               'type': 'picture',
-              'picture-texture-line': true
+              'picture-texture-line': true,
             },
             style: {
               'stroke-pattern-src': symbolizer.Picture,
               'stroke-width': Number(symbolizer.Width),
               'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],
-              'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)]
+              'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],
             }
           };
         }
@@ -340,8 +354,8 @@ class MapLoader {
             'vertical-right-length': Number(symbolizer.rightLength),
             'vertical-line-cap': Number(symbolizer?.StartCap),
             'vertical-start-pos': Number(symbolizer?.StartPos),
-            'vertical-interval': Number(symbolizer?.Interval)
-          }
+            'vertical-interval': Number(symbolizer?.Interval),        
+          },                        
         };
         break;
       case "DOUBLELINE":
@@ -352,8 +366,8 @@ class MapLoader {
             'double-line-width': Number(symbolizer.Width),
             'double-line-type': Number(symbolizer.Type),
             'double-line-space': Number(symbolizer.Space),
-            'double-line-line-join': lineJoins[Number(symbolizer.JoinType)]
-          }
+            'double-line-line-join': lineJoins[Number(symbolizer.JoinType)],
+          },  
         };
         break;
       default:
@@ -371,8 +385,8 @@ class MapLoader {
         const rgba = this.toRGBAArray(symbolizer.Color);
         rgba[3] = symbolizer.Transparent === "true" ? 0 : rgba[3]; // alpha 설정
         olPolygonStyleObj.style = {
-          'fill-color': rgba.join(', '),
-        };
+          'fill-color': rgba,
+        }
       } else if (symbolizer.type === "PICTURE") {
         olPolygonStyleObj.symbol = {
           'type': 'polygon',
@@ -441,7 +455,7 @@ class MapLoader {
       olLabelStyleObj.style['text-background-fill-color'] = this.toRGBAArray(labelStyleObj.BoxColor);
     }
 
-    const picture = labelStyleObj.Picture;
+    const picture = labelStyleObj?.Picture;
     if (picture) {
       olLabelStyleObj.style['icon-src'] = picture;
       olLabelStyleObj.style['icon-displacement'] = [Number(labelStyleObj.ImageOffsetX), Number(labelStyleObj.ImageOffsetY)];
@@ -449,6 +463,17 @@ class MapLoader {
     }
 
     return olLabelStyleObj;
+  }
+
+  // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
+  toOlMapLayer(layersObj) {
+    const olLayers = {};
+    for (const layerObj of layersObj) {
+      olLayers[layerObj.Name] = layerObj.type === "Layer" 
+        ? this.toOlLayer(layerObj)
+        : this.toOlMapLayer(layerObj.layers);
+    }
+    return olLayers;
   }
 
   // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
@@ -472,9 +497,8 @@ class MapLoader {
 
     const olStyles = {};
     for (const featureObj of layerObj.features) {
-      const { styles, filters } = this.toOlFeature(featureObj);
-      olFilters.push(...filters);
-      Object.assign(olStyles, styles);
+      const { style, filter } = this.toOlFeature(featureObj);
+      olFilters.push(...filter);
     }
 
     return {
@@ -506,8 +530,8 @@ class MapLoader {
     }
 
     return {
-      styles,
-      filters,
+      style: styles,
+      filter: filters,
     };
   }
 
@@ -515,27 +539,13 @@ class MapLoader {
 const mapLoader = new MapLoader();
 
 const styles = mapLoader.parseMapStyle(xmlMapStyle);
-let olResult = mapLoader.toOlStyle(styles);
+let olResult = mapLoader.toOlMapStyle(styles);
 console.log(JSON.stringify(olResult, null, 2));
 
 const layers = mapLoader.parseMapLayer(xmlMapLayer);
 let olResultStyle = mapLoader.toOlMapLayer(layers);
 
-console.log(JSON.stringify(olResultStyle, null, 2));
-/*
-
-let results = parseMapStyle(xmlMapStyle);
-
-let olResult = toOlStyle(results);
-console.log(JSON.stringify(olResult, null, 2));
-
-let results2 = parseMapLayer(xmlMapLayer);
-
-let olResultStyle = toOlMapLayer(results2);
-
-console.log(JSON.stringify(results2, null, 2));
-*/
-
+console.log(JSON.stringify(layers, null, 2));
 
     </script>
   </body>
