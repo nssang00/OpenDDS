@@ -126,3 +126,70 @@ class MapLoader {
 
   // ... 기존의 다른 메서드들 ...
 }
+
+import LayerGroup from 'ol/layer/Group';
+import VectorTileSource from 'ol/source/VectorTile';
+import MVT from 'ol/format/MVT';
+import { createStyledLayers } from './yourUtilFile'; // createStyledLayers 함수가 정의된 파일을 임포트
+
+class MapLoader {
+  constructor() {
+    this.parsedStyles = null;
+    this.parsedLayers = null;
+    this.olStyles = null;
+  }
+
+  // ... loadMap, parseMap 등의 기존 메서드들 ...
+
+  applyMap(map) {
+    if (!this.parsedStyles || !this.parsedLayers) {
+      throw new Error("Map data has not been loaded. Call loadMap first.");
+    }
+    this.olStyles = this.processMapStyle(this.parsedStyles);
+    
+    for (const layer of this.parsedLayers) {
+      const processedLayer = this.processLayer(layer, map);
+      if (processedLayer) {
+        map.addLayer(processedLayer);
+      }
+    }
+  }
+
+  processLayer(layer, map) {
+    if (layer.type === 'Layer') {
+      return this.createVectorTileLayer(layer);
+    } else if (layer.type === 'Group') {
+      return this.createLayerGroup(layer, map);
+    }
+  }
+
+  createLayerGroup(groupLayer, map) {
+    const layers = groupLayer.layers
+      .map(subLayer => this.processLayer(subLayer, map))
+      .filter(Boolean);
+    
+    return new LayerGroup({
+      layers: layers,
+      properties: { name: groupLayer.Name, category: groupLayer.Category }
+    });
+  }
+
+  createLayerStyles(layer) {
+    const canvasStyle = (feature, resolution) => {
+      for (const featureConfig of layer.features) {
+        if (this.matchesFilter(feature, featureConfig.VVTStyle)) {
+          return this.combineStyles(featureConfig.GeometryStyle, featureConfig.LabelStyle);
+        }
+      }
+      return null;
+    };
+
+    const webGLStyle = this.createFlatStyle(layer);
+
+    return [canvasStyle, webGLStyle];
+  }
+
+  
+  
+
+  
