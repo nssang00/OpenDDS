@@ -121,7 +121,6 @@ export default class MapLoader {
           throw new Error('Failed to fetch one or both files');
       }
 
-      // styleText와 layerText를 Promise.all을 사용하여 병렬로 처리
       const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
 
       this.parseMap(styleXmlString, layerXmlString);
