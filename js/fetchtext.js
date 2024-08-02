@@ -1,59 +1,22 @@
 async loadMap(styleUrl, layerUrl) {
-  try {
-    // fetch 요청과 응답 본문 변환을 동시에 수행
-    const [styleResponse, layerResponse] = await Promise.all([
-      fetch(styleUrl).then(async response => {
-        if (!response.ok) throw new Error(`Failed to fetch: ${response.url} - ${response.statusText}`);
-        return response.text();
-      }),
-      fetch(layerUrl).then(async response => {
-        if (!response.ok) throw new Error(`Failed to fetch: ${response.url} - ${response.statusText}`);
-        return response.text();
-      })
-    ]);
-
-    this.parseMap(styleResponse, layerResponse);
-  } catch (error) {
-    console.error('Error loading map:', error);
-  }
-}
-
-
-async loadMap(styleUrl, layerUrl) {
-  try {
-    const fetchText = async (url) => {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch: ${response.url} - ${response.statusText}`);
-      }
-      return response.text();
-    };
-
-    // fetch 요청과 응답 본문 변환을 동시에 수행
-    const [styleResponse, layerResponse] = await Promise.all([
-      fetchText(styleUrl),
-      fetchText(layerUrl)
-    ]);
-
-    this.parseMap(styleResponse, layerResponse);
-  } catch (error) {
-    console.error('Error loading map:', error);
-  }
-}
-
-
-async function fetchXmlString(url) {
-  try {
+  const fetchXmlString = async (url) => {
     const response = await fetch(url);
-    
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`Failed to fetch: ${url} - ${response.statusText}`);
     }
-    
-    const xmlString = await response.text();
-    return xmlString;
+    return await response.text(); 
+  };
+
+  try {
+    // fetch 요청과 응답 본문 변환을 동시에 수행
+    const [styleXmlString, layerXmlString] = await Promise.all([
+      fetchXmlString(styleUrl),
+      fetchXmlString(layerUrl)
+    ]);
+
+    this.parseMap(styleXmlString, layerXmlString);
   } catch (error) {
-    console.error('Error fetching XML:', error);
-    throw error;
+    console.error('Error loading map:', error);
   }
 }
+
