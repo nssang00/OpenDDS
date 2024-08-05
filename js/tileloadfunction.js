@@ -84,3 +84,29 @@ OpenLayers에서 tileLoadFunction은 타일 이미지가 로드될 때마다 특
 캐싱: 타일을 서버에서 요청하기 전에 로컬 캐시를 확인하고, 캐시에서 이미지를 제공하거나 서버로 요청을 보낼 수 있습니다.
 
 타일 요청 제어: 요청할 URL을 변경하거나, 타일 요청을 수정하고 싶을 때 사용합니다. 예를 들어, 타일의 URL을 동적으로 생성하거나, 추가적인 쿼리 파라미터를 추가할 수 있습니다.
+
+function tileLoadFunction(imageTile, src) {
+  const xhr = new XMLHttpRequest();
+  xhr.open('GET', src, true);
+  xhr.responseType = 'blob'; // 응답 타입을 blob으로 설정
+
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      const url = URL.createObjectURL(xhr.response);
+      imageTile.getImage().src = url;
+
+      // Blob URL을 사용한 후에는 해제해야 합니다.
+      imageTile.getImage().onload = () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      console.error('Tile load error:', xhr.status, xhr.statusText);
+    }
+  };
+
+  xhr.onerror = function() {
+    console.error('Tile load error:', xhr.status, xhr.statusText);
+  };
+
+  xhr.send(); // 요청 전송
+}
