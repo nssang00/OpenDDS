@@ -14,3 +14,25 @@ function tileLoadFunction(imageTile, src) {
       console.error('Tile load error:', error);
     });
 }
+
+
+source.setTileLoadFunction((tile, src) => {
+  const image = tile.getImage();
+  fetch(src)
+    .then((response) => {
+      if (retryCodes.includes(response.status)) {
+        retries[src] = (retries[src] || 0) + 1;
+        if (retries[src] <= 3) {
+          setTimeout(() => tile.load(), retries[src] * 1000);
+        }
+        return Promise.reject();
+      }
+      return response.blob();
+    })
+    .then((blob) => {
+      const imageUrl = URL.createObjectURL(blob);
+      image.src = imageUrl;
+      setTimeout(() => URL.revokeObjectURL(imageUrl), 5000);
+    })
+    .catch(() => tile.setState(3)); // error
+});
