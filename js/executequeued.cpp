@@ -5,42 +5,65 @@
 #include <queue>
 #include <string>
 
-std::queue<std::string> js_function_queue;
-bool is_object_registered = false;
+class FunctionQueueManager {
+public:
+    void RegisterObject() {
+        is_object_registered_ = true;
+        ExecuteQueuedFunctions();
+    }
+
+    void QueueFunction(const std::string& function_name, CefRefPtr<CefBrowser> browser) {
+        if (is_object_registered_) {
+            browser->GetMainFrame()->ExecuteJavaScript(function_name, browser->GetMainFrame()->GetURL(), 0);
+        } else {
+            js_function_queue_.push(function_name);
+        }
+    }
+
+private:
+    void ExecuteQueuedFunctions() {
+        CefRefPtr<CefBrowser> browser = CefV8Context::GetCurrentContext()->GetBrowser();
+        while (!js_function_queue_.empty()) {
+            std::string js_function = js_function_queue_.front();
+            js_function_queue_.pop();
+            browser->GetMainFrame()->ExecuteJavaScript(js_function, browser->GetMainFrame()->GetURL(), 0);
+        }
+    }
+
+    bool is_object_registered_ = false;
+    std::queue<std::string> js_function_queue_;
+};
 
 class MyV8Handler : public CefV8Handler {
 public:
+    explicit MyV8Handler(FunctionQueueManager* manager) : manager_(manager) {}
+
     virtual bool Execute(const CefString& name,
                          CefRefPtr<CefV8Value> object,
                          const CefV8ValueList& arguments,
                          CefRefPtr<CefV8Value>& retval,
                          CefString& exception) override {
         if (name == "registerobject") {
-            is_object_registered = true;
-            ExecuteQueuedFunctions(CefV8Context::GetCurrentContext()->GetBrowser());
+            manager_->RegisterObject();
             return true;
         }
         return false;
     }
 
-    void ExecuteQueuedFunctions(CefRefPtr<CefBrowser> browser) {
-        while (!js_function_queue.empty()) {
-            std::string js_function = js_function_queue.front();
-            js_function_queue.pop();
-            browser->GetMainFrame()->ExecuteJavaScript(js_function, browser->GetMainFrame()->GetURL(), 0);
-        }
-    }
-
+private:
+    FunctionQueueManager* manager_;
     IMPLEMENT_REFCOUNTING(MyV8Handler);
 };
 
 class MyRenderProcessHandler : public CefRenderProcessHandler {
 public:
+    MyRenderProcessHandler() : manager_(new FunctionQueueManager) {}
+
     virtual void OnContextCreated(CefRefPtr<CefBrowser> browser,
                                   CefRefPtr<CefFrame> frame,
                                   CefRefPtr<CefV8Context> context) override {
         CefRefPtr<CefV8Value> global = context->GetGlobal();
-        CefRefPtr<CefV8Handler> handler = new MyV8Handler();
+        CefRefPtr<CefV8Handler> handler = new MyV8Handler(manager_.get());
         CefRefPtr<CefV8Value> func = CefV8Value::CreateFunction("registerobject", handler);
         global->SetValue("registerobject", func, V8_PROPERTY_ATTRIBUTE_NONE);
     }
@@ -52,21 +75,21 @@ public:
         std::string message_name = message->GetName();
         if (message_name == "CallFunction") {
             std::string function_name = message->GetArgumentList()->GetString(0);
-            if (is_object_registered) {
-                browser->GetMainFrame()->ExecuteJavaScript(function_name, browser->GetMainFrame()->GetURL(), 0);
-            } else {
-                js_function_queue.push(function_name);
-            }
+            manager_->QueueFunction(function_name, browser);
             return true;
         }
         return false;
     }
+
+private:
+    std::unique_ptr<FunctionQueueManager> manager_;
+    IMPLEMENT_REFCOUNTING(MyRenderProcessHandler);
 };
 
 class MyApp : public CefApp, public CefRenderProcessHandler {
 public:
     virtual CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override {
-        return this;
+        return new MyRenderProcessHandler;
     }
 
     IMPLEMENT_REFCOUNTING(MyApp);
