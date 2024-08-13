@@ -16,13 +16,18 @@ private:
     std::map<std::string, std::queue<std::function<void()>>> functionMap;
 
 public:
-    // 함수 추가
+    // 함수 추가 (std::make_pair 사용)
     void addFunction(const std::string& key, const std::function<void()>& func) {
-        functionMap[key].push(func);
+        auto result = functionMap.insert(std::make_pair(key, std::queue<std::function<void()>>()));
+        if (result.second) { // 새로 추가된 경우
+            result.first->second.push(func);
+        } else { // 이미 존재하는 경우
+            result.first->second.push(func);
+        }
     }
 
-    // 해당 키에 있는 모든 큐에서 함수 호출
-    void callFunctions(const std::string& key) {
+    // 해당 키에 있는 모든 큐에서 함수 호출 후 키 삭제
+    void callFunctionsAndRemoveKey(const std::string& key) {
         auto it = functionMap.find(key);
         if (it != functionMap.end()) {
             while (!it->second.empty()) {
@@ -30,6 +35,7 @@ public:
                 it->second.pop();
                 func(); // 함수 호출
             }
+            functionMap.erase(it); // 키 삭제
         } else {
             std::cout << "No functions found for key: " << key << std::endl;
         }
@@ -48,8 +54,11 @@ int main() {
     manager.addFunction("key1", callback1);
     manager.addFunction("key1", callback2);
 
-    // 함수 호출
-    manager.callFunctions("key1");
+    // 함수 호출 후 키 삭제
+    manager.callFunctionsAndRemoveKey("key1");
+
+    // 키가 삭제되었는지 확인
+    manager.callFunctionsAndRemoveKey("key1"); // No functions found for key: key1
 
     return 0;
 }
