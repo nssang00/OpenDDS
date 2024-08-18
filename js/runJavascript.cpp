@@ -2,17 +2,9 @@
 #include <functional>
 #include <string>
 
-// Base case for the recursive call without a callback function
-template<typename... Args>
-void runJavaScript(const std::string& name, Args... args) {
-    // Handle the case where there is no callback
-    std::cout << "Executing JavaScript function: " << name << std::endl;
-    // Example: You would call the JS function here
-}
-
 // Overload for when the last argument is a callback function
 template<typename... Args>
-void runJavaScript(const std::string& name, Args... args, const std::function<void(const std::string&)> &resultCallback = {}) {
+void runJavaScript(const std::string& name, Args... args, const std::function<void(const std::string&)> &resultCallback = nullptr) {
     // Call the function that doesn't take a callback to handle the arguments
     runJavaScript(name, args...);
 
