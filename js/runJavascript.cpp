@@ -4,7 +4,7 @@
 
 // Overload for when the last argument is a callback function
 template<typename... Args>
-void runJavaScript(const std::string& name, Args... args, const std::function<void(const std::string&)> &resultCallback = nullptr) {
+void runJavaScript(const std::string& name, Args... args, const std::function<void(const std::string&)> &resultCallback = {}) {
     // Call the function that doesn't take a callback to handle the arguments
     runJavaScript(name, args...);
 
