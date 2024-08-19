@@ -2,6 +2,7 @@
 #include <functional>
 #include <string>
 
+//std::map<int, std::function<void(const Variant&)>> callbacks;
 // Overload for when the last argument is a callback function
 template<typename... Args>
 void runJavaScript(const std::string& name, Args... args, const std::function<void(const Variant &)> &resultCallback = {}) {
