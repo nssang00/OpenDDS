@@ -10,5 +10,35 @@
     using MyAllocator = std::allocator<T>;
 #endif
 
+/*
+#ifdef USE_CUSTOM_ALLOCATOR
+#include "CustomAllocator.h"
+#define STC_ALLOCATOR CustomAllocator
+#else
+#define STC_ALLOCATOR std::allocator
+#endif
+*/
+/*
+#ifdef USE_CUSTOM_ALLOCATOR
+    template<typename T>
+    using STC_ALLOCATOR = CustomAllocator<T>;
+#else
+    template<typename T>
+    using STC_ALLOCATOR = std::allocator<T>;
+#endif
+*/
+#ifdef USE_CUSTOM_ALLOCATOR
+    template<typename T>
+    struct STC_ALLOCATOR {
+        typedef CustomAllocator<T> type;
+    };
+#else
+    template<typename T>
+    struct STC_ALLOCATOR {
+        typedef std::allocator<T> type;
+    };
+#endif
+
+
 // vector에 적용
 std::vector<int, MyAllocator<int>> myVector;
