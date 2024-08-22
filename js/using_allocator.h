@@ -1,3 +1,20 @@
+#ifdef USE_CUSTOM_ALLOCATOR
+    template<typename T>
+    struct STC_ALLOCATOR {
+        typedef CustomAllocator<T> type;
+    };
+#else
+    template<typename T>
+    struct STC_ALLOCATOR {
+        typedef std::allocator<T> type;
+    };
+#endif
+
+// 사용 예시: USE_CUSTOM_ALLOCATOR가 정의된 경우 CustomAllocator 사용, 그렇지 않은 경우 std::allocator 사용
+std::vector<int, STC_ALLOCATOR<int>::type> myVector;
+
+
+
 // Allocator 선택을 위한 매크로 정의 (필요시)
 #define USE_CUSTOM_ALLOCATOR
 
