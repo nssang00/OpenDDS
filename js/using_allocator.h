@@ -1,4 +1,16 @@
 #ifdef USE_CUSTOM_ALLOCATOR
+    // USE_STC_MM가 정의되어 있으면 CustomAllocator 사용
+    template <typename T>
+    typedef CustomAllocator<T> STC_ALLOCATOR;
+#else
+    // USE_STC_MM가 정의되어 있지 않으면 std::allocator 사용
+    template <typename T>
+    typedef std::allocator<T> STC_ALLOCATOR;
+#endif
+
+std::vector<int, STC_ALLOCATOR<int>> vec;
+
+#ifdef USE_CUSTOM_ALLOCATOR
     template<typename T>
     struct STC_ALLOCATOR {
         typedef CustomAllocator<T> type;
