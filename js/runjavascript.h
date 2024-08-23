@@ -1,3 +1,6 @@
+void handleResult(const Variant& result) {
+    std::cout << "Result: " << result << std::endl;
+}
 
 template<typename... Args>
 void runJavaScript(const std::string& name, Args... args, const std::function<void(const Variant&)>& resultCallback = {}) {
