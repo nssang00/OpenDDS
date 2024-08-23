@@ -43,9 +43,6 @@ void MyClass::execute() {
 #include <iostream>
 #include <vector>
 
-// Variant 타입이 정의되어 있다고 가정
-using Variant = int;
-
 template<typename... Args>
 void runJavaScript(const std::string& name, Args... args) {
     // 인자 개수 체크
@@ -60,13 +57,9 @@ void runJavaScript(const std::string& name, Args... args) {
         auto argumentsTuple = std::tuple<Args...>(args...);
         auto resultCallback = std::get<numArgs - 1>(argumentsTuple);
 
-        // JavaScript 함수 호출 로직 (예제에서 생략)
-        std::cout << "Calling JavaScript function: " << name << std::endl;
-
         // 인자 처리 (예: std::vector로 변환)
         std::vector<Variant> arguments = { static_cast<Variant>(args)... };
 
-        // 예시로 결과를 생성
         Variant result = 42; // 호출 결과 예시
 
         // 콜백 호출
@@ -87,3 +80,9 @@ int main() {
 
     return 0;
 }
+
+if(resultCallback)
+    execute(callbackId,resultcallback)
+else
+ AsyncCondition condition;
+ condition.wait(); 
