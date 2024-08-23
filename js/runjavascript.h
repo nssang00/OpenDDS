@@ -27,3 +27,10 @@ int main() {
 
     return 0;
 }
+
+void MyClass::execute() {
+    runJavaScript("myFunction", 1, 2.5, "example", [this](const Variant& result) {
+        // 멤버변수에 접근
+        std::cout << "Result: " << result << ", Member Variable: " << memberVariable << std::endl;
+    });
+}
