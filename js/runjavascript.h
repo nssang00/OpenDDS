@@ -19,9 +19,7 @@ void runJavaScript(const std::string& name, Args... args, const std::function<vo
 int main() {
     runJavaScript("myFunction", 1, 2.5, "example", [](const Variant& result) {
         // 결과 처리
-        std::visit([](auto&& arg) {
-            std::cout << "Result: " << arg << std::endl;
-        }, result);
+        std::cout << result << std::endl;
     });
 
     return 0;
