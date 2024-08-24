@@ -81,6 +81,31 @@ int main() {
 
     return 0;
 }
+/////
+
+void processArgs(const std::vector<Variant>& args) {
+    std::function<void(const Variant&)> resultCallback;
+
+    if (!args.empty()) {
+        const std::any& lastArg = args.back();
+        if (lastArg.type() == typeid(std::function<void(const Variant&)>)) {
+            resultCallback = std::any_cast<const std::function<void(const Variant&)>&>(lastArg);
+        }
+    }
+
+    if (resultCallback) {
+        Variant variant = 42;
+        resultCallback(variant);
+    }
+}
+
+auto lastArg = std::any_cast<std::function<void(const Variant&)>>(&arguments.back());
+        
+        if (lastArg) {
+            // 마지막 인자가 std::function<void(const Variant&)> 타입일 경우
+            resultCallback = *lastArg;
+            arguments.pop_back();
+//////
 
 if(resultCallback)
     execute(callbackId,resultcallback)
