@@ -56,7 +56,8 @@ void runJavaScript(const std::string& name, Args... args) {
         // 마지막 인자가 std::function인 경우
         //auto argumentsTuple = std::tuple<Args...>(args...);
         //auto resultCallback = std::get<numArgs - 1>(argumentsTuple);
-        auto resultCallback = std::get<sizeof...(Args) - 1>(std::tuple<Args...>(args...));
+        auto resultCallback = std::get<sizeof...(Args) - 1>(std::forward_as_tuple(args...));
+        
         // 인자 처리 (예: std::vector로 변환)
         std::vector<Variant> arguments = { static_cast<Variant>(args)... };
 
