@@ -7,13 +7,9 @@ class SpeedTest {
         }
     }
 public:
-    function<SumDataBlockEventHandler> Bind() {
-        return bind(&SpeedTest::SumDataBlock, this, _1, _2);
-    }
-    function<SumDataBlockEventHandler> Lambda() {
-        return [this](auto data, auto len)
-        {
-            SumDataBlock(data, len);
-        };
-    }
+};
+
+std::bind(&SpeedTest::SumDataBlock, this, 3, 5);
+[this](){
+    SumDataBlock(3, 5);
 };
