@@ -112,3 +112,64 @@ if(resultCallback)
 else
  AsyncCondition condition;
  condition.wait(); 
+
+
+///////
+#include <iostream>
+#include <vector>
+#include <any>
+#include <functional>
+#include <typeindex>
+#include <typeinfo>
+
+// Variant 클래스 정의 (예시)
+class Variant {
+public:
+    Variant(int value) : value_(value) {}
+    friend std::ostream& operator<<(std::ostream& os, const Variant& v) {
+        return os << v.value_;
+    }
+private:
+    int value_;
+};
+
+// 람다 함수 타입 정의
+using LambdaType = std::function<void(const Variant&)>;
+
+// 벡터의 마지막 요소가 LambdaType인지 확인하고 호출하는 함수
+void processVector(const std::vector<std::any>& vec) {
+    if (vec.empty()) {
+        std::cout << "Vector is empty" << std::endl;
+        return;
+    }
+
+    const std::any& last = vec.back();
+    
+    // 마지막 요소가 LambdaType인지 확인
+    if (last.type() == typeid(LambdaType)) {
+        try {
+            // LambdaType으로 캐스팅
+            const auto& lambda = std::any_cast<const LambdaType&>(last);
+            
+            // 람다 함수 호출 (여기서는 예시로 Variant(42)를 전달)
+            lambda(Variant(42));
+        } catch (const std::bad_any_cast& e) {
+            std::cout << "Error: " << e.what() << std::endl;
+        }
+    } else {
+        std::cout << "Last element is not a lambda function" << std::endl;
+    }
+}
+
+int main() {
+    std::vector<std::any> vec = {1, "hello", 3.14};
+    
+    // 람다 함수 추가
+    vec.push_back(LambdaType([](const Variant& result) {
+        std::cout << "Result: " << result << std::endl;
+    }));
+
+    processVector(vec);
+
+    return 0;
+}
