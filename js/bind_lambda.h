@@ -39,63 +39,61 @@ private:
 /////?
 #include <functional>
 #include <tuple>
-#include <type_traits>
 
-namespace my_std {
+namespace simple_std {
 
-// 함수 호출을 위한 헬퍼 함수
-template<typename Func, typename Tuple, std::size_t... I>
-auto call_impl(Func&& f, Tuple&& t, std::index_sequence<I...>) {
-    return std::forward<Func>(f)(std::get<I>(std::forward<Tuple>(t))...);
-}
-
-template<typename Func, typename Tuple>
-auto call(Func&& f, Tuple&& t) {
-    constexpr auto size = std::tuple_size<std::decay_t<Tuple>>::value;
-    return call_impl(std::forward<Func>(f), std::forward<Tuple>(t),
-                     std::make_index_sequence<size>{});
-}
-
-// placeholder 타입
-template<int>
+// 플레이스홀더 타입
+template <int N>
 struct placeholder {};
 
-// 실제 바인드 구현
-template<typename F, typename... Args>
-class binder {
+// 바인드 구현
+template <typename F, typename... Args>
+class bind_t {
     F f;
     std::tuple<Args...> args;
 
 public:
-    binder(F&& f, Args&&... args)
-        : f(std::forward<F>(f)), args(std::forward<Args>(args)...) {}
+    bind_t(F f, Args... args) : f(f), args(std::make_tuple(args...)) {}
 
-    template<typename... CallArgs>
+    template <typename... CallArgs>
     auto operator()(CallArgs&&... call_args) {
-        auto bound_args = std::tuple_cat(
-            args,
-            std::forward_as_tuple(std::forward<CallArgs>(call_args)...)
-        );
-        return call(f, bound_args);
+        return call(std::index_sequence_for<Args...>{}, 
+                    std::forward<CallArgs>(call_args)...);
+    }
+
+private:
+    template <std::size_t... Is, typename... CallArgs>
+    auto call(std::index_sequence<Is...>, CallArgs&&... call_args) {
+        return f(get_arg<Is>(std::forward<CallArgs>(call_args)...)...);
+    }
+
+    template <std::size_t I, typename... CallArgs>
+    auto get_arg(CallArgs&&... call_args) {
+        if constexpr (std::is_same_v<std::tuple_element_t<I, std::tuple<Args...>>, placeholder<1>>) {
+            return std::get<0>(std::forward_as_tuple(call_args...));
+        } else {
+            return std::get<I>(args);
+        }
     }
 };
 
 // bind 함수
-template<typename F, typename... Args>
+template <typename F, typename... Args>
 auto bind(F&& f, Args&&... args) {
-    return binder<std::decay_t<F>, std::decay_t<Args>...>(
-        std::forward<F>(f), std::forward<Args>(args)...
-    );
+    return bind_t<F, Args...>(std::forward<F>(f), std::forward<Args>(args)...);
 }
 
-} // namespace my_std
+} // namespace simple_std
+
+// 사용 예시
+#include <iostream>
 
 int add(int a, int b) {
     return a + b;
 }
 
 int main() {
-    auto bound = my_std::bind(add, 5, my_std::placeholder<1>{});
+    auto bound = simple_std::bind(add, 5, simple_std::placeholder<1>{});
     std::cout << bound(10) << std::endl; // 출력: 15
     return 0;
 }
