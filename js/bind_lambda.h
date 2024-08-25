@@ -2,7 +2,7 @@ class SpeedTest {
     uint32_t sum = 0;
     uint8_t i = 0;
     void SumDataBlock(int a, int b) {
-        auto d = [=](){
+        auto lambda = [=](){
             SumDataBlock(a, b);
         };
     }
