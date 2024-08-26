@@ -43,8 +43,8 @@ private:
     std::map<size_t, Cache*> caches;
     CRITICAL_SECTION cs; // 크리티컬 섹션 추가
 
+    static Slab* createSlab(size_t size); // 정적 멤버 함수로 선언
     Cache* getCache(size_t size);
-    Slab* createSlab(size_t size);
 };
 
 SlubAllocator::SlubAllocator() {
@@ -89,7 +89,7 @@ SlubAllocator::Cache* SlubAllocator::getCache(size_t size) {
     return newCache;
 }
 
-SlubAllocator::Slab* SlubAllocator::createSlab(size_t size) {
+SlubAllocator::Slab* SlubAllocator::createSlab(size_t size) { // 정적 멤버 함수로 구현
     size_t capacity = 1024; // 1024 objects per slab
     return new Slab(size, capacity);
 }
