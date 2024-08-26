@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
-#include <algorithm> // For std::fill
+#include <list> // For std::list
 #include <windows.h> // Windows API 헤더 추가
 
 class SlabAllocator {
@@ -15,25 +15,26 @@ public:
     static SlabAllocator* Instance();
 
 private:
-    struct Slab {
-        unsigned char* data;
-        size_t blockSize;
-        size_t capacity;
-        size_t freeCount;
-        bool* freeMap;
-
-        Slab(size_t blkSize, size_t capacity);
-        ~Slab();
-        void* allocate();
-        void deallocate(void* ptr);
-    };
-
+    struct Slab;
     struct SlabCache {
         size_t blockSize;
         std::vector<Slab*> slabs;
 
         SlabCache(size_t size) : blockSize(size) {}
         ~SlabCache();
+    };
+
+    struct Slab {
+        unsigned char* data;
+        size_t blockSize;
+        size_t capacity;
+        size_t freeCount;
+        std::list<size_t> freeList; // 변경된 부분: std::list를 사용하여 빈 블록 인덱스 관리
+
+        Slab(size_t blkSize, size_t capacity);
+        ~Slab();
+        void* allocate();
+        void deallocate(void* ptr);
     };
 
     std::map<size_t, SlabCache*> caches;
@@ -115,30 +116,29 @@ SlabAllocator::SlabCache::~SlabCache() {
 SlabAllocator::Slab::Slab(size_t blkSize, size_t cap)
     : blockSize(blkSize), capacity(cap), freeCount(cap) {
     data = new unsigned char[blkSize * cap];
-    freeMap = new bool[cap];
-    std::fill(freeMap, freeMap + cap, true);
+    for (size_t i = 0; i < cap; ++i) {
+        freeList.push_back(i);
+    }
 }
 
 SlabAllocator::Slab::~Slab() {
     delete[] data;
-    delete[] freeMap;
 }
 
 void* SlabAllocator::Slab::allocate() {
-    for (size_t i = 0; i < capacity; ++i) {
-        if (freeMap[i]) {
-            freeMap[i] = false;
-            --freeCount;
-            return data + i * blockSize;
-        }
+    if (freeCount > 0) {
+        size_t index = freeList.front();
+        freeList.pop_front();
+        --freeCount;
+        return data + index * blockSize;
     }
     return nullptr;
 }
 
 void SlabAllocator::Slab::deallocate(void* ptr) {
     size_t index = ((unsigned char*)ptr - data) / blockSize;
-    if (!freeMap[index]) {
-        freeMap[index] = true;
+    if (index < capacity) {
+        freeList.push_back(index);
         ++freeCount;
     }
 }
