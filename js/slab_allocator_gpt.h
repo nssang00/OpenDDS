@@ -2,6 +2,7 @@
 #include <vector>
 #include <map>
 #include <algorithm> // For std::fill
+#include <windows.h> // Windows API 헤더 추가
 
 class SlabAllocator {
 public:
@@ -12,6 +13,7 @@ public:
     void free(void* ptr, size_t size);
 
     static SlabAllocator* Instance();
+
 private:
     struct Slab;
     struct Cache {
@@ -36,17 +38,21 @@ private:
     };
 
     std::map<size_t, Cache*> caches;
+    CRITICAL_SECTION cs; // 크리티컬 섹션 추가
 
     Cache* getCache(size_t size);
     Slab* createSlab(size_t size);
 };
 
-SlabAllocator::SlabAllocator() {}
+SlabAllocator::SlabAllocator() {
+    InitializeCriticalSection(&cs); // 크리티컬 섹션 초기화
+}
 
 SlabAllocator::~SlabAllocator() {
     for (std::map<size_t, Cache*>::iterator it = caches.begin(); it != caches.end(); ++it) {
         delete it->second;
     }
+    DeleteCriticalSection(&cs); // 크리티컬 섹션 삭제
 }
 
 SlabAllocator* SlabAllocator::Instance() {
@@ -55,19 +61,25 @@ SlabAllocator* SlabAllocator::Instance() {
 }
 
 void* SlabAllocator::allocate(size_t size) {
+    EnterCriticalSection(&cs); // 크리티컬 섹션 진입
     Cache* cache = getCache(size);
     for (size_t i = 0; i < cache->slabs.size(); ++i) {
         if (cache->slabs[i]->freeCount > 0) {
-            return cache->slabs[i]->allocate();
+            void* result = cache->slabs[i]->allocate();
+            LeaveCriticalSection(&cs); // 크리티컬 섹션 종료
+            return result;
         }
     }
 
     Slab* newSlab = createSlab(size);
     cache->slabs.push_back(newSlab);
-    return newSlab->allocate();
+    void* result = newSlab->allocate();
+    LeaveCriticalSection(&cs); // 크리티컬 섹션 종료
+    return result;
 }
 
 void SlabAllocator::free(void* ptr, size_t size) {
+    EnterCriticalSection(&cs); // 크리티컬 섹션 진입
     Cache* cache = getCache(size);
     for (size_t i = 0; i < cache->slabs.size(); ++i) {
         Slab* slab = cache->slabs[i];
@@ -76,6 +88,7 @@ void SlabAllocator::free(void* ptr, size_t size) {
             break;
         }
     }
+    LeaveCriticalSection(&cs); // 크리티컬 섹션 종료
 }
 
 SlabAllocator::Cache* SlabAllocator::getCache(size_t size) {
@@ -100,7 +113,7 @@ SlabAllocator::Cache::~Cache() {
     }
 }
 
-SlabAllocator::Slab::Slab(size_t objSize, size_t cap) 
+SlabAllocator::Slab::Slab(size_t objSize, size_t cap)
     : objectSize(objSize), capacity(cap), freeCount(cap) {
     data = new unsigned char[objSize * cap];
     freeMap = new bool[cap];
@@ -120,7 +133,7 @@ void* SlabAllocator::Slab::allocate() {
             return data + i * objectSize;
         }
     }
-    return 0;
+    return nullptr;
 }
 
 void SlabAllocator::Slab::deallocate(void* ptr) {
