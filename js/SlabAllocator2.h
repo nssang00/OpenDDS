@@ -30,8 +30,8 @@ private:
         Slab* slab = cache.slabs;
         while (slab) {
             Slab* next = slab->next;
-            free(slab->free_list);
-            free(slab);
+            free(slab->free_list);  // No need to change this line
+            free(slab);            // No need to change this line
             slab = next;
         }
     }
@@ -80,7 +80,7 @@ public:
     }
 
     // Free allocated memory
-    void free(void* ptr, size_t size) {
+    void deallocate(void* ptr, size_t size) {
         Slab* slab = cache.slabs;
 
         // Find the slab containing this pointer
