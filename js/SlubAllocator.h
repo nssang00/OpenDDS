@@ -10,14 +10,15 @@ public:
     ~SlubAllocator();
 
     void* allocate(size_t size);
-    void free(void* ptr, size_t size);
+    void deallocate(void* ptr, size_t size);
 
     static SlubAllocator* Instance();
 
 private:
+    struct Slab;
     struct Cache {
         size_t objectSize;
-        std::vector<void*> slabs;
+        std::vector<Slab*> slabs;
         size_t slabSize;
 
         Cache(size_t size);
@@ -33,7 +34,7 @@ private:
         size_t freeCount;
         bool* freeMap;
 
-        Slab(size_t objSize, size_t capacity);
+        Slab(size_t objSize, size_t cap);
         ~Slab();
         void* allocate();
         void deallocate(void* ptr);
@@ -51,8 +52,8 @@ SlubAllocator::SlubAllocator() {
 }
 
 SlubAllocator::~SlubAllocator() {
-    for (auto& cachePair : caches) {
-        delete cachePair.second;
+    for (std::map<size_t, Cache*>::iterator it = caches.begin(); it != caches.end(); ++it) {
+        delete it->second;
     }
     DeleteCriticalSection(&cs); // 크리티컬 섹션 삭제
 }
@@ -70,7 +71,7 @@ void* SlubAllocator::allocate(size_t size) {
     return result;
 }
 
-void SlubAllocator::free(void* ptr, size_t size) {
+void SlubAllocator::deallocate(void* ptr, size_t size) {
     EnterCriticalSection(&cs); // 크리티컬 섹션 진입
     Cache* cache = getCache(size);
     cache->deallocate(ptr);
@@ -78,7 +79,7 @@ void SlubAllocator::free(void* ptr, size_t size) {
 }
 
 SlubAllocator::Cache* SlubAllocator::getCache(size_t size) {
-    auto it = caches.find(size);
+    std::map<size_t, Cache*>::iterator it = caches.find(size);
     if (it != caches.end()) {
         return it->second;
     }
@@ -95,35 +96,34 @@ SlubAllocator::Slab* SlubAllocator::createSlab(size_t size) {
 
 SlubAllocator::Cache::Cache(size_t size) : objectSize(size), slabSize(1024) {
     // Create an initial slab
-    slabs.push_back(createSlab(size));
+    slabs.push_back(SlubAllocator::createSlab(size));
 }
 
 SlubAllocator::Cache::~Cache() {
-    for (void* slab : slabs) {
-        delete[] static_cast<unsigned char*>(slab);
+    for (Slab* slab : slabs) {
+        delete slab;
     }
 }
 
 void* SlubAllocator::Cache::allocate() {
-    for (void* slab : slabs) {
-        void* result = static_cast<Slab*>(slab)->allocate();
+    for (Slab* slab : slabs) {
+        void* result = slab->allocate();
         if (result) {
             return result;
         }
     }
 
     // All slabs are full, create a new slab
-    Slab* newSlab = createSlab(objectSize);
+    Slab* newSlab = SlubAllocator::createSlab(objectSize);
     slabs.push_back(newSlab);
     return newSlab->allocate();
 }
 
 void SlubAllocator::Cache::deallocate(void* ptr) {
-    for (void* slab : slabs) {
-        Slab* slabObj = static_cast<Slab*>(slab);
-        if (slabObj->data <= (unsigned char*)ptr &&
-            (unsigned char*)ptr < slabObj->data + slabObj->objectSize * slabObj->capacity) {
-            slabObj->deallocate(ptr);
+    for (Slab* slab : slabs) {
+        if (slab->data <= static_cast<unsigned char*>(ptr) &&
+            static_cast<unsigned char*>(ptr) < slab->data + slab->objectSize * slab->capacity) {
+            slab->deallocate(ptr);
             return;
         }
     }
@@ -153,7 +153,7 @@ void* SlubAllocator::Slab::allocate() {
 }
 
 void SlubAllocator::Slab::deallocate(void* ptr) {
-    size_t index = ((unsigned char*)ptr - data) / objectSize;
+    size_t index = (static_cast<unsigned char*>(ptr) - data) / objectSize;
     if (!freeMap[index]) {
         freeMap[index] = true;
         ++freeCount;
