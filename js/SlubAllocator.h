@@ -100,14 +100,14 @@ SlubAllocator::Cache::Cache(size_t size) : objectSize(size), slabSize(1024) {
 }
 
 SlubAllocator::Cache::~Cache() {
-    for (Slab* slab : slabs) {
-        delete slab;
+    for (size_t i = 0; i < slabs.size(); ++i) {
+        delete slabs[i];
     }
 }
 
 void* SlubAllocator::Cache::allocate() {
-    for (Slab* slab : slabs) {
-        void* result = slab->allocate();
+    for (size_t i = 0; i < slabs.size(); ++i) {
+        void* result = slabs[i]->allocate();
         if (result) {
             return result;
         }
@@ -120,7 +120,8 @@ void* SlubAllocator::Cache::allocate() {
 }
 
 void SlubAllocator::Cache::deallocate(void* ptr) {
-    for (Slab* slab : slabs) {
+    for (size_t i = 0; i < slabs.size(); ++i) {
+        Slab* slab = slabs[i];
         if (slab->data <= static_cast<unsigned char*>(ptr) &&
             static_cast<unsigned char*>(ptr) < slab->data + slab->objectSize * slab->capacity) {
             slab->deallocate(ptr);
