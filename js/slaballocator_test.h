@@ -16,7 +16,11 @@ void generateSizes() {
     }
 }
 
+bool deleted = false; // 메모리 해제 여부
+
 void testMallocFree() {
+    std::vector<void*> ptrs;
+    ptrs.reserve(NUM_ALLOCATIONS);
     std::cout << "Testing malloc/free..." << std::endl;
     clock_t start = clock();
 
@@ -24,6 +28,10 @@ void testMallocFree() {
         size_t size = sizes[i]; // 고정된 사이즈 사용
         void* ptr = malloc(size);
         if (ptr) {
+            memset(ptr, 0, size); // 메모리를 0으로 초기화
+            ptrs.push_back(ptr);
+        }
+        if (deleted && ptr) {
             free(ptr);
         }
     }
@@ -31,7 +39,16 @@ void testMallocFree() {
     clock_t end = clock();
     double duration = double(end - start) / CLOCKS_PER_SEC;
     std::cout << "Time taken by malloc/free: " << duration << " seconds" << std::endl;
+
+    if (deleted)
+        return;
+    
+    for (int i = 0; i < NUM_ALLOCATIONS; ++i) {
+        free(ptrs[i]);
+    }
+    ptrs.clear();
 }
+
 
 void testSlabAllocator() {
     std::cout << "Testing SlabAllocator..." << std::endl;
