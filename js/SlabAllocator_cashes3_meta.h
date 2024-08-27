@@ -1,6 +1,6 @@
 #include <iostream>
 #include <vector>
-#include <windows.h> // Windows API 헤더
+#include <windows.h>
 
 class SlabAllocator {
 public:
@@ -19,8 +19,9 @@ private:
         size_t capacity;
         size_t freeCount;
         std::vector<size_t> freeList;
+        size_t blockSizeShift; // 블록 크기 비트 시프트
 
-        Slab(size_t blkSize, size_t capacity);
+        Slab(size_t blkSize, size_t cap);
         ~Slab();
     };
 
@@ -39,14 +40,15 @@ private:
     Slab* createSlab(size_t size);
     void* slabAllocate(Slab* slab);
     void slabDeallocate(Slab* slab, void* ptr);
+    Slab* findSlabContainingPointer(void* ptr, size_t& blockSize);
 };
 
 SlabAllocator::SlabAllocator() {
-    InitializeCriticalSectionAndSpinCount(&cs, 4000); // 크리티컬 섹션 초기화 및 스핀락 설정
+    InitializeCriticalSectionAndSpinCount(&cs, 4000);
 }
 
 SlabAllocator::~SlabAllocator() {
-    for (size_t i = 0; i < caches.size(); ++i) {
+    for (size_t i = 0; i < caches.size(); ++i) { // auto 대신 명시적 타입 사용
         delete caches[i];
     }
     DeleteCriticalSection(&cs);
@@ -57,50 +59,32 @@ SlabAllocator* SlabAllocator::Instance() {
     return &instance;
 }
 
-struct BlockHeader {
-    size_t size;
-};
-
 void* SlabAllocator::allocate(size_t size) {
     SlabCache* cache = getCache(size);
 
     EnterCriticalSection(&cs);
-    for (size_t i = 0; i < cache->slabs.size(); ++i) {
+    for (size_t i = 0; i < cache->slabs.size(); ++i) { // auto 대신 명시적 타입 사용
         Slab* slab = cache->slabs[i];
         if (slab->freeCount > 0) {
             void* result = slabAllocate(slab);
-            if (result) {
-                // 블록 크기를 헤더에 저장
-                BlockHeader* header = reinterpret_cast<BlockHeader*>(result);
-                header->size = size;
-                return header + 1; // 헤더를 건너뛰고 실제 데이터 시작
-            }
+            LeaveCriticalSection(&cs);
+            return result;
         }
     }
 
-    Slab* newSlab = createSlab(size + sizeof(BlockHeader));
+    Slab* newSlab = createSlab(size);
     cache->slabs.push_back(newSlab);
     LeaveCriticalSection(&cs);
 
-    return allocate(size); // 재귀 호출
+    return slabAllocate(newSlab);
 }
 
-void SlabAllocator::free(void* ptr, size_t) {
-    BlockHeader* header = reinterpret_cast<BlockHeader*>(ptr) - 1;
-    size_t size = header->size;
-    
-    SlabCache* cache = getCache(size);
-
+void SlabAllocator::free(void* ptr) {
     EnterCriticalSection(&cs);
-    BlockHeader* header = reinterpret_cast<BlockHeader*>(ptr) - 1;
-    size_t blockSize = header->size;
-
-    for (size_t i = 0; i < cache->slabs.size(); ++i) {
-        Slab* slab = cache->slabs[i];
-        if (slab->data <= (unsigned char*)ptr && (unsigned char*)ptr < slab->data + slab->blockSize * slab->capacity) {
-            slabDeallocate(slab, ptr);
-            break;
-        }
+    size_t blockSize;
+    Slab* slab = findSlabContainingPointer(ptr, blockSize);
+    if (slab) {
+        slabDeallocate(slab, ptr);
     }
     LeaveCriticalSection(&cs);
 }
@@ -108,7 +92,7 @@ void SlabAllocator::free(void* ptr, size_t) {
 SlabAllocator::SlabCache* SlabAllocator::getCache(size_t size) {
     size_t index = size;
     if (index >= caches.size()) {
-        caches.resize(index + 1, nullptr);
+        caches.resize(index + 1, NULL); // nullptr 대신 NULL 사용
     }
     if (!caches[index]) {
         caches[index] = new SlabCache(size);
@@ -118,7 +102,7 @@ SlabAllocator::SlabCache* SlabAllocator::getCache(size_t size) {
 
 SlabAllocator::Slab* SlabAllocator::createSlab(size_t size) {
     size_t capacity = 1024;
-    size_t alignedSize = (size + 63) & ~63; // 캐시 라인 크기 맞춤
+    size_t alignedSize = (size + 63) & ~63;
     return new Slab(alignedSize, capacity);
 }
 
@@ -129,7 +113,7 @@ void* SlabAllocator::slabAllocate(Slab* slab) {
         --slab->freeCount;
         return slab->data + index * slab->blockSize;
     }
-    return nullptr;
+    return NULL; // nullptr 대신 NULL 사용
 }
 
 void SlabAllocator::slabDeallocate(Slab* slab, void* ptr) {
@@ -140,8 +124,24 @@ void SlabAllocator::slabDeallocate(Slab* slab, void* ptr) {
     }
 }
 
+SlabAllocator::Slab* SlabAllocator::findSlabContainingPointer(void* ptr, size_t& blockSize) {
+    for (size_t i = 0; i < caches.size(); ++i) { // auto 대신 명시적 타입 사용
+        SlabCache* cache = caches[i];
+        if (cache) {
+            for (size_t j = 0; j < cache->slabs.size(); ++j) { // auto 대신 명시적 타입 사용
+                Slab* slab = cache->slabs[j];
+                if (slab->data <= (unsigned char*)ptr && (unsigned char*)ptr < slab->data + slab->blockSize * slab->capacity) {
+                    blockSize = slab->blockSize;
+                    return slab;
+                }
+            }
+        }
+    }
+    return NULL; // nullptr 대신 NULL 사용
+}
+
 SlabAllocator::SlabCache::~SlabCache() {
-    for (size_t i = 0; i < slabs.size(); ++i) {
+    for (size_t i = 0; i < slabs.size(); ++i) { // auto 대신 명시적 타입 사용
         delete slabs[i];
     }
 }
@@ -149,7 +149,7 @@ SlabAllocator::SlabCache::~SlabCache() {
 SlabAllocator::Slab::Slab(size_t blkSize, size_t cap)
     : blockSize(blkSize), capacity(cap), freeCount(cap) {
     data = new unsigned char[blkSize * cap];
-    freeList.reserve(cap); // 필요한 용량만큼 미리 할당
+    freeList.reserve(cap);
     for (size_t i = 0; i < cap; ++i) {
         freeList.push_back(i);
     }
