@@ -58,26 +58,37 @@ SlabAllocator* SlabAllocator::Instance() {
 }
 
 void* SlabAllocator::allocate(size_t size) {
-    SlabCache* cache = getCache(size + sizeof(size_t)); // 메타데이터 공간 추가
+    size_t totalSize = size + sizeof(size_t);
+    SlabCache* cache = getCache(totalSize);
 
     EnterCriticalSection(&cs);
+    void* result = nullptr;
+    
     for (size_t i = 0; i < cache->slabs.size(); ++i) {
         Slab* slab = cache->slabs[i];
         if (slab->freeCount > 0) {
-            void* result = slabAllocate(slab);
-            LeaveCriticalSection(&cs);
-            *(size_t*)result = size; // 메타데이터에 블록 크기 저장
-            return (void*)((char*)result + sizeof(size_t)); // 사용자에게 메타데이터를 건너뛴 위치 반환
+            result = slabAllocate(slab);
+            if (result) {
+                *(size_t*)result = size; // 메타데이터에 블록 크기 저장
+                result = (void*)((char*)result + sizeof(size_t)); // 사용자에게 메타데이터를 건너뛴 위치 반환
+                LeaveCriticalSection(&cs);
+                return result;
+            }
         }
     }
 
-    Slab* newSlab = createSlab(size + sizeof(size_t));
+    // 새로운 슬랩을 생성하여 추가
+    Slab* newSlab = createSlab(totalSize);
     cache->slabs.push_back(newSlab);
     LeaveCriticalSection(&cs);
 
-    void* result = slabAllocate(newSlab);
-    *(size_t*)result = size; // 메타데이터에 블록 크기 저장
-    return (void*)((char*)result + sizeof(size_t)); // 사용자에게 메타데이터를 건너뛴 위치 반환
+    result = slabAllocate(newSlab);
+    if (result) {
+        *(size_t*)result = size; // 메타데이터에 블록 크기 저장
+        result = (void*)((char*)result + sizeof(size_t)); // 사용자에게 메타데이터를 건너뛴 위치 반환
+    }
+
+    return result;
 }
 
 void SlabAllocator::free(void* ptr) {
@@ -92,7 +103,8 @@ void SlabAllocator::free(void* ptr) {
         Slab* slab = cache->slabs[i];
         if (slab->data <= (unsigned char*)rawPtr && (unsigned char*)rawPtr < slab->data + slab->blockSize * slab->capacity) {
             slabDeallocate(slab, rawPtr);
-            break;
+            LeaveCriticalSection(&cs);
+            return;
         }
     }
     LeaveCriticalSection(&cs);
