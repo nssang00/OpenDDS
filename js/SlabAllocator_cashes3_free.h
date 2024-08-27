@@ -57,54 +57,49 @@ SlabAllocator* SlabAllocator::Instance() {
     return &instance;
 }
 
+struct BlockHeader {
+    size_t size;
+};
+
 void* SlabAllocator::allocate(size_t size) {
-    size_t totalSize = size + sizeof(size_t);
-    SlabCache* cache = getCache(totalSize);
+    SlabCache* cache = getCache(size);
 
     EnterCriticalSection(&cs);
-    void* result = nullptr;
-    
     for (size_t i = 0; i < cache->slabs.size(); ++i) {
         Slab* slab = cache->slabs[i];
         if (slab->freeCount > 0) {
-            result = slabAllocate(slab);
+            void* result = slabAllocate(slab);
             if (result) {
-                *(size_t*)result = size; // 메타데이터에 블록 크기 저장
-                result = (void*)((char*)result + sizeof(size_t)); // 사용자에게 메타데이터를 건너뛴 위치 반환
-                LeaveCriticalSection(&cs);
-                return result;
+                // 블록 크기를 헤더에 저장
+                BlockHeader* header = reinterpret_cast<BlockHeader*>(result);
+                header->size = size;
+                return header + 1; // 헤더를 건너뛰고 실제 데이터 시작
             }
         }
     }
 
-    // 새로운 슬랩을 생성하여 추가
-    Slab* newSlab = createSlab(totalSize);
+    Slab* newSlab = createSlab(size + sizeof(BlockHeader));
     cache->slabs.push_back(newSlab);
     LeaveCriticalSection(&cs);
 
-    result = slabAllocate(newSlab);
-    if (result) {
-        *(size_t*)result = size; // 메타데이터에 블록 크기 저장
-        result = (void*)((char*)result + sizeof(size_t)); // 사용자에게 메타데이터를 건너뛴 위치 반환
-    }
-
-    return result;
+    return allocate(size); // 재귀 호출
 }
 
-void SlabAllocator::free(void* ptr) {
-    if (ptr == nullptr) return;
-
-    void* rawPtr = (void*)((char*)ptr - sizeof(size_t)); // 메타데이터 위치로 포인터 이동
-    size_t size = *(size_t*)rawPtr; // 메타데이터에서 크기 읽기
-    SlabCache* cache = getCache(size + sizeof(size_t));
+void SlabAllocator::free(void* ptr, size_t) {
+    BlockHeader* header = reinterpret_cast<BlockHeader*>(ptr) - 1;
+    size_t size = header->size;
+    
+    SlabCache* cache = getCache(size);
 
     EnterCriticalSection(&cs);
+    BlockHeader* header = reinterpret_cast<BlockHeader*>(ptr) - 1;
+    size_t blockSize = header->size;
+
     for (size_t i = 0; i < cache->slabs.size(); ++i) {
         Slab* slab = cache->slabs[i];
-        if (slab->data <= (unsigned char*)rawPtr && (unsigned char*)rawPtr < slab->data + slab->blockSize * slab->capacity) {
-            slabDeallocate(slab, rawPtr);
-            LeaveCriticalSection(&cs);
-            return;
+        if (slab->data <= (unsigned char*)ptr && (unsigned char*)ptr < slab->data + slab->blockSize * slab->capacity) {
+            slabDeallocate(slab, ptr);
+            break;
         }
     }
     LeaveCriticalSection(&cs);
