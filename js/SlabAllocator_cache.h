@@ -1,7 +1,6 @@
 #include <iostream>
 #include <vector>
 #include <list>
-#include <map>
 #include <windows.h>
 
 class SlabAllocator {
@@ -32,7 +31,7 @@ private:
         size_t freeCount;
         std::list<size_t> freeList;
 
-        Slab(size_t blkSize, size_t capacity);
+        Slab(size_t blkSize, size_t cap);
         ~Slab();
         void* allocate();
         void deallocate(void* ptr);
@@ -90,7 +89,7 @@ void SlabAllocator::Slab::deallocate(void* ptr) {
 }
 
 SlabAllocator::SlabAllocator()
-    : largeObjectCache(new SlabCache(0)) {
+    : largeObjectCache(new SlabCache(1)) { // 큰 객체 캐시는 빈 크기로 초기화
     InitializeCriticalSection(&cs);
 
     smallObjectCaches.resize(NUM_SMALL_OBJECT_CACHES);
@@ -112,17 +111,20 @@ SlabAllocator* SlabAllocator::Instance() {
 void* SlabAllocator::allocate(size_t size) {
     EnterCriticalSection(&cs);
     SlabCache* cache = getCache(size);
+    void* result = nullptr;
     for (size_t i = 0; i < cache->slabs.size(); ++i) {
         if (cache->slabs[i]->freeCount > 0) {
-            void* result = cache->slabs[i]->allocate();
-            LeaveCriticalSection(&cs);
-            return result;
+            result = cache->slabs[i]->allocate();
+            if (result != nullptr) {
+                LeaveCriticalSection(&cs);
+                return result;
+            }
         }
     }
 
     Slab* newSlab = createSlab(size);
     cache->slabs.push_back(newSlab);
-    void* result = newSlab->allocate();
+    result = newSlab->allocate();
     LeaveCriticalSection(&cs);
     return result;
 }
@@ -134,7 +136,8 @@ void SlabAllocator::free(void* ptr, size_t size) {
         Slab* slab = cache->slabs[i];
         if (slab->data <= (unsigned char*)ptr && (unsigned char*)ptr < slab->data + slab->blockSize * slab->capacity) {
             slab->deallocate(ptr);
-            break;
+            LeaveCriticalSection(&cs);
+            return;
         }
     }
     LeaveCriticalSection(&cs);
