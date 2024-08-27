@@ -1,10 +1,11 @@
 #include <iostream>
 #include <vector>
-#include <list> // For std::list
+#include <list>
 #include <windows.h> // Windows API 헤더 추가
 
 #define MAX_SMALL_OBJECT_SIZE 256
-#define SMALL_OBJECT_CACHE_SIZE 32 // 작은 객체 캐시의 배열 크기
+#define SMALL_OBJECT_CACHE_SIZE 32 // 캐시 배열 크기
+#define SLAB_CAPACITY 1024 // 슬랩의 용량
 
 class SlabAllocator {
 public:
@@ -54,9 +55,9 @@ SlabAllocator::SlabAllocator() {
 
     // 작은 객체 캐시 초기화
     for (size_t i = 0; i < SMALL_OBJECT_CACHE_SIZE; ++i) {
-        small_object_caches[i] = nullptr;
+        small_object_caches[i] = NULL;
     }
-    large_object_cache = nullptr;
+    large_object_cache = NULL;
 }
 
 SlabAllocator::~SlabAllocator() {
@@ -74,13 +75,9 @@ SlabAllocator* SlabAllocator::Instance() {
 
 void* SlabAllocator::allocate(size_t size) {
     EnterCriticalSection(&cs); // 크리티컬 섹션 진입
-    SlabCache* cache;
-    if (size <= MAX_SMALL_OBJECT_SIZE) {
-        cache = getSmallObjectCache(size);
-    } else {
-        cache = getLargeObjectCache();
-    }
+    SlabCache* cache = getCache(size);
 
+    // 슬랩에서 할당
     for (size_t i = 0; i < cache->slabs.size(); ++i) {
         Slab* slab = cache->slabs[i];
         if (slab->freeCount > 0) {
@@ -90,6 +87,7 @@ void* SlabAllocator::allocate(size_t size) {
         }
     }
 
+    // 새로운 슬랩 생성
     Slab* newSlab = createSlab(size);
     cache->slabs.push_back(newSlab);
     void* result = newSlab->allocate();
@@ -99,13 +97,9 @@ void* SlabAllocator::allocate(size_t size) {
 
 void SlabAllocator::free(void* ptr, size_t size) {
     EnterCriticalSection(&cs); // 크리티컬 섹션 진입
-    SlabCache* cache;
-    if (size <= MAX_SMALL_OBJECT_SIZE) {
-        cache = getSmallObjectCache(size);
-    } else {
-        cache = getLargeObjectCache();
-    }
+    SlabCache* cache = getCache(size);
 
+    // 슬랩에서 해제
     for (size_t i = 0; i < cache->slabs.size(); ++i) {
         Slab* slab = cache->slabs[i];
         if (slab->data <= (unsigned char*)ptr && (unsigned char*)ptr < slab->data + slab->blockSize * slab->capacity) {
@@ -116,8 +110,15 @@ void SlabAllocator::free(void* ptr, size_t size) {
     LeaveCriticalSection(&cs); // 크리티컬 섹션 종료
 }
 
+SlabAllocator::SlabCache* SlabAllocator::getCache(size_t size) {
+    if (size <= MAX_SMALL_OBJECT_SIZE) {
+        return getSmallObjectCache(size);
+    }
+    return getLargeObjectCache();
+}
+
 SlabAllocator::SlabCache* SlabAllocator::getSmallObjectCache(size_t size) {
-    size_t index = (size - 1) / 8; // 8바이트 단위로 캐시를 구분
+    size_t index = (size + 7) / 8 - 1; // 8바이트 단위로 캐시를 구분
     if (index >= SMALL_OBJECT_CACHE_SIZE) {
         return getLargeObjectCache();
     }
@@ -129,14 +130,13 @@ SlabAllocator::SlabCache* SlabAllocator::getSmallObjectCache(size_t size) {
 
 SlabAllocator::SlabCache* SlabAllocator::getLargeObjectCache() {
     if (!large_object_cache) {
-        large_object_cache = new SlabCache(MAX_SMALL_OBJECT_SIZE + 1); // 큰 객체 캐시의 블록 크기 설정
+        large_object_cache = new SlabCache(MAX_SMALL_OBJECT_SIZE + 1);
     }
     return large_object_cache;
 }
 
 SlabAllocator::Slab* SlabAllocator::createSlab(size_t size) {
-    size_t capacity = 1024; // 1024 objects per slab
-    return new Slab(size, capacity);
+    return new Slab(size, SLAB_CAPACITY); // 조정된 슬랩 용량
 }
 
 SlabAllocator::SlabCache::~SlabCache() {
@@ -164,7 +164,7 @@ void* SlabAllocator::Slab::allocate() {
         --freeCount;
         return data + index * blockSize;
     }
-    return nullptr;
+    return NULL; // nullptr 대신 NULL 사용
 }
 
 void SlabAllocator::Slab::deallocate(void* ptr) {
