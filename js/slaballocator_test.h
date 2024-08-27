@@ -1,0 +1,68 @@
+#include <iostream>
+#include <ctime>
+#include <cstdlib>
+#include <vector>
+
+#include "SlabAllocator.h" // Slab Allocator 헤더 파일을 포함합니다.
+
+#define NUM_ALLOCATIONS 1000000
+
+// 고정된 메모리 크기를 저장할 벡터
+std::vector<size_t> sizes(NUM_ALLOCATIONS);
+
+void generateSizes() {
+    for (int i = 0; i < NUM_ALLOCATIONS; ++i) {
+        sizes[i] = (rand() % 512) * 8 + 8; // 8, 16, ..., 4096
+    }
+}
+
+void testMallocFree() {
+    std::cout << "Testing malloc/free..." << std::endl;
+    clock_t start = clock();
+
+    for (int i = 0; i < NUM_ALLOCATIONS; ++i) {
+        size_t size = sizes[i]; // 고정된 사이즈 사용
+        void* ptr = malloc(size);
+        if (ptr) {
+            free(ptr);
+        }
+    }
+
+    clock_t end = clock();
+    double duration = double(end - start) / CLOCKS_PER_SEC;
+    std::cout << "Time taken by malloc/free: " << duration << " seconds" << std::endl;
+}
+
+void testSlabAllocator() {
+    std::cout << "Testing SlabAllocator..." << std::endl;
+    SlabAllocator* allocator = SlabAllocator::Instance();
+    clock_t start = clock();
+
+    for (int i = 0; i < NUM_ALLOCATIONS; ++i) {
+        size_t size = sizes[i]; // 고정된 사이즈 사용
+        void* ptr = allocator->allocate(size);
+        if (ptr) {
+            allocator->free(ptr, size);
+        }
+    }
+
+    clock_t end = clock();
+    double duration = double(end - start) / CLOCKS_PER_SEC;
+    std::cout << "Time taken by SlabAllocator: " << duration << " seconds" << std::endl;
+}
+
+int main() {
+    // 난수 생성기 시드 설정
+    srand(static_cast<unsigned int>(time(0))); // 동일한 시드를 사용하여 난수를 고정
+
+    // 메모리 크기 생성
+    generateSizes();
+
+    // malloc/free 성능 테스트
+    testMallocFree();
+
+    // SlabAllocator 성능 테스트
+    testSlabAllocator();
+
+    return 0;
+}
