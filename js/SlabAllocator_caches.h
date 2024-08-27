@@ -14,15 +14,6 @@ public:
     static SlabAllocator* Instance();
 
 private:
-    struct Slab;
-    struct SlabCache {
-        size_t blockSize;
-        std::vector<Slab*> slabs;
-
-        SlabCache(size_t size) : blockSize(size) {}
-        ~SlabCache();
-    };
-
     struct Slab {
         unsigned char* data;
         size_t blockSize;
@@ -34,6 +25,14 @@ private:
         ~Slab();
         void* allocate();
         void deallocate(void* ptr);
+    };
+
+    struct SlabCache {
+        size_t blockSize;
+        std::vector<Slab*> slabs;
+
+        SlabCache(size_t size) : blockSize(size) {}
+        ~SlabCache();
     };
 
     std::vector<SlabCache*> caches;
