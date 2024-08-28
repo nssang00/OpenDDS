@@ -57,6 +57,7 @@ private:
     std::map<size_t, SlabCache*> slabCaches;  // 객체 크기별 슬랩 캐시 관리
 
     SlabAllocator() {}
+
     ~SlabAllocator() {
         for (std::map<size_t, SlabCache*>::iterator it = slabCaches.begin(); it != slabCaches.end(); ++it) {
             SlabCache* cache = it->second;
@@ -65,6 +66,7 @@ private:
             }
             delete cache;
         }
+        slabCaches.clear();
     }
 
     void addSlab(size_t size) {
