@@ -94,7 +94,7 @@ void* SlabAllocator::allocate(size_t size) {
     Slab* slab = cache->freeList;
     cache->freeList = slab->next;
 
-    return reinterpret_cast<void*>(reinterpret_cast<char*>(slab) - sizeof(size_t));
+    return reinterpret_cast<void*>(reinterpret_cast<char*>(slab) + sizeof(size_t));
 }
 
 void SlabAllocator::free(void* ptr) {
@@ -103,7 +103,7 @@ void SlabAllocator::free(void* ptr) {
     SlabCache* cache = slabCaches[size];
 
     // 메모리를 해제하고 자유 리스트로 반환
-    char* actualPtr = reinterpret_cast<char*>(ptr) + sizeof(size_t);
+    char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(size_t);
     Slab* slab = reinterpret_cast<Slab*>(actualPtr);
     slab->next = cache->freeList;
     cache->freeList = slab;
