@@ -79,10 +79,11 @@ void SlabAllocator::addSlab(size_t size) {
 }
 
 void* SlabAllocator::allocate(size_t size) {
+void* SlabAllocator::allocate(size_t size) {
     SlabCache* cache;
 
     // 해당 크기의 캐시가 없다면 생성
-    auto it = slabCaches.find(size);
+    std::map<size_t, SlabCache*>::iterator it = slabCaches.find(size);
     if (it == slabCaches.end()) {
         addSlab(size);
         it = slabCaches.find(size);
@@ -96,6 +97,7 @@ void* SlabAllocator::allocate(size_t size) {
     Slab* slab = cache->freeList;
     cache->freeList = slab->next;
 
+    // 실제 객체 시작 주소를 반환
     return reinterpret_cast<void*>(reinterpret_cast<char*>(slab) + sizeof(size_t));
 }
 
