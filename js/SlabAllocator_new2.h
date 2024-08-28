@@ -17,21 +17,23 @@ public:
             slabCaches[size] = new SlabCache(size);
             addSlab(size);
         }
-
+    
         SlabCache* cache = slabCaches[size];
-        if (cache->freeList == NULL) {
+        if (cache->freeList == nullptr) {
             addSlab(size);
         }
-
+    
         Slab* slab = cache->freeList;
         cache->freeList = slab->next;
-        return static_cast<void*>(slab);
+    
+        return static_cast<void*>(static_cast<char*>(slab) + sizeof(Slab));
     }
 
     void free(void* ptr) {
-        Slab* slab = static_cast<Slab*>(ptr);
+        // ptr을 올바르게 offset 계산하여 slab 구조체의 포인터로 변환
+        Slab* slab = reinterpret_cast<Slab*>(static_cast<char*>(ptr) - sizeof(Slab));
         size_t size = slab->cache->objectSize;
-
+    
         slab->next = slabCaches[size]->freeList;
         slabCaches[size]->freeList = slab;
     }
