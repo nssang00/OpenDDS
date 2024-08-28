@@ -26,7 +26,7 @@ public:
         Slab* slab = cache->freeList;
         cache->freeList = slab->next;
     
-        return static_cast<void*>(static_cast<char*>(slab) + sizeof(Slab));
+        return static_cast<void*>(static_cast<char*>(static_cast<void*>(slab)) + sizeof(Slab));
     }
 
     void free(void* ptr) {
