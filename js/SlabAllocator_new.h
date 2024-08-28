@@ -110,5 +110,7 @@ void SlabAllocator::free(void* ptr) {
 }
 
 size_t SlabAllocator::getObjectSize(void* ptr) {
-    return *reinterpret_cast<size_t*>(ptr);
+    // ptr이 실제로는 슬랩 내부의 시작 부분보다 sizeof(size_t)만큼 뒤에 위치함
+    char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(size_t);
+    return *reinterpret_cast<size_t*>(actualPtr);
 }
