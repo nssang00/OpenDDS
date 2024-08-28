@@ -106,9 +106,10 @@ void SlabAllocator::free(void* ptr) {
     cache->freeList = slab;
 }
 
+
 size_t SlabAllocator::getObjectSize(void* ptr) {
     char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(Slab);
-    return *(reinterpret_cast<size_t*>(actualPtr) - 1); // Adjusted to correctly retrieve the size
+    return *(reinterpret_cast<size_t*>(actualPtr + sizeof(Slab) - sizeof(size_t)));
 }
 
 // Example usage
