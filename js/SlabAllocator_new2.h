@@ -94,3 +94,16 @@ private:
         }
     }
 };
+
+size_t getAdjustedSize(size_t size) {
+    // size가 1보다 작을 경우 최소 크기인 8을 반환
+    if (size <= 8) return 8;
+
+    // 요청된 size보다 큰 가장 작은 2의 거듭제곱을 찾음
+    size_t adjustedSize = 1;
+    while (adjustedSize < size) {
+        adjustedSize <<= 1; // adjustedSize를 왼쪽으로 한 비트씩 이동(즉, 2를 곱함)
+    }
+
+    return adjustedSize;
+}
