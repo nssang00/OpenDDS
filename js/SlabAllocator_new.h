@@ -41,10 +41,10 @@ SlabAllocator* SlabAllocator::Instance() {
 SlabAllocator::SlabAllocator() {}
 
 SlabAllocator::~SlabAllocator() {
-    for (std::map<size_t, SlabCache*>::iterator it = slabCaches.begin(); it != slabCaches.end(); ++it) {
-        SlabCache* cache = it->second;
-        for (std::vector<void*>::iterator vecIt = cache->slabs.begin(); vecIt != cache->slabs.end(); ++vecIt) {
-            ::free(*vecIt);
+    for (auto& pair : slabCaches) {
+        SlabCache* cache = pair.second;
+        for (void* slab : cache->slabs) {
+            ::free(slab);
         }
         delete cache;
     }
@@ -53,39 +53,33 @@ SlabAllocator::~SlabAllocator() {
 void SlabAllocator::addSlab(size_t size) {
     SlabCache* cache;
 
-    // Get or create cache
-    std::map<size_t, SlabCache*>::iterator it = slabCaches.find(size);
+    auto it = slabCaches.find(size);
     if (it == slabCaches.end()) {
         cache = new SlabCache();
         cache->objectSize = size;
-        cache->freeList = NULL;
+        cache->freeList = nullptr;
         slabCaches[size] = cache;
     } else {
         cache = it->second;
     }
 
-    // Allocate a new slab
-    size_t slabSize = (size + sizeof(size_t)) * 8;
+    size_t slabSize = (size + sizeof(Slab)) * 8;
     void* newSlab = ::malloc(slabSize);
     cache->slabs.push_back(newSlab);
 
     char* slabPtr = static_cast<char*>(newSlab);
-
     for (int i = 0; i < 8; ++i) {
-        // Store object size at the start of the block
-        *reinterpret_cast<size_t*>(slabPtr) = size;
-        Slab* slab = reinterpret_cast<Slab*>(slabPtr + sizeof(size_t));
+        Slab* slab = reinterpret_cast<Slab*>(slabPtr);
         slab->next = cache->freeList;
         cache->freeList = slab;
-        slabPtr += (size + sizeof(size_t)); // Move to next block
+        slabPtr += size + sizeof(Slab);
     }
 }
 
 void* SlabAllocator::allocate(size_t size) {
     SlabCache* cache;
 
-    // Get or create cache
-    std::map<size_t, SlabCache*>::iterator it = slabCaches.find(size);
+    auto it = slabCaches.find(size);
     if (it == slabCaches.end()) {
         addSlab(size);
         it = slabCaches.find(size);
@@ -99,26 +93,22 @@ void* SlabAllocator::allocate(size_t size) {
     Slab* slab = cache->freeList;
     cache->freeList = slab->next;
 
-    // Return pointer to the allocated object
-    return reinterpret_cast<void*>(reinterpret_cast<char*>(slab) + sizeof(size_t));
+    return reinterpret_cast<void*>(reinterpret_cast<char*>(slab) + sizeof(Slab));
 }
 
 void SlabAllocator::free(void* ptr) {
-    // Get object size to find the correct cache
     size_t size = getObjectSize(ptr);
     SlabCache* cache = slabCaches[size];
 
-    // Adjust pointer to find the start of the slab
-    char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(size_t);
+    char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(Slab);
     Slab* slab = reinterpret_cast<Slab*>(actualPtr);
     slab->next = cache->freeList;
     cache->freeList = slab;
 }
 
 size_t SlabAllocator::getObjectSize(void* ptr) {
-    // Adjust pointer to the start of the slab
-    char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(size_t);
-    return *reinterpret_cast<size_t*>(actualPtr);
+    char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(Slab);
+    return *(reinterpret_cast<size_t*>(actualPtr) - 1); // Adjusted to correctly retrieve the size
 }
 
 // Example usage
