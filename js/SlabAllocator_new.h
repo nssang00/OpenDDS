@@ -82,11 +82,13 @@ void* SlabAllocator::allocate(size_t size) {
     SlabCache* cache;
 
     // 해당 크기의 캐시가 없다면 생성
-    if (slabCaches.find(size) == slabCaches.end()) {
+    auto it = slabCaches.find(size);
+    if (it == slabCaches.end()) {
         addSlab(size);
+        it = slabCaches.find(size);
     }
 
-    cache = slabCaches[size];
+    cache = it->second;
     if (!cache->freeList) {
         addSlab(size);
     }
@@ -110,7 +112,7 @@ void SlabAllocator::free(void* ptr) {
 }
 
 size_t SlabAllocator::getObjectSize(void* ptr) {
-    // ptr이 실제로는 슬랩 내부의 시작 부분보다 sizeof(size_t)만큼 뒤에 위치함
+    // ptr에서 sizeof(size_t)만큼 뒤로 이동하여 메모리 블록의 시작 부분을 찾습니다.
     char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(size_t);
     return *reinterpret_cast<size_t*>(actualPtr);
 }
