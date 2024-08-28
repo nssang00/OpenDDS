@@ -30,6 +30,14 @@ public:
     }
 
     void free(void* ptr) {
+        Slab* slab = reinterpret_cast<Slab*>(static_cast<char*>(ptr) - sizeof(Slab));
+        SlabCache* cache = slab->cache;
+        
+        slab->next = cache->freeList;
+        cache->freeList = slab;
+    }
+
+    void free(void* ptr) {
         // ptr을 올바르게 offset 계산하여 slab 구조체의 포인터로 변환
         Slab* slab = reinterpret_cast<Slab*>(static_cast<char*>(ptr) - sizeof(Slab));
         size_t size = slab->cache->objectSize;
