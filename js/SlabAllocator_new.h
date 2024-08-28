@@ -3,6 +3,7 @@
 #include <map>
 #include <cstdlib>
 #include <cassert>
+#include <iostream>
 
 class SlabAllocator {
 public:
@@ -63,7 +64,7 @@ void SlabAllocator::addSlab(size_t size) {
         cache = it->second;
     }
 
-    // Allocate a new slab
+    // Allocate a new slab: (size + sizeof(size_t)) * 8 bytes
     void* newSlab = ::malloc((size + sizeof(size_t)) * 8);
     cache->slabs.push_back(newSlab);
 
@@ -75,7 +76,7 @@ void SlabAllocator::addSlab(size_t size) {
         Slab* slab = reinterpret_cast<Slab*>(slabPtr + sizeof(size_t));
         slab->next = cache->freeList;
         cache->freeList = slab;
-        slabPtr += (size + sizeof(size_t));
+        slabPtr += (size + sizeof(size_t)); // Move to next block
     }
 }
 
@@ -117,4 +118,19 @@ size_t SlabAllocator::getObjectSize(void* ptr) {
     // Adjust pointer to the start of the slab
     char* actualPtr = reinterpret_cast<char*>(ptr) - sizeof(size_t);
     return *reinterpret_cast<size_t*>(actualPtr);
+}
+
+// Example usage
+int main() {
+    SlabAllocator* allocator = SlabAllocator::Instance();
+
+    // Allocate a block of 64 bytes
+    void* ptr1 = allocator->allocate(64);
+    std::cout << "Allocated block at: " << ptr1 << std::endl;
+
+    // Free the allocated block
+    allocator->free(ptr1);
+    std::cout << "Freed block at: " << ptr1 << std::endl;
+
+    return 0;
 }
