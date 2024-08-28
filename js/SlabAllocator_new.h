@@ -52,7 +52,7 @@ SlabAllocator::~SlabAllocator() {
 
 void SlabAllocator::addSlab(size_t size) {
     SlabCache* cache;
-    
+
     // Get or create cache
     std::map<size_t, SlabCache*>::iterator it = slabCaches.find(size);
     if (it == slabCaches.end()) {
@@ -64,8 +64,9 @@ void SlabAllocator::addSlab(size_t size) {
         cache = it->second;
     }
 
-    // Allocate a new slab: (size + sizeof(size_t)) * 8 bytes
-    void* newSlab = ::malloc((size + sizeof(size_t)) * 8);
+    // Allocate a new slab
+    size_t slabSize = (size + sizeof(size_t)) * 8;
+    void* newSlab = ::malloc(slabSize);
     cache->slabs.push_back(newSlab);
 
     char* slabPtr = static_cast<char*>(newSlab);
