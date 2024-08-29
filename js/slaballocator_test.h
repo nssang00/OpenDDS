@@ -6,13 +6,15 @@
 #include "SlabAllocator.h" // Slab Allocator 헤더 파일을 포함합니다.
 
 #define NUM_ALLOCATIONS 1000000
+#define MIN_SIZE 8           // 최소 8바이트
+#define MAX_SIZE 1024 * 1024 // 최대 1MB
 
 // 고정된 메모리 크기를 저장할 벡터
 std::vector<size_t> sizes(NUM_ALLOCATIONS);
 
 void generateSizes() {
     for (int i = 0; i < NUM_ALLOCATIONS; ++i) {
-        sizes[i] = (rand() % 512) * 8 + 8; // 8, 16, ..., 4096
+        sizes[i] = (rand() % (MAX_SIZE - MIN_SIZE + 1)) + MIN_SIZE; // 8바이트 ~ 1MB 사이 크기
     }
 }
 
