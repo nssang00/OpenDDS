@@ -1,7 +1,8 @@
 #define SDDS_MEMORY_MANAGER_MAGIC_NUMBER1       0xAA435453L
 #define SDDS_MEMORY_MANAGER_MAGIC_NUMBER2       0xBB21474DL
 
-#define MEM_POOL_SIZE (64 * 1024)  // 64KB
+#define MEM_POOL_SIZE (32 * 1024)  // 32KB
+#define MIN_CAPACITY 1
 
 #include <windows.h>
 #include <vector>
@@ -109,8 +110,6 @@ CustomAllocator* CustomAllocator::Instance(int num) {
     return instance[num];
 }
 
-
-
 void* CustomAllocator::allocate(size_t size) {
     int index = -1;
     int newSize = 0;
@@ -125,7 +124,7 @@ void* CustomAllocator::allocate(size_t size) {
         }
     }
     if (index == -1)
-        return NULL;  // VS2008에서는 nullptr 대신 NULL 사용
+        return NULL; 
 
     mutex->lock();
 
@@ -171,13 +170,13 @@ void CustomAllocator::free(void* object, size_t size) {
 }
 
 bool CustomAllocator::freeMemPool() {
-    for (size_t i = 0; i < memPoolList.size(); i++) {  // C++03에서 호환되도록 변경
+    for (size_t i = 0; i < memPoolList.size(); i++) { 
         MemPool* memPool = memPoolList[i];
         delete[] memPool->payload;
         delete memPool;
     }
     memPoolList.clear();
-    nowMemPool = NULL;  // VS2008에서는 nullptr 대신 NULL 사용
+    nowMemPool = NULL;  
 
     return true;
 }
@@ -187,6 +186,7 @@ bool CustomAllocator::allocMemPool(size_t size) {
 
     // MEM_POOL_SIZE로 할당할 수 있는 블록 수를 계산하여 capacity 변수에 저장
     size_t capacity = (MEM_POOL_SIZE / totalBlockSize) < 1 ? 1 : MEM_POOL_SIZE / totalBlockSize;
+    size_t capacity = std::max(MEM_POOL_SIZE / totalBlockSize, MIN_CAPACITY);
 
     // 필요한 메모리 크기
     size_t requiredSize = capacity * totalBlockSize;
@@ -208,6 +208,38 @@ bool CustomAllocator::allocMemPool(size_t size) {
     return true;
 }
 
+MemBlock* CustomAllocator::getMemBlockFromMemPool(size_t size) {
+    size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
+
+    // Check if we need a new memory pool
+    if (nowMemPool == NULL || (nowMemPool->curPos + blockSize > nowMemPool->size)) {
+        if (!allocMemPool(size)) {
+            return NULL;
+        }
+    }
+
+    unsigned char* start = nowMemPool->payload + nowMemPool->curPos;
+    size_t capacity = (nowMemPool->size - nowMemPool->curPos) / blockSize;
+
+    MemBlock* firstBlock = NULL;
+
+    for (size_t i = 0; i < capacity; ++i) {
+        MemBlock* currentBlock = reinterpret_cast<MemBlock*>(start + i * blockSize);
+
+        // Initialize the memory block
+        currentBlock->size = size;
+        currentBlock->signature1 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER1;
+        currentBlock->signature2 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER2;
+        currentBlock->next = firstBlock;
+        firstBlock = currentBlock;
+    }
+
+    nowMemPool->curPos += static_cast<int>(blockSize * capacity);
+
+    return firstBlock;
+}
+
+/*
 MemBlock* CustomAllocator::getMemBlockFromMemPool(size_t size) {
     size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
@@ -251,3 +283,4 @@ MemBlock* CustomAllocator::getMemBlockFromMemPool(size_t size) {
 
     return firstBlock;
 }
+*/
