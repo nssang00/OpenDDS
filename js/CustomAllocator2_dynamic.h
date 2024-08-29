@@ -1,17 +1,13 @@
-bool CustomAllocator::allocMemPool(size_t blockSize) {
-    // 메모리 풀의 크기를 64KB로 설정
-    size_t poolSize = 64 * 1024;  // 64KB
-    size_t totalBlockSize = blockSize + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
+#define MEM_POOL_SIZE (64 * 1024)  // 64KB
 
-    // 64KB로 할당할 수 있는 블록 수를 계산
-    size_t blocksPerPool = poolSize / totalBlockSize;
+bool CustomAllocator::allocMemPool(size_t size) {
+    size_t totalBlockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
-    if (blocksPerPool < 1) {
-        blocksPerPool = 1;  // 최소 1개의 블록을 할당하도록 설정
-    }
+    // MEM_POOL_SIZE로 할당할 수 있는 블록 수를 계산하여 capacity 변수에 저장
+    size_t capacity = (MEM_POOL_SIZE / totalBlockSize) < 1 ? 1 : MEM_POOL_SIZE / totalBlockSize;
 
     // 필요한 메모리 크기
-    size_t requiredSize = blocksPerPool * totalBlockSize;
+    size_t requiredSize = capacity * totalBlockSize;
 
     // 메모리 풀을 할당
     nowMemPool = new MemPool;
@@ -30,7 +26,7 @@ bool CustomAllocator::allocMemPool(size_t blockSize) {
     return true;
 }
 
-MemBlock* CustomAllocator::getMemBlockFromMemPool(int size) {
+MemBlock* CustomAllocator::getMemBlockFromMemPool(size_t size) {
     size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
     // 현재 메모리 풀이 부족할 경우 새 메모리 풀 할당
@@ -44,9 +40,9 @@ MemBlock* CustomAllocator::getMemBlockFromMemPool(int size) {
     MemBlock* currentBlock = NULL;
 
     unsigned char* start = nowMemPool->payload + nowMemPool->curPos;
-    size_t blocksPerBatch = (nowMemPool->size - nowMemPool->curPos) / blockSize;
+    size_t capacity = (nowMemPool->size - nowMemPool->curPos) / blockSize;
 
-    for (size_t i = 0; i < blocksPerBatch; ++i) {
+    for (size_t i = 0; i < capacity; ++i) {
         currentBlock = (MemBlock*)(start + i * blockSize);
 
         // 메모리 풀의 끝을 초과하지 않도록 확인
@@ -58,7 +54,7 @@ MemBlock* CustomAllocator::getMemBlockFromMemPool(int size) {
             start = nowMemPool->payload + nowMemPool->curPos;
             i = -1;  // 루프를 재시작하도록 설정
             firstBlock = NULL;  // 기존 블록 목록 초기화
-            blocksPerBatch = (nowMemPool->size - nowMemPool->curPos) / blockSize;
+            capacity = (nowMemPool->size - nowMemPool->curPos) / blockSize;  // 새로운 capacity 재계산
             continue;
         }
 
@@ -69,7 +65,7 @@ MemBlock* CustomAllocator::getMemBlockFromMemPool(int size) {
         firstBlock = currentBlock;
     }
 
-    nowMemPool->curPos += (int)(blockSize * blocksPerBatch);
+    nowMemPool->curPos += (int)(blockSize * capacity);
 
     return firstBlock;
 }
