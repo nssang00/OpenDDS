@@ -1,7 +1,7 @@
 #define SDDS_MEMORY_MANAGER_MAGIC_NUMBER1       0xAA435453L
 #define SDDS_MEMORY_MANAGER_MAGIC_NUMBER2       0xBB21474DL
 
-#define BLOCK_BATCH_SIZE 1024  // ÇÑ ¹ø¿¡ ÇÒ´çÇÒ ºí·ÏÀÇ °³¼ö
+#define MEM_POOL_SIZE (64 * 1024)  // 64KB
 
 #include <windows.h>
 #include <vector>
@@ -92,7 +92,7 @@ CustomAllocator::CustomAllocator() {
     allocMemPool(MAX_BLOCK_SIZE);
     for (int i = 0; i < BLOCK_ENTRY_SIZE; i++) {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
-        freeBlockEntryList[i].head = NULL;  // VS2008¿¡¼­´Â nullptr ´ë½Å NULL »ç¿ë
+        freeBlockEntryList[i].head = NULL;  // VS2008ì—ì„œëŠ” nullptr ëŒ€ì‹  NULL ì‚¬ìš©
         freeBlockEntryListSize[i] = 0;
     }
     mutex = new Mutex;
@@ -125,7 +125,7 @@ void* CustomAllocator::allocate(size_t size) {
         }
     }
     if (index == -1)
-        return NULL;  // VS2008¿¡¼­´Â nullptr ´ë½Å NULL »ç¿ë
+        return NULL;  // VS2008ì—ì„œëŠ” nullptr ëŒ€ì‹  NULL ì‚¬ìš©
 
     mutex->lock();
 
@@ -182,24 +182,24 @@ bool CustomAllocator::allocMemPool(int size) {
     catch (std::bad_alloc& ex) {
         printf("CustomAllocator::allocMemPool() Stack OverFlow!! - %s\n", ex.what());
         delete nowMemPool;
-        nowMemPool = NULL;  // VS2008¿¡¼­´Â nullptr ´ë½Å NULL »ç¿ë
+        nowMemPool = NULL;  // VS2008ì—ì„œëŠ” nullptr ëŒ€ì‹  NULL ì‚¬ìš©
         return false;
     }
 
     nowMemPool->curPos = 0;
-    nowMemPool->size = (int)requiredSize;  // VS2008¿¡¼­´Â size_t¿¡¼­ int·ÎÀÇ ¸í½ÃÀû Ä³½ºÆÃ ÇÊ¿ä
+    nowMemPool->size = (int)requiredSize;  // VS2008ì—ì„œëŠ” size_tì—ì„œ intë¡œì˜ ëª…ì‹œì  ìºìŠ¤íŒ… í•„ìš”
     memPoolList.push_back(nowMemPool);
     return true;
 }
 
 bool CustomAllocator::freeMemPool() {
-    for (size_t i = 0; i < memPoolList.size(); i++) {  // C++03¿¡¼­ È£È¯µÇµµ·Ï º¯°æ
+    for (size_t i = 0; i < memPoolList.size(); i++) {  // C++03ì—ì„œ í˜¸í™˜ë˜ë„ë¡ ë³€ê²½
         MemPool* memPool = memPoolList[i];
         delete[] memPool->payload;
         delete memPool;
     }
     memPoolList.clear();
-    nowMemPool = NULL;  // VS2008¿¡¼­´Â nullptr ´ë½Å NULL »ç¿ë
+    nowMemPool = NULL;  // VS2008ì—ì„œëŠ” nullptr ëŒ€ì‹  NULL ì‚¬ìš©
 
     return true;
 }
@@ -207,31 +207,31 @@ bool CustomAllocator::freeMemPool() {
 MemBlock* CustomAllocator::getMemBlockFromMemPool(int size) {
     size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
-    // ÇöÀç ¸Ş¸ğ¸® Ç®ÀÌ ºÎÁ·ÇÒ °æ¿ì »õ ¸Ş¸ğ¸® Ç® ÇÒ´ç
+    // í˜„ì¬ ë©”ëª¨ë¦¬ í’€ì´ ë¶€ì¡±í•  ê²½ìš° ìƒˆ ë©”ëª¨ë¦¬ í’€ í• ë‹¹
     if (nowMemPool == NULL || (nowMemPool->curPos + blockSize * BLOCK_BATCH_SIZE > nowMemPool->size)) {
         if (!allocMemPool(size)) {
-            return NULL;  // VS2008¿¡¼­´Â nullptr ´ë½Å NULL »ç¿ë
+            return NULL;  // VS2008ì—ì„œëŠ” nullptr ëŒ€ì‹  NULL ì‚¬ìš©
         }
     }
 
-    MemBlock* firstBlock = NULL;  // VS2008¿¡¼­´Â nullptr ´ë½Å NULL »ç¿ë
-    MemBlock* currentBlock = NULL;  // VS2008¿¡¼­´Â nullptr ´ë½Å NULL »ç¿ë
+    MemBlock* firstBlock = NULL;  // VS2008ì—ì„œëŠ” nullptr ëŒ€ì‹  NULL ì‚¬ìš©
+    MemBlock* currentBlock = NULL;  // VS2008ì—ì„œëŠ” nullptr ëŒ€ì‹  NULL ì‚¬ìš©
 
     unsigned char* start = nowMemPool->payload + nowMemPool->curPos;
 
     for (int i = 0; i < BLOCK_BATCH_SIZE; ++i) {
         currentBlock = (MemBlock*)(start + i * blockSize);
 
-        // ¸Ş¸ğ¸® Ç®ÀÇ ³¡À» ÃÊ°úÇÏÁö ¾Êµµ·Ï È®ÀÎ
+        // ë©”ëª¨ë¦¬ í’€ì˜ ëì„ ì´ˆê³¼í•˜ì§€ ì•Šë„ë¡ í™•ì¸
         if (reinterpret_cast<size_t>(currentBlock) + blockSize > reinterpret_cast<size_t>(nowMemPool->payload) + nowMemPool->size) {
-            // ºí·ÏÀÌ Ç®ÀÇ ³¡À» ÃÊ°úÇÏ¸é ¾×¼¼½º À§¹İÀÌ ¹ß»ıÇÏ¹Ç·Î, »õ·Î¿î Ç®À» ÇÒ´çÇÕ´Ï´Ù.
+            // ë¸”ë¡ì´ í’€ì˜ ëì„ ì´ˆê³¼í•˜ë©´ ì•¡ì„¸ìŠ¤ ìœ„ë°˜ì´ ë°œìƒí•˜ë¯€ë¡œ, ìƒˆë¡œìš´ í’€ì„ í• ë‹¹í•©ë‹ˆë‹¤.
             if (!allocMemPool(size)) {
                 return NULL;
             }
 
             start = nowMemPool->payload + nowMemPool->curPos;
-            i = -1;  // ·çÇÁ¸¦ Àç½ÃÀÛÇÏµµ·Ï ¼³Á¤
-            firstBlock = NULL;  // ±âÁ¸ ºí·Ï ¸ñ·Ï ÃÊ±âÈ­
+            i = -1;  // ë£¨í”„ë¥¼ ì¬ì‹œì‘í•˜ë„ë¡ ì„¤ì •
+            firstBlock = NULL;  // ê¸°ì¡´ ë¸”ë¡ ëª©ë¡ ì´ˆê¸°í™”
             continue;
         }
 
@@ -242,8 +242,8 @@ MemBlock* CustomAllocator::getMemBlockFromMemPool(int size) {
         firstBlock = currentBlock;
     }
 
-    nowMemPool->curPos += (int)(blockSize * BLOCK_BATCH_SIZE);  // VS2008¿¡¼­ÀÇ Ä³½ºÆÃ ÇÊ¿ä
+    nowMemPool->curPos += (int)(blockSize * BLOCK_BATCH_SIZE);  // VS2008ì—ì„œì˜ ìºìŠ¤íŒ… í•„ìš”
 
-    // Ã¹ ¹øÂ° ºí·ÏÀ» ¹İÈ¯
+    // ì²« ë²ˆì§¸ ë¸”ë¡ì„ ë°˜í™˜
     return firstBlock;
 }
