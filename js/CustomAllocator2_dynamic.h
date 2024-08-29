@@ -1,10 +1,12 @@
 #define SDDS_MEMORY_MANAGER_MAGIC_NUMBER1       0xAA435453L
 #define SDDS_MEMORY_MANAGER_MAGIC_NUMBER2       0xBB21474DL
 
-#define MEM_POOL_SIZE (64 * 1024)  // 64KB
+#define MEM_POOL_SIZE (32 * 1024)  // 32KB
+#define MIN_CAPACITY 1
 
 #include <windows.h>
 #include <vector>
+#include <list>
 #include <stdexcept>
 #include <cstdio>
 
@@ -41,7 +43,7 @@ typedef struct _MemBlock {
     size_t signature2;
     size_t size;
     struct _MemBlock* next;
-    unsigned char payload[1]; // 첫 번째 바이트는 실제 메모리 블록의 시작
+    unsigned char* payload;
 } MemBlock;
 
 typedef struct _MemPool {
@@ -58,7 +60,7 @@ typedef struct _FreeBlockEntry {
 const int MIN_BLOCK_SIZE = 8;
 const int MAX_BLOCK_SIZE = 4096;
 const int BLOCK_ENTRY_SIZE = MAX_BLOCK_SIZE / MIN_BLOCK_SIZE;
-const int BLOCK_HEADER_SIZE = sizeof(struct _MemBlock) - sizeof(unsigned char[1]);
+const int BLOCK_HEADER_SIZE = sizeof(struct _MemBlock) - sizeof(unsigned char*);
 const int BLOCK_FOOTER_SIZE = 0;
 const int MEM_MANAGER_SIZE = 2;
 
@@ -74,41 +76,39 @@ public:
 private:
     static CustomAllocator* instance[MEM_MANAGER_SIZE];
 
-    bool allocMemPool(int size);
-    bool freeMemPool();
-    MemBlock* getMemBlockFromMemPool(int size);
+    bool allocMemPool(size_t size);
+    MemBlock* allocateMemBlocks(size_t size);
 
-    MemPool* nowMemPool;
-    std::vector<MemPool*> memPoolList;
-
+    std::list<MemPool*> memPoolList;
     FreeBlockEntry freeBlockEntryList[BLOCK_ENTRY_SIZE];
-    unsigned int freeBlockEntryListSize[BLOCK_ENTRY_SIZE];
     Mutex* mutex;
 };
 
-CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL }; // VS2008에서는 nullptr 대신 NULL 사용
+CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
 
 CustomAllocator::CustomAllocator() {
     allocMemPool(MAX_BLOCK_SIZE);
     for (int i = 0; i < BLOCK_ENTRY_SIZE; i++) {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
-        freeBlockEntryList[i].head = NULL;  // VS2008에서는 nullptr 대신 NULL 사용
-        freeBlockEntryListSize[i] = 0;
+        freeBlockEntryList[i].head = NULL;
     }
     mutex = new Mutex;
 }
 
 CustomAllocator::~CustomAllocator() {
-    freeMemPool();
+    // 메모리 풀 리스트의 모든 메모리 풀 해제
+    for (std::list<MemPool*>::iterator it = memPoolList.begin(); it != memPoolList.end(); ++it) {
+        MemPool* memPool = *it;
+        delete[] memPool->payload;
+        delete memPool;
+    }
+    memPoolList.clear();
     delete mutex;
 }
 
 CustomAllocator* CustomAllocator::Instance(int num) {
-    static Mutex instanceMutex;
-    instanceMutex.lock();
     if (!instance[num])
         instance[num] = new CustomAllocator();
-    instanceMutex.unlock();
     return instance[num];
 }
 
@@ -116,7 +116,7 @@ void* CustomAllocator::allocate(size_t size) {
     int index = -1;
     int newSize = 0;
 
-    MemBlock* memBlock;
+    MemBlock* memBlock = NULL;
 
     for (int i = 0; i < BLOCK_ENTRY_SIZE; i++) {
         if (size <= freeBlockEntryList[i].size) {
@@ -126,19 +126,18 @@ void* CustomAllocator::allocate(size_t size) {
         }
     }
     if (index == -1)
-        return NULL;  // VS2008에서는 nullptr 대신 NULL 사용
+        return NULL;
 
     mutex->lock();
 
     memBlock = freeBlockEntryList[index].head;
 
     if (!memBlock) {
-        memBlock = getMemBlockFromMemPool(newSize);
+        memBlock = allocateMemBlocks(newSize);
     }
 
     if (memBlock) {
         freeBlockEntryList[index].head = memBlock->next;
-        freeBlockEntryListSize[index]--;
     }
 
     mutex->unlock();
@@ -151,7 +150,7 @@ void CustomAllocator::free(void* object, size_t size) {
 
     if ((memBlock->signature1 != SDDS_MEMORY_MANAGER_MAGIC_NUMBER1) ||
         (memBlock->signature2 != SDDS_MEMORY_MANAGER_MAGIC_NUMBER2)) {
-        delete[] (unsigned char*)object;
+        (size == 1) ? delete (char*)object : delete[](char*)object;
         return;
     }
 
@@ -167,65 +166,62 @@ void CustomAllocator::free(void* object, size_t size) {
     mutex->lock();
     memBlock->next = freeBlockEntryList[index].head;
     freeBlockEntryList[index].head = memBlock;
-    freeBlockEntryListSize[index]++;
     mutex->unlock();
 }
 
-bool CustomAllocator::freeMemPool() {
-    for (size_t i = 0; i < memPoolList.size(); i++) {  // C++03에서 호환되도록 변경
-        MemPool* memPool = memPoolList[i];
-        delete[] memPool->payload;
-        delete memPool;
-    }
-    memPoolList.clear();
-    nowMemPool = NULL;  // VS2008에서는 nullptr 대신 NULL 사용
-
-    return true;
-}
-
-bool CustomAllocator::allocMemPool(size_t size) {
-    size_t totalBlockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
-
-    // MEM_POOL_SIZE로 할당할 수 있는 블록 수를 계산하여 capacity 변수에 저장
-    size_t capacity = (MEM_POOL_SIZE / totalBlockSize) < 1 ? 1 : MEM_POOL_SIZE / totalBlockSize;
-
-    // 필요한 메모리 크기
-    size_t requiredSize = capacity * totalBlockSize;
-
-    // 메모리 풀을 할당
-    nowMemPool = new MemPool;
-    try {
-        nowMemPool->payload = new unsigned char[requiredSize];
-    } catch (std::bad_alloc& ex) {
-        printf("CustomAllocator::allocMemPool() Stack OverFlow!! - %s\n", ex.what());
-        delete nowMemPool;
-        nowMemPool = NULL;
-        return false;
-    }
-
-    nowMemPool->curPos = 0;
-    nowMemPool->size = (int)requiredSize;
-    memPoolList.push_back(nowMemPool);
-    return true;
-}
-
-MemBlock* CustomAllocator::getMemBlockFromMemPool(size_t size) {
+MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
     size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
+    
+    // 현재 메모리 풀을 찾고, 충분하지 않으면 새로운 풀을 할당
+    MemPool* currentMemPool = NULL;
+    if (!memPoolList.empty()) {
+        currentMemPool = memPoolList.back();
+    }
 
-    // 현재 메모리 풀이 부족할 경우 새 메모리 풀 할당
-    if (nowMemPool == NULL || (nowMemPool->curPos + blockSize > nowMemPool->size)) {
-        if (!allocMemPool(size)) {
+    if (currentMemPool == NULL || (currentMemPool->curPos + blockSize > currentMemPool->size)) {
+        size_t capacity = (MEM_POOL_SIZE / blockSize < MIN_CAPACITY) ? MIN_CAPACITY : MEM_POOL_SIZE / blockSize;
+        size_t requiredSize = capacity * blockSize;
+
+        // 새 메모리 풀 할당
+        currentMemPool = new MemPool;
+        try {
+            currentMemPool->payload = new unsigned char[requiredSize];
+        } catch (std::bad_alloc& ex) {
+            printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());
+            delete currentMemPool;
             return NULL;
         }
+
+        currentMemPool->curPos = 0;
+        currentMemPool->size = static_cast<int>(requiredSize);
+        memPoolList.push_back(currentMemPool);
     }
 
-    MemBlock* memBlock = (MemBlock*)(nowMemPool->payload + nowMemPool->curPos);
-    memBlock->size = size;
-    memBlock->signature1 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER1;
-    memBlock->signature2 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER2;
-    memBlock->next = NULL;
+    // 메모리 풀에서 블록 생성 및 연결
+    unsigned char* start = currentMemPool->payload + currentMemPool->curPos;
+    size_t capacity = (currentMemPool->size - currentMemPool->curPos) / blockSize;
+    MemBlock* firstBlock = NULL;
+    MemBlock* previousBlock = NULL;
 
-    nowMemPool->curPos += (int)(blockSize);
+    for (size_t i = 0; i < capacity; ++i) {
+        MemBlock* newBlock = reinterpret_cast<MemBlock*>(start + i * blockSize);
 
-    return memBlock;
+        // 메모리 블록 초기화
+        newBlock->size = size;
+        newBlock->signature1 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER1;
+        newBlock->signature2 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER2;
+        newBlock->next = NULL;
+
+        if (previousBlock != NULL) {
+            previousBlock->next = newBlock;
+        } else {
+            firstBlock = newBlock;
+        }
+        previousBlock = newBlock;
+    }
+
+    // 메모리 풀의 현재 위치 업데이트
+    currentMemPool->curPos += static_cast<int>(blockSize * capacity);
+
+    return firstBlock;
 }
