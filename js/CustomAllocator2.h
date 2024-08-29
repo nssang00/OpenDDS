@@ -97,6 +97,7 @@ CustomAllocator::CustomAllocator() {
         freeBlockEntryListSize[i] = 0;
     }
     mutex = new Mutex;
+    nowMemPool = NULL;  
 }
 
 CustomAllocator::~CustomAllocator() {
