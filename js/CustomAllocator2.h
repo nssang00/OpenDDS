@@ -186,8 +186,8 @@ bool CustomAllocator::allocMemPool(size_t size) {
     size_t totalBlockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
     // MEM_POOL_SIZE로 할당할 수 있는 블록 수를 계산하여 capacity 변수에 저장
-    size_t capacity = (MEM_POOL_SIZE / totalBlockSize) < 1 ? 1 : MEM_POOL_SIZE / totalBlockSize;
-    size_t capacity = std::max(MEM_POOL_SIZE / totalBlockSize, MIN_CAPACITY);
+    //size_t capacity = (MEM_POOL_SIZE / totalBlockSize) < 1 ? 1 : MEM_POOL_SIZE / totalBlockSize;
+    size_t capacity = max(MEM_POOL_SIZE / totalBlockSize, MIN_CAPACITY);
 
     // 필요한 메모리 크기
     size_t requiredSize = capacity * totalBlockSize;
