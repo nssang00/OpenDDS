@@ -45,10 +45,9 @@ typedef struct _MemBlock {
     unsigned char* payload;
 } MemBlock;
 
-typedef struct _MemPool {
+typedef struct _MemChunk {
     unsigned char* payload;
-    int curPos;
-} MemPool;
+} MemChunk;
 
 typedef struct _FreeBlockEntry {
     size_t size;
@@ -76,7 +75,7 @@ private:
 
     MemBlock* allocateMemBlocks(size_t size);
 
-    std::vector<MemPool*> memPoolList;
+    std::vector<MemChunk*> memChunkList;
     FreeBlockEntry freeBlockEntryList[BLOCK_ENTRY_SIZE];
     Mutex* mutex;
 };
@@ -92,13 +91,13 @@ CustomAllocator::CustomAllocator() {
 }
 
 CustomAllocator::~CustomAllocator() {
-    // 메모리 풀 리스트의 모든 메모리 풀 해제
-    for (std::vector<MemPool*>::iterator it = memPoolList.begin(); it != memPoolList.end(); ++it) {
-        MemPool* memPool = *it;
-        delete[] memPool->payload;
-        delete memPool;
+    // 메모리 청크 리스트의 모든 메모리 청크 해제
+    for (std::vector<MemChunk*>::iterator it = memChunkList.begin(); it != memChunkList.end(); ++it) {
+        MemChunk* memChunk = *it;
+        delete[] memChunk->payload;
+        delete memChunk;
     }
-    memPoolList.clear();
+    memChunkList.clear();
     delete mutex;
 }
 
@@ -168,24 +167,23 @@ void CustomAllocator::free(void* object, size_t size) {
 MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
     size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
-    // 새로운 메모리 풀 할당
-    MemPool* currentMemPool = new MemPool;
-    size_t numBlocks = std::max(MEM_POOL_SIZE / blockSize, (size_t)MIN_CAPACITY);
-    size_t requiredSize = numBlocks * blockSize;
+    // 새로운 메모리 청크 할당
+    MemChunk* currentMemChunk = new MemChunk;
+    size_t numBlocks = max(MEM_POOL_SIZE / blockSize, (size_t)MIN_CAPACITY);
+    size_t chunkSize = numBlocks * blockSize;
 
     try {
-        currentMemPool->payload = new unsigned char[requiredSize];
+        currentMemChunk->payload = new unsigned char[chunkSize];
     } catch (std::bad_alloc& ex) {
         printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());
-        delete currentMemPool;
+        delete currentMemChunk;
         return NULL;
     }
 
-    currentMemPool->curPos = 0;
-    memPoolList.push_back(currentMemPool);
+    memChunkList.push_back(currentMemChunk);
 
-    // 메모리 풀에서 블록 생성 및 연결
-    unsigned char* start = currentMemPool->payload + currentMemPool->curPos;
+    // 메모리 청크에서 블록 생성 및 연결
+    unsigned char* start = currentMemChunk->payload;
     MemBlock* firstBlock = NULL;
     MemBlock* previousBlock = NULL;
 
@@ -205,9 +203,6 @@ MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
         }
         previousBlock = newBlock;
     }
-
-    // 메모리 풀의 현재 위치 업데이트
-    currentMemPool->curPos += static_cast<int>(blockSize * numBlocks);
 
     return firstBlock;
 }
