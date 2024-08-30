@@ -172,7 +172,8 @@ MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
 
     // 새로운 메모리 풀 할당
     MemPool* currentMemPool = new MemPool;
-    size_t capacity = (MEM_POOL_SIZE / blockSize < MIN_CAPACITY) ? MIN_CAPACITY : MEM_POOL_SIZE / blockSize;
+    //size_t capacity = (MEM_POOL_SIZE / blockSize < MIN_CAPACITY) ? MIN_CAPACITY : MEM_POOL_SIZE / blockSize;
+    size_t capacity = max(MEM_POOL_SIZE / totalBlockSize, MIN_CAPACITY);
     size_t requiredSize = capacity * blockSize;
 
     try {
