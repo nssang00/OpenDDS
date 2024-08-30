@@ -144,6 +144,16 @@ void* CustomAllocator::allocate(size_t size) {
         memBlock = allocateMemBlocks(newSize, freeBlockEntryList[index].numBlocks);
     }
 
+    //////
+    /*
+    if (!memBlock) {
+        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_TOTAL_BLOCKS) {
+            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_TOTAL_BLOCKS);
+        }
+        freeBlockEntryList[index].hitCount++;
+        memBlock = allocateMemBlocks(newSize, freeBlockEntryList[index].numBlocks);
+    }*/
+
     if (memBlock) {
         freeBlockEntryList[index].head = memBlock->next;
     }
