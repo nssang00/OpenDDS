@@ -3,6 +3,7 @@
 
 #define MEM_POOL_SIZE (32 * 1024)  // 32KB
 #define MIN_CAPACITY 1
+#define FREE_BLOCK_ENTRY_SIZE 24 //24(128MB)
 
 #include <windows.h>
 #include <vector>
@@ -76,14 +77,14 @@ private:
     MemBlock* allocateMemBlocks(size_t size);
 
     std::vector<MemChunk*> memChunkList;
-    FreeBlockEntry freeBlockEntryList[BLOCK_ENTRY_SIZE];
+    FreeBlockEntry freeBlockEntryList[FREE_BLOCK_ENTRY_SIZE];
     Mutex* mutex;
 };
 
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
 
 CustomAllocator::CustomAllocator() {
-    for (int i = 0; i < BLOCK_ENTRY_SIZE; i++) {
+    for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
         freeBlockEntryList[i].head = NULL;
     }
@@ -113,7 +114,7 @@ void* CustomAllocator::allocate(size_t size) {
 
     MemBlock* memBlock = NULL;
 
-    for (int i = 0; i < BLOCK_ENTRY_SIZE; i++) {
+    for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
         if (size <= freeBlockEntryList[i].size) {
             index = i;
             newSize = freeBlockEntryList[i].size;
@@ -151,7 +152,7 @@ void CustomAllocator::free(void* object, size_t size) {
 
     int index = -1;
 
-    for (int i = 0; i < BLOCK_ENTRY_SIZE; i++) {
+    for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
         if (memBlock->size <= freeBlockEntryList[i].size) {
             index = i;
             break;
@@ -170,10 +171,9 @@ MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
     // 새로운 메모리 청크 할당
     MemChunk* currentMemChunk = new MemChunk;
     size_t numBlocks = max(MEM_POOL_SIZE / blockSize, (size_t)MIN_CAPACITY);
-    size_t chunkSize = numBlocks * blockSize;
 
     try {
-        currentMemChunk->payload = new unsigned char[chunkSize];
+        currentMemChunk->payload = new unsigned char[numBlocks * blockSize];
     } catch (std::bad_alloc& ex) {
         printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());
         delete currentMemChunk;
