@@ -49,7 +49,6 @@ typedef struct _MemBlock {
 typedef struct _MemPool {
     unsigned char* payload;
     int curPos;
-    int size;
 } MemPool;
 
 typedef struct _FreeBlockEntry {
@@ -184,7 +183,6 @@ MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
     }
 
     currentMemPool->curPos = 0;
-    currentMemPool->size = static_cast<int>(requiredSize);
     memPoolList.push_back(currentMemPool);
 
     // 메모리 풀에서 블록 생성 및 연결
