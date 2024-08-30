@@ -172,9 +172,8 @@ MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
 
     // 새로운 메모리 풀 할당
     MemPool* currentMemPool = new MemPool;
-    //size_t capacity = (MEM_POOL_SIZE / blockSize < MIN_CAPACITY) ? MIN_CAPACITY : MEM_POOL_SIZE / blockSize;
-    size_t capacity = max(MEM_POOL_SIZE / totalBlockSize, MIN_CAPACITY);
-    size_t requiredSize = capacity * blockSize;
+    size_t numBlocks = std::max(MEM_POOL_SIZE / blockSize, (size_t)MIN_CAPACITY);
+    size_t requiredSize = numBlocks * blockSize;
 
     try {
         currentMemPool->payload = new unsigned char[requiredSize];
@@ -190,7 +189,6 @@ MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
 
     // 메모리 풀에서 블록 생성 및 연결
     unsigned char* start = currentMemPool->payload + currentMemPool->curPos;
-    size_t numBlocks = (currentMemPool->size - currentMemPool->curPos) / blockSize;
     MemBlock* firstBlock = NULL;
     MemBlock* previousBlock = NULL;
 
