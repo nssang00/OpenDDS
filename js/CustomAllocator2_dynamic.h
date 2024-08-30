@@ -6,7 +6,6 @@
 
 #include <windows.h>
 #include <vector>
-#include <list>
 #include <stdexcept>
 #include <cstdio>
 
@@ -77,7 +76,7 @@ private:
 
     MemBlock* allocateMemBlocks(size_t size);
 
-    std::list<MemPool*> memPoolList;
+    std::vector<MemPool*> memPoolList;
     FreeBlockEntry freeBlockEntryList[BLOCK_ENTRY_SIZE];
     Mutex* mutex;
 };
@@ -94,7 +93,7 @@ CustomAllocator::CustomAllocator() {
 
 CustomAllocator::~CustomAllocator() {
     // 메모리 풀 리스트의 모든 메모리 풀 해제
-    for (std::list<MemPool*>::iterator it = memPoolList.begin(); it != memPoolList.end(); ++it) {
+    for (std::vector<MemPool*>::iterator it = memPoolList.begin(); it != memPoolList.end(); ++it) {
         MemPool* memPool = *it;
         delete[] memPool->payload;
         delete memPool;
