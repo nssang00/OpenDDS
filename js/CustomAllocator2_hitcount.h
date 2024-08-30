@@ -53,8 +53,8 @@ typedef struct _MemChunk {
 typedef struct _FreeBlockEntry {
     size_t size;
     struct _MemBlock* head;
-    size_t hitCount; // 추가된 hit count
-    size_t numBlocks; // 현재 크기의 블록 수
+    size_t hitCount;   // 추가된 hit count
+    size_t numBlocks;  // 현재 크기의 블록 수
 } FreeBlockEntry;
 
 const int MIN_BLOCK_SIZE = 8;
@@ -63,9 +63,8 @@ const int BLOCK_ENTRY_SIZE = MAX_BLOCK_SIZE / MIN_BLOCK_SIZE;
 const int BLOCK_HEADER_SIZE = sizeof(struct _MemBlock) - sizeof(unsigned char*);
 const int BLOCK_FOOTER_SIZE = 0;
 const int MEM_MANAGER_SIZE = 2;
-
-const size_t MAX_TOTAL_BLOCKS = 1024; // 할당할 수 있는 최대 블록 수
-const int HIT_COUNT_THRESHOLD = 10; // 블록 확장을 위한 임계값
+const size_t MAX_TOTAL_BLOCKS = 1024;  // 할당할 수 있는 최대 블록 수
+const int HIT_COUNT_THRESHOLD = 10;    // 블록 확장을 위한 임계값
 
 class CustomAllocator {
 public:
@@ -83,18 +82,17 @@ private:
 
     std::vector<MemChunk*> memChunkList;
     FreeBlockEntry freeBlockEntryList[FREE_BLOCK_ENTRY_SIZE];
-    size_t totalBlocksAllocated; // 전체 할당된 블록 수
     Mutex* mutex;
 };
 
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
 
-CustomAllocator::CustomAllocator() : totalBlocksAllocated(0) {
+CustomAllocator::CustomAllocator() {
     for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
         freeBlockEntryList[i].head = NULL;
-        freeBlockEntryList[i].hitCount = 0;
-        freeBlockEntryList[i].numBlocks = 0;
+        freeBlockEntryList[i].hitCount = 0;  // hitCount 초기화
+        freeBlockEntryList[i].numBlocks = max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_CAPACITY);
     }
     mutex = new Mutex;
 }
@@ -118,6 +116,7 @@ CustomAllocator* CustomAllocator::Instance(int num) {
 void* CustomAllocator::allocate(size_t size) {
     int index = -1;
     int newSize = 0;
+
     MemBlock* memBlock = NULL;
 
     for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
@@ -132,33 +131,17 @@ void* CustomAllocator::allocate(size_t size) {
 
     mutex->lock();
 
-    // Hit count 증가
-    freeBlockEntryList[index].hitCount++;
-
-    // Hit count 임계값 도달 시 블록 확장
-    if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD) {
-        size_t numBlocks = freeBlockEntryList[index].numBlocks * 2;
-
-        if (totalBlocksAllocated + numBlocks <= MAX_TOTAL_BLOCKS) {
-            MemBlock* newBlock = allocateMemBlocks(newSize, numBlocks);
-            if (newBlock) {
-                newBlock->next = freeBlockEntryList[index].head;
-                freeBlockEntryList[index].head = newBlock;
-                freeBlockEntryList[index].numBlocks += numBlocks;
-                totalBlocksAllocated += numBlocks;
-            }
-        }
-        freeBlockEntryList[index].hitCount = 0; // 히트 카운트 초기화
-    }
-
     memBlock = freeBlockEntryList[index].head;
 
     if (!memBlock) {
-        memBlock = allocateMemBlocks(newSize, MIN_CAPACITY);
-        if (memBlock) {
-            freeBlockEntryList[index].numBlocks += MIN_CAPACITY;
-            totalBlocksAllocated += MIN_CAPACITY;
+        freeBlockEntryList[index].hitCount++;
+
+        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_TOTAL_BLOCKS) {
+            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_TOTAL_BLOCKS);
+            freeBlockEntryList[index].hitCount = 0;  // hitCount 초기화
         }
+
+        memBlock = allocateMemBlocks(newSize, freeBlockEntryList[index].numBlocks);
     }
 
     if (memBlock) {
@@ -197,7 +180,6 @@ void CustomAllocator::free(void* object, size_t size) {
 MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
     size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
-    // 새로운 메모리 청크 할당
     MemChunk* currentMemChunk = new MemChunk;
 
     try {
