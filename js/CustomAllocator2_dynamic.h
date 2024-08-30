@@ -138,7 +138,7 @@ void* CustomAllocator::allocate(size_t size) {
 
     mutex->unlock();
 
-    return memBlock ? (void*)(memBlock->payload) : NULL;
+    return memBlock ? (void*)&(memBlock->payload) : NULL;
 }
 
 void CustomAllocator::free(void* object, size_t size) {
