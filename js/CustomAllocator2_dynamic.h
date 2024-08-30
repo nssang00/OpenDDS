@@ -76,7 +76,6 @@ public:
 private:
     static CustomAllocator* instance[MEM_MANAGER_SIZE];
 
-    bool allocMemPool(size_t size);
     MemBlock* allocateMemBlocks(size_t size);
 
     std::list<MemPool*> memPoolList;
@@ -87,7 +86,6 @@ private:
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
 
 CustomAllocator::CustomAllocator() {
-    allocMemPool(MAX_BLOCK_SIZE);
     for (int i = 0; i < BLOCK_ENTRY_SIZE; i++) {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
         freeBlockEntryList[i].head = NULL;
@@ -142,7 +140,7 @@ void* CustomAllocator::allocate(size_t size) {
 
     mutex->unlock();
 
-    return memBlock ? (void*)&(memBlock->payload) : NULL;
+    return memBlock ? (void*)(memBlock->payload) : NULL;
 }
 
 void CustomAllocator::free(void* object, size_t size) {
@@ -171,39 +169,31 @@ void CustomAllocator::free(void* object, size_t size) {
 
 MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
     size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
-    
-    // 현재 메모리 풀을 찾고, 충분하지 않으면 새로운 풀을 할당
-    MemPool* currentMemPool = NULL;
-    if (!memPoolList.empty()) {
-        currentMemPool = memPoolList.back();
+
+    // 새로운 메모리 풀 할당
+    MemPool* currentMemPool = new MemPool;
+    size_t capacity = (MEM_POOL_SIZE / blockSize < MIN_CAPACITY) ? MIN_CAPACITY : MEM_POOL_SIZE / blockSize;
+    size_t requiredSize = capacity * blockSize;
+
+    try {
+        currentMemPool->payload = new unsigned char[requiredSize];
+    } catch (std::bad_alloc& ex) {
+        printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());
+        delete currentMemPool;
+        return NULL;
     }
 
-    if (currentMemPool == NULL || (currentMemPool->curPos + blockSize > currentMemPool->size)) {
-        size_t capacity = (MEM_POOL_SIZE / blockSize < MIN_CAPACITY) ? MIN_CAPACITY : MEM_POOL_SIZE / blockSize;
-        size_t requiredSize = capacity * blockSize;
-
-        // 새 메모리 풀 할당
-        currentMemPool = new MemPool;
-        try {
-            currentMemPool->payload = new unsigned char[requiredSize];
-        } catch (std::bad_alloc& ex) {
-            printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());
-            delete currentMemPool;
-            return NULL;
-        }
-
-        currentMemPool->curPos = 0;
-        currentMemPool->size = static_cast<int>(requiredSize);
-        memPoolList.push_back(currentMemPool);
-    }
+    currentMemPool->curPos = 0;
+    currentMemPool->size = static_cast<int>(requiredSize);
+    memPoolList.push_back(currentMemPool);
 
     // 메모리 풀에서 블록 생성 및 연결
     unsigned char* start = currentMemPool->payload + currentMemPool->curPos;
-    size_t capacity = (currentMemPool->size - currentMemPool->curPos) / blockSize;
+    size_t numBlocks = (currentMemPool->size - currentMemPool->curPos) / blockSize;
     MemBlock* firstBlock = NULL;
     MemBlock* previousBlock = NULL;
 
-    for (size_t i = 0; i < capacity; ++i) {
+    for (size_t i = 0; i < numBlocks; ++i) {
         MemBlock* newBlock = reinterpret_cast<MemBlock*>(start + i * blockSize);
 
         // 메모리 블록 초기화
@@ -221,7 +211,7 @@ MemBlock* CustomAllocator::allocateMemBlocks(size_t size) {
     }
 
     // 메모리 풀의 현재 위치 업데이트
-    currentMemPool->curPos += static_cast<int>(blockSize * capacity);
+    currentMemPool->curPos += static_cast<int>(blockSize * numBlocks);
 
     return firstBlock;
 }
