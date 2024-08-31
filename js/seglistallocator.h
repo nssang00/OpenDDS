@@ -16,7 +16,7 @@ block_t* segregated_free_lists[NUM_LISTS]; // 크기별 프리 리스트 배열
 // 정렬을 위한 매크로
 #define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
 #define BLOCK_HEADER_SIZE ALIGN(sizeof(block_t), MIN_BLOCK_SIZE)
-
+//size_to_index
 int get_list_index(size_t size) {
     int index = 0;
     size_t block_size = MIN_BLOCK_SIZE;
