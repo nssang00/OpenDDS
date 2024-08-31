@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#define SIGNATURE 0xDEADBEEF
 #define NUM_LISTS 10 // 예시로 10개의 리스트를 사용
 #define MIN_BLOCK_SIZE 8
 
