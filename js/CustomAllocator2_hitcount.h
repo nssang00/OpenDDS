@@ -10,33 +10,6 @@
 #include <stdexcept>
 #include <cstdio>
 
-class Mutex {
-public:
-    Mutex();
-    ~Mutex();
-
-    void lock();
-    void unlock();
-
-private:
-    CRITICAL_SECTION cs;
-};
-
-Mutex::Mutex() {
-    InitializeCriticalSection(&cs);
-}
-
-Mutex::~Mutex() {
-    DeleteCriticalSection(&cs);
-}
-
-void Mutex::lock() {
-    EnterCriticalSection(&cs);
-}
-
-void Mutex::unlock() {
-    LeaveCriticalSection(&cs);
-}
 
 typedef struct _MemBlock {
     size_t signature1;
