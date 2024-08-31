@@ -3,6 +3,18 @@
 #include <cstdlib>
 #include <vector>
 
+class Mutex {
+public:
+    Mutex();
+    ~Mutex();
+
+    void lock();
+    void unlock();
+
+private:
+    CRITICAL_SECTION cs;
+};
+
 #include "SlabAllocator.h" // Slab Allocator 헤더 파일을 포함합니다.
 
 #define NUM_ALLOCATIONS 1000000
@@ -84,4 +96,20 @@ int main() {
     testSlabAllocator();
 
     return 0;
+}
+
+Mutex::Mutex() {
+    InitializeCriticalSection(&cs);
+}
+
+Mutex::~Mutex() {
+    DeleteCriticalSection(&cs);
+}
+
+void Mutex::lock() {
+    EnterCriticalSection(&cs);
+}
+
+void Mutex::unlock() {
+    LeaveCriticalSection(&cs);
 }
