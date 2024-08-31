@@ -159,30 +159,31 @@ void CustomAllocator::free(void* object) {
 
 CustomAllocator::MemoryBlockHeader* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
     size_t blockSize = size + sizeof(MemoryBlockHeader) + sizeof(MemoryBlockFooter);
+    size_t totalSize = numBlocks * blockSize;
 
-    unsigned char* currentMemChunk = new unsigned char[numBlocks * blockSize];
-    memChunkList.push_back(currentMemChunk);
+    // 메모리 청크 할당
+    unsigned char* payload = new unsigned char[totalSize];
+    memChunkList.push_back(payload);
 
-    unsigned char* start = currentMemChunk;
-    MemoryBlockHeader* firstBlock = NULL;
-    MemoryBlockHeader* previousBlock = NULL;
+    MemoryBlockHeader* firstBlock = reinterpret_cast<MemoryBlockHeader*>(payload);
 
+    // 메모리 블록 체인 설정
     for (size_t i = 0; i < numBlocks; ++i) {
-        MemoryBlockHeader* newBlock = reinterpret_cast<MemoryBlockHeader*>(start + i * blockSize);
+        MemoryBlockHeader* currentBlock = reinterpret_cast<MemoryBlockHeader*>(payload + i * blockSize);
+        
+        currentBlock->signature = HEADER_SIGNATURE;
+        currentBlock->size = size;
 
-        newBlock->signature = HEADER_SIGNATURE;
-        newBlock->size = size;
-        newBlock->next = NULL;
-
-        MemoryBlockFooter* footer = reinterpret_cast<MemoryBlockFooter*>(reinterpret_cast<unsigned char*>(newBlock) + sizeof(MemoryBlockHeader) + size);
-        footer->signature = FOOTER_SIGNATURE;
-
-        if (previousBlock != NULL) {
-            previousBlock->next = newBlock;
+        // 다음 블록을 연결
+        if (i < numBlocks - 1) {
+            currentBlock->next = reinterpret_cast<MemoryBlockHeader*>(payload + (i + 1) * blockSize);
         } else {
-            firstBlock = newBlock;
+            currentBlock->next = NULL;
         }
-        previousBlock = newBlock;
+
+        // Footer 설정
+        MemoryBlockFooter* footer = reinterpret_cast<MemoryBlockFooter*>(reinterpret_cast<unsigned char*>(currentBlock) + sizeof(MemoryBlockHeader) + size);
+        footer->signature = FOOTER_SIGNATURE;
     }
 
     return firstBlock;
