@@ -107,6 +107,140 @@ void* CustomAllocator::allocate(size_t size) {
 
 void CustomAllocator::free(void* object) {
     if (!object) return;
+#define MEM_POOL_SIZE (32 * 1024)  // 32KB
+#define MIN_CAPACITY 1
+#define FREE_BLOCK_ENTRY_SIZE 24 // 24(128MB)
+#define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
+#define BLOCK_HEADER_SIZE ALIGN(sizeof(MemoryBlockHeader), MIN_BLOCK_SIZE)
+
+#include <windows.h>
+#include <vector>  // STL 사용을 최소화합니다. 필요한 경우 동적 배열로 대체 가능
+#include <stdexcept>
+#include <cstdio>
+
+class Mutex {
+public:
+    Mutex() { InitializeCriticalSection(&cs); }
+    ~Mutex() { DeleteCriticalSection(&cs); }
+    void lock() { EnterCriticalSection(&cs); }
+    void unlock() { LeaveCriticalSection(&cs); }
+
+private:
+    CRITICAL_SECTION cs;
+};
+
+class CustomAllocator {
+public:
+    CustomAllocator();
+    ~CustomAllocator();
+    void* allocate(size_t size);
+    void free(void* object);
+
+    static CustomAllocator* Instance(int num = 0);
+
+private:
+    static const unsigned long HEADER_SIGNATURE = 0xDEADBEEF;
+    static const unsigned long FOOTER_SIGNATURE = 0xFEEDFACE;
+
+    struct MemoryBlockHeader {
+        unsigned long signature;
+        size_t size;
+        struct MemoryBlockHeader* next;
+    };
+
+    struct MemoryBlockFooter {
+        unsigned long signature;
+    };
+
+    struct FreeBlockEntry {
+        size_t size;
+        MemoryBlockHeader* head;
+        size_t hitCount;
+        size_t numBlocks;
+    };
+
+    static CustomAllocator* instance[MEM_MANAGER_SIZE];
+
+    MemoryBlockHeader* allocateMemBlocks(size_t size, size_t numBlocks);
+
+    std::vector<unsigned char*> memChunkList;
+    FreeBlockEntry freeBlockEntryList[FREE_BLOCK_ENTRY_SIZE];
+    Mutex* mutex;
+
+    int size_to_index(size_t size);
+};
+
+CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
+
+CustomAllocator::CustomAllocator() {
+    for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
+        freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
+        freeBlockEntryList[i].head = NULL;
+        freeBlockEntryList[i].hitCount = 0;  // hitCount 초기화
+        freeBlockEntryList[i].numBlocks = max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + sizeof(MemoryBlockHeader) + sizeof(MemoryBlockFooter)), (size_t)MIN_CAPACITY);
+    }
+    mutex = new Mutex;
+}
+
+CustomAllocator::~CustomAllocator() {
+    for (size_t i = 0; i < memChunkList.size(); ++i) {
+        delete[] memChunkList[i];
+    }
+    memChunkList.clear();
+    delete mutex;
+}
+
+CustomAllocator* CustomAllocator::Instance(int num) {
+    if (!instance[num])
+        instance[num] = new CustomAllocator();
+    return instance[num];
+}
+
+int CustomAllocator::size_to_index(size_t size) {
+    int index = 0;
+    size_t block_size = MIN_BLOCK_SIZE;
+
+    while (block_size < size && index < FREE_BLOCK_ENTRY_SIZE - 1) {
+        block_size <<= 1; // 2배씩 증가
+        index++;
+    }
+    return index;
+}
+
+void* CustomAllocator::allocate(size_t size) {
+    size = ALIGN(size, MIN_BLOCK_SIZE);  // 정렬
+    size += BLOCK_HEADER_SIZE;           // 헤더 크기 포함
+
+    int index = size_to_index(size);     // 적절한 인덱스를 계산
+
+    MemoryBlockHeader* memBlock = NULL;
+
+    mutex->lock();
+
+    memBlock = freeBlockEntryList[index].head;
+
+    if (!memBlock) {
+        freeBlockEntryList[index].hitCount++;
+
+        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_TOTAL_BLOCKS) {
+            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_TOTAL_BLOCKS);
+            freeBlockEntryList[index].hitCount = 0;  // hitCount 초기화
+        }
+
+        memBlock = allocateMemBlocks(freeBlockEntryList[index].size, freeBlockEntryList[index].numBlocks);
+    }
+
+    if (memBlock) {
+        freeBlockEntryList[index].head = memBlock->next;
+    }
+
+    mutex->unlock();
+
+    return memBlock ? reinterpret_cast<void*>(reinterpret_cast<unsigned char*>(memBlock) + sizeof(MemoryBlockHeader)) : NULL;
+}
+
+void CustomAllocator::free(void* object) {
+    if (!object) return;
 
     MemoryBlockHeader* header = reinterpret_cast<MemoryBlockHeader*>(
         reinterpret_cast<unsigned char*>(object) - sizeof(MemoryBlockHeader)
@@ -124,14 +258,7 @@ void CustomAllocator::free(void* object) {
         throw std::runtime_error("Memory overrun detected");
     }
 
-    int index = -1;
-
-    for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
-        if (header->size <= freeBlockEntryList[i].size) {
-            index = i;
-            break;
-        }
-    }
+    int index = size_to_index(header->size + sizeof(MemoryBlockHeader) + sizeof(MemoryBlockFooter));
 
     mutex->lock();
     header->next = freeBlockEntryList[index].head;
