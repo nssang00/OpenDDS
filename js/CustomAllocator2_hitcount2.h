@@ -122,7 +122,7 @@ void* CustomAllocator::allocate(size_t size) {
     if (!memBlock) {
         freeBlockEntryList[index].hitCount++;
 
-        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_TOTAL_BLOCKS) {
+        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_BLOCKS_PER_ENTRY) {
             freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, (size_t)MAX_BLOCKS_PER_ENTRY);
             freeBlockEntryList[index].hitCount = 0;  // hitCount 초기화
         }
