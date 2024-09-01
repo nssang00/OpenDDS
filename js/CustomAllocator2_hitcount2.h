@@ -3,8 +3,6 @@
 #define FREE_BLOCK_ENTRY_SIZE 24   // 24(128MB)
 #define MAX_BLOCKS_PER_ENTRY 1024  // 각 FreeBlockEntry당 최대 블록 수
 #define HIT_COUNT_THRESHOLD 10     // 블록 확장 트리거 히트 카운트
-const size_t MAX_BLOCKS_PER_ENTRY = 1024;  // 각 FreeBlockEntry당 최대 블록 수
-const int HIT_COUNT_THRESHOLD = 10;    // 블록 확장을 위한 임계값
 
 #define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
 #define BLOCK_HEADER_SIZE ALIGN(sizeof(MemoryBlockHeader), MIN_BLOCK_SIZE)
