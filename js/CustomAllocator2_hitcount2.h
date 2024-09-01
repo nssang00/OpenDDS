@@ -103,7 +103,7 @@ void* CustomAllocator::allocate(size_t size) {
     size = ALIGN(size, MIN_BLOCK_SIZE);  // 정렬
     size += BLOCK_HEADER_SIZE;           // 헤더 크기 포함
 
-    int index = size_to_index(size);     // 적절한 인덱스를 계산
+    int index = findFreeListIndex(size);     // 적절한 인덱스를 계산
 
     MemoryBlockHeader* memBlock = NULL;
 
