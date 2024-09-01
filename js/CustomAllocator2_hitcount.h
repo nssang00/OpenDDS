@@ -1,64 +1,61 @@
+#define SDDS_MEMORY_MANAGER_MAGIC_NUMBER1       0xAA435453L
+#define SDDS_MEMORY_MANAGER_MAGIC_NUMBER2       0xBB21474DL
+
 #define MEM_POOL_SIZE (32 * 1024)  // 32KB
 #define MIN_CAPACITY 1
-#define FREE_BLOCK_ENTRY_SIZE 24 // 24(128MB)
-#define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
-#define BLOCK_HEADER_SIZE ALIGN(sizeof(MemoryBlockHeader), MIN_BLOCK_SIZE)
+#define FREE_BLOCK_ENTRY_SIZE 24 //24(128MB)
 
 #include <windows.h>
-#include <vector>  // STL 사용을 최소화합니다. 필요한 경우 동적 배열로 대체 가능
+#include <vector>
 #include <stdexcept>
 #include <cstdio>
 
-class Mutex {
-public:
-    Mutex() { InitializeCriticalSection(&cs); }
-    ~Mutex() { DeleteCriticalSection(&cs); }
-    void lock() { EnterCriticalSection(&cs); }
-    void unlock() { LeaveCriticalSection(&cs); }
 
-private:
-    CRITICAL_SECTION cs;
-};
+typedef struct _MemBlock {
+    size_t signature1;
+    size_t signature2;
+    size_t size;
+    struct _MemBlock* next;
+    unsigned char* payload;
+} MemBlock;
+
+typedef struct _MemChunk {
+    unsigned char* payload;
+} MemChunk;
+
+typedef struct _FreeBlockEntry {
+    size_t size;
+    struct _MemBlock* head;
+    size_t hitCount;   // 추가된 hit count
+    size_t numBlocks;  // 현재 크기의 블록 수
+} FreeBlockEntry;
+
+const int MIN_BLOCK_SIZE = 8;
+const int MAX_BLOCK_SIZE = 4096;
+const int BLOCK_ENTRY_SIZE = MAX_BLOCK_SIZE / MIN_BLOCK_SIZE;
+const int BLOCK_HEADER_SIZE = sizeof(struct _MemBlock) - sizeof(unsigned char*);
+const int BLOCK_FOOTER_SIZE = 0;
+const int MEM_MANAGER_SIZE = 2;
+const size_t MAX_TOTAL_BLOCKS = 1024;  // 할당할 수 있는 최대 블록 수
+const int HIT_COUNT_THRESHOLD = 10;    // 블록 확장을 위한 임계값
 
 class CustomAllocator {
 public:
     CustomAllocator();
     ~CustomAllocator();
     void* allocate(size_t size);
-    void free(void* object);
+    void free(void* object, size_t size);
 
     static CustomAllocator* Instance(int num = 0);
 
 private:
-    static const unsigned long HEADER_SIGNATURE = 0xDEADBEEF;
-    static const unsigned long FOOTER_SIGNATURE = 0xFEEDFACE;
-
-    struct MemoryBlockHeader {
-        unsigned long signature;
-        size_t size;
-        struct MemoryBlockHeader* next;
-    };
-
-    struct MemoryBlockFooter {
-        unsigned long signature;
-    };
-
-    struct FreeBlockEntry {
-        size_t size;
-        MemoryBlockHeader* head;
-        size_t hitCount;
-        size_t numBlocks;
-    };
-
     static CustomAllocator* instance[MEM_MANAGER_SIZE];
 
-    MemoryBlockHeader* allocateMemBlocks(size_t size, size_t numBlocks);
+    MemBlock* allocateMemBlocks(size_t size, size_t numBlocks);
 
-    std::vector<unsigned char*> memChunkList;
+    std::vector<MemChunk*> memChunkList;
     FreeBlockEntry freeBlockEntryList[FREE_BLOCK_ENTRY_SIZE];
     Mutex* mutex;
-
-    int size_to_index(size_t size);
 };
 
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
@@ -68,14 +65,16 @@ CustomAllocator::CustomAllocator() {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
         freeBlockEntryList[i].head = NULL;
         freeBlockEntryList[i].hitCount = 0;  // hitCount 초기화
-        freeBlockEntryList[i].numBlocks = max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + sizeof(MemoryBlockHeader) + sizeof(MemoryBlockFooter)), (size_t)MIN_CAPACITY);
+        freeBlockEntryList[i].numBlocks = max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_CAPACITY);
     }
     mutex = new Mutex;
 }
 
 CustomAllocator::~CustomAllocator() {
-    for (size_t i = 0; i < memChunkList.size(); ++i) {
-        delete[] memChunkList[i];
+    for (std::vector<MemChunk*>::iterator it = memChunkList.begin(); it != memChunkList.end(); ++it) {
+        MemChunk* memChunk = *it;
+        delete[] memChunk->payload;
+        delete memChunk;
     }
     memChunkList.clear();
     delete mutex;
@@ -87,24 +86,21 @@ CustomAllocator* CustomAllocator::Instance(int num) {
     return instance[num];
 }
 
-int CustomAllocator::size_to_index(size_t size) {
-    int index = 0;
-    size_t block_size = MIN_BLOCK_SIZE;
-
-    while (block_size < size && index < FREE_BLOCK_ENTRY_SIZE - 1) {
-        block_size <<= 1; // 2배씩 증가
-        index++;
-    }
-    return index;
-}
-
 void* CustomAllocator::allocate(size_t size) {
-    size = ALIGN(size, MIN_BLOCK_SIZE);  // 정렬
-    size += BLOCK_HEADER_SIZE;           // 헤더 크기 포함
+    int index = -1;
+    int newSize = 0;
 
-    int index = size_to_index(size);     // 적절한 인덱스를 계산
+    MemBlock* memBlock = NULL;
 
-    MemoryBlockHeader* memBlock = NULL;
+    for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
+        if (size <= freeBlockEntryList[i].size) {
+            index = i;
+            newSize = freeBlockEntryList[i].size;
+            break;
+        }
+    }
+    if (index == -1)
+        return NULL;
 
     mutex->lock();
 
@@ -118,7 +114,7 @@ void* CustomAllocator::allocate(size_t size) {
             freeBlockEntryList[index].hitCount = 0;  // hitCount 초기화
         }
 
-        memBlock = allocateMemBlocks(freeBlockEntryList[index].size, freeBlockEntryList[index].numBlocks);
+        memBlock = allocateMemBlocks(newSize, freeBlockEntryList[index].numBlocks);
     }
 
     if (memBlock) {
@@ -127,55 +123,59 @@ void* CustomAllocator::allocate(size_t size) {
 
     mutex->unlock();
 
-    return memBlock ? reinterpret_cast<void*>(reinterpret_cast<unsigned char*>(memBlock) + sizeof(MemoryBlockHeader)) : NULL;
+    return memBlock ? (void*)&(memBlock->payload) : NULL;
 }
 
-void CustomAllocator::free(void* object) {
-    if (!object) return;
+void CustomAllocator::free(void* object, size_t size) {
+    MemBlock* memBlock = (MemBlock*)((char*)object - BLOCK_HEADER_SIZE);
 
-    MemoryBlockHeader* header = reinterpret_cast<MemoryBlockHeader*>(
-        reinterpret_cast<unsigned char*>(object) - sizeof(MemoryBlockHeader)
-    );
-
-    if (header->signature != HEADER_SIGNATURE) {
-        throw std::runtime_error("Invalid memory block header");
+    if ((memBlock->signature1 != SDDS_MEMORY_MANAGER_MAGIC_NUMBER1) ||
+        (memBlock->signature2 != SDDS_MEMORY_MANAGER_MAGIC_NUMBER2)) {
+        (size == 1) ? delete (char*)object : delete[](char*)object;
+        return;
     }
 
-    MemoryBlockFooter* footer = reinterpret_cast<MemoryBlockFooter*>(
-        reinterpret_cast<unsigned char*>(object) + header->size
-    );
+    int index = -1;
 
-    if (footer->signature != FOOTER_SIGNATURE) {
-        throw std::runtime_error("Memory overrun detected");
+    for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
+        if (memBlock->size <= freeBlockEntryList[i].size) {
+            index = i;
+            break;
+        }
     }
-
-    int index = size_to_index(header->size + sizeof(MemoryBlockHeader) + sizeof(MemoryBlockFooter));
 
     mutex->lock();
-    header->next = freeBlockEntryList[index].head;
-    freeBlockEntryList[index].head = header;
+    memBlock->next = freeBlockEntryList[index].head;
+    freeBlockEntryList[index].head = memBlock;
     mutex->unlock();
 }
 
-CustomAllocator::MemoryBlockHeader* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
-    size_t blockSize = size + sizeof(MemoryBlockHeader) + sizeof(MemoryBlockFooter);
+MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
+    size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
-    unsigned char* currentMemChunk = new unsigned char[numBlocks * blockSize];
+    MemChunk* currentMemChunk = new MemChunk;
+
+    try {
+        currentMemChunk->payload = new unsigned char[numBlocks * blockSize];
+    } catch (std::bad_alloc& ex) {
+        printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());
+        delete currentMemChunk;
+        return NULL;
+    }
+
     memChunkList.push_back(currentMemChunk);
 
-    unsigned char* start = currentMemChunk;
-    MemoryBlockHeader* firstBlock = NULL;
-    MemoryBlockHeader* previousBlock = NULL;
+    unsigned char* start = currentMemChunk->payload;
+    MemBlock* firstBlock = NULL;
+    MemBlock* previousBlock = NULL;
 
     for (size_t i = 0; i < numBlocks; ++i) {
-        MemoryBlockHeader* newBlock = reinterpret_cast<MemoryBlockHeader*>(start + i * blockSize);
+        MemBlock* newBlock = reinterpret_cast<MemBlock*>(start + i * blockSize);
 
-        newBlock->signature = HEADER_SIGNATURE;
         newBlock->size = size;
+        newBlock->signature1 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER1;
+        newBlock->signature2 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER2;
         newBlock->next = NULL;
-
-        MemoryBlockFooter* footer = reinterpret_cast<MemoryBlockFooter*>(reinterpret_cast<unsigned char*>(newBlock) + sizeof(MemoryBlockHeader) + size);
-        footer->signature = FOOTER_SIGNATURE;
 
         if (previousBlock != NULL) {
             previousBlock->next = newBlock;
