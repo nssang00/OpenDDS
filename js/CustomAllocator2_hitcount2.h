@@ -1,3 +1,14 @@
+#define MEM_POOL_SIZE (32 * 1024)  // 32KB
+#define MIN_CAPACITY 1
+#define FREE_BLOCK_ENTRY_SIZE 24   // 24(128MB)
+#define MAX_BLOCKS_PER_ENTRY 1024  // 각 FreeBlockEntry당 최대 블록 수
+#define HIT_COUNT_THRESHOLD 10     // 블록 확장 트리거 히트 카운트
+#define MAX_MEMORY_POOL_SIZE (64 * 1024 * 1024)  // 64MB, 메모리 풀이 사용할 수 있는 최대 크기
+#define MIN_BLOCK_SIZE 16          // 블록의 최소 크기 정의
+#define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
+#define BLOCK_HEADER_SIZE ALIGN(sizeof(MemoryBlockHeader), MIN_BLOCK_SIZE)
+
+
 const int MIN_BLOCK_SIZE = 8;
 const int MAX_BLOCK_SIZE = 4096;
 const int BLOCK_ENTRY_SIZE = MAX_BLOCK_SIZE / MIN_BLOCK_SIZE;
