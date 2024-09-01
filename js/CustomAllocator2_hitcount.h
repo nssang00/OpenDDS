@@ -153,6 +153,41 @@ void CustomAllocator::free(void* object, size_t size) {
 MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
     size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
 
+    MemChunk* currentMemChunk = NULL;
+
+    try {
+        currentMemChunk = new MemChunk;
+        currentMemChunk->payload = new unsigned char[numBlocks * blockSize];
+    } catch (std::bad_alloc& ex) {
+        printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());
+        delete currentMemChunk;
+        return NULL;
+    }
+
+    memChunkList.push_back(currentMemChunk);
+
+    MemBlock* firstBlock = reinterpret_cast<MemBlock*>(currentMemChunk->payload);
+    MemBlock* currentBlock = firstBlock;
+
+    for (size_t i = 0; i < numBlocks; ++i) {
+        currentBlock->size = size;
+        currentBlock->signature1 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER1;
+        currentBlock->signature2 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER2;
+
+        if (i < numBlocks - 1) {
+            currentBlock->next = reinterpret_cast<MemBlock*>(reinterpret_cast<unsigned char*>(currentBlock) + blockSize);
+            currentBlock = currentBlock->next;
+        } else {
+            currentBlock->next = NULL;
+        }
+    }
+
+    return firstBlock;
+}
+/*
+MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
+    size_t blockSize = size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE;
+
     MemChunk* currentMemChunk = new MemChunk;
 
     try {
@@ -187,3 +222,4 @@ MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
 
     return firstBlock;
 }
+*/
