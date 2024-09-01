@@ -1,10 +1,17 @@
+const int MIN_BLOCK_SIZE = 8;
+const int MAX_BLOCK_SIZE = 4096;
+const int BLOCK_ENTRY_SIZE = MAX_BLOCK_SIZE / MIN_BLOCK_SIZE;
+const int BLOCK_HEADER_SIZE = sizeof(struct _MemBlock) - sizeof(unsigned char*);
+const int BLOCK_FOOTER_SIZE = 0;
+const int MEM_MANAGER_SIZE = 2;
+const size_t MAX_BLOCKS_PER_ENTRY = 1024;  // 각 FreeBlockEntry당 최대 블록 수
+const int HIT_COUNT_THRESHOLD = 10;    // 블록 확장을 위한 임계값
 
 #define MEM_POOL_SIZE (32 * 1024)  // 32KB
 #define MIN_CAPACITY 1
 #define FREE_BLOCK_ENTRY_SIZE 24 // 24(128MB)
 #define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
-#define BLOCK_HEADER_SIZE ALIGN(sizeof(MemoryBlockHeader), MIN_BLOCK_SIZE)
-#define MAX_BLOCKS_PER_ENTRY 1024  // 각 FreeBlockEntry당 최대 블록 수
+
 
 #include <windows.h>
 #include <vector>  // STL 사용을 최소화합니다. 필요한 경우 동적 배열로 대체 가능
@@ -116,7 +123,7 @@ void* CustomAllocator::allocate(size_t size) {
         freeBlockEntryList[index].hitCount++;
 
         if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_TOTAL_BLOCKS) {
-            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
+            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, (size_t)MAX_BLOCKS_PER_ENTRY);
             freeBlockEntryList[index].hitCount = 0;  // hitCount 초기화
         }
 
