@@ -4,6 +4,7 @@
 #define FREE_BLOCK_ENTRY_SIZE 24 // 24(128MB)
 #define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
 #define BLOCK_HEADER_SIZE ALIGN(sizeof(MemoryBlockHeader), MIN_BLOCK_SIZE)
+#define MAX_BLOCKS_PER_ENTRY 1024  // 각 FreeBlockEntry당 최대 블록 수
 
 #include <windows.h>
 #include <vector>  // STL 사용을 최소화합니다. 필요한 경우 동적 배열로 대체 가능
@@ -115,7 +116,7 @@ void* CustomAllocator::allocate(size_t size) {
         freeBlockEntryList[index].hitCount++;
 
         if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_TOTAL_BLOCKS) {
-            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_TOTAL_BLOCKS);
+            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
             freeBlockEntryList[index].hitCount = 0;  // hitCount 초기화
         }
 
