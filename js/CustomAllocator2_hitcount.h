@@ -36,7 +36,7 @@ const int BLOCK_ENTRY_SIZE = MAX_BLOCK_SIZE / MIN_BLOCK_SIZE;
 const int BLOCK_HEADER_SIZE = sizeof(struct _MemBlock) - sizeof(unsigned char*);
 const int BLOCK_FOOTER_SIZE = 0;
 const int MEM_MANAGER_SIZE = 2;
-const size_t MAX_TOTAL_BLOCKS = 1024;  // 할당할 수 있는 최대 블록 수
+const size_t MAX_BLOCKS_PER_ENTRY = 1024;  // 할당할 수 있는 최대 블록 수
 const int HIT_COUNT_THRESHOLD = 10;    // 블록 확장을 위한 임계값
 
 class CustomAllocator {
@@ -109,8 +109,8 @@ void* CustomAllocator::allocate(size_t size) {
     if (!memBlock) {
         freeBlockEntryList[index].hitCount++;
 
-        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_TOTAL_BLOCKS) {
-            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_TOTAL_BLOCKS);
+        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_BLOCKS_PER_ENTRY) {
+            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
             freeBlockEntryList[index].hitCount = 0;  // hitCount 초기화
         }
 
