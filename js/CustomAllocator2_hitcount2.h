@@ -59,7 +59,7 @@ private:
     FreeBlockEntry freeBlockEntryList[FREE_BLOCK_ENTRY_SIZE];
     Mutex* mutex;
 
-    int size_to_index(size_t size);
+    int findFreeListIndex(size_t size);
 };
 
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
@@ -88,7 +88,7 @@ CustomAllocator* CustomAllocator::Instance(int num) {
     return instance[num];
 }
 
-int CustomAllocator::size_to_index(size_t size) {
+int CustomAllocator::findFreeListIndex(size_t size) {
     int index = 0;
     size_t block_size = MIN_BLOCK_SIZE;
 
@@ -150,7 +150,7 @@ void CustomAllocator::free(void* object) {
         throw std::runtime_error("Memory overrun detected");
     }
 
-    int index = size_to_index(header->size + sizeof(MemoryBlockHeader) + sizeof(MemoryBlockFooter));
+    int index = findFreeListIndex(header->size + sizeof(MemoryBlockHeader) + sizeof(MemoryBlockFooter));
 
     mutex->lock();
     header->next = freeBlockEntryList[index].head;
