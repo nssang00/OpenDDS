@@ -1,75 +1,65 @@
 #include <vector>
-#include <algorithm>
 
-class Mutex {
-public:
-    Mutex() { InitializeCriticalSection(&cs); }  
-    ~Mutex() { DeleteCriticalSection(&cs); }   
-    void lock() { EnterCriticalSection(&cs); }  
-    void unlock() { LeaveCriticalSection(&cs); } 
-private:
-    CRITICAL_SECTION cs; 
-};
 
 class CustomAllocator {
 public:
-    CustomAllocator(); 
-    ~CustomAllocator(); 
+    CustomAllocator();
+    ~CustomAllocator();
     void* allocate(size_t size);
-    void free(void* object, size_t size); 
+    void free(void* object, size_t size);
 
-    static CustomAllocator* Instance(int num = 0); 
+    static CustomAllocator* Instance(int num = 0);
 
 private:
-    static const unsigned int HEADER_SIGNATURE = 0x435348ABU;  // 블록 헤더의 시그니처 값
-    static const unsigned int FOOTER_SIGNATURE = 0xEF474D4BU;  // 블록 푸터의 시그니처 값
+    static const unsigned int HEADER_SIGNATURE = 0x435348ABU;  // Signature value of the block header
+    static const unsigned int FOOTER_SIGNATURE = 0xEF474D4BU;  // Signature value of the block footer
 
-    static const int MEM_POOL_SIZE = 32 * 1024;  // 메모리 풀 크기 (32KB)
-    static const int FREE_BLOCK_ENTRY_SIZE = 24; // 자유 블록 항목의 개수
+    static const int MEM_POOL_SIZE = 32 * 1024;  // Memory pool size (32KB)
+    static const int FREE_BLOCK_ENTRY_SIZE = 24; // Number of free block entries
 
-    static const int MIN_BLOCK_SIZE = 8;  // 블록의 최소 크기
-    static const int MAX_BLOCK_SIZE = 4096;  // 블록의 최대 크기
-    static const int MEM_MANAGER_SIZE = 2;  // 메모리 관리자 배열의 크기
-    static const int MAX_BLOCKS_PER_ENTRY = 1024;  // 최대 블록 수
-    static const int MIN_BLOCKS_PER_ENTRY = 1;  // 최소 블록 수
-    static const int HIT_COUNT_THRESHOLD = 10;  // 블록 확장을 위한 히트 카운트 임계값
+    static const int MIN_BLOCK_SIZE = 8;  // Minimum block size
+    static const int MAX_BLOCK_SIZE = 4096;  // Maximum block size
+    static const int MEM_MANAGER_SIZE = 2;  // Size of memory manager array
+    static const int MAX_BLOCKS_PER_ENTRY = 1024;  // Maximum number of blocks per entry
+    static const int MIN_BLOCKS_PER_ENTRY = 1;  // Minimum number of blocks per entry
+    static const int HIT_COUNT_THRESHOLD = 10;  // Hit count threshold for block expansion
 
-    #define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))  // 메모리 정렬 매크로
-    #define BLOCK_HEADER_SIZE ALIGN(sizeof(MemBlock) - sizeof(unsigned char*), MIN_BLOCK_SIZE)  // 블록 헤더의 크기
-    #define BLOCK_FOOTER_SIZE sizeof(unsigned int)  // 블록 푸터의 크기
+#define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))  // Memory alignment macro
+#define BLOCK_HEADER_SIZE ALIGN(sizeof(MemBlock) - sizeof(unsigned char*), MIN_BLOCK_SIZE)  // Block header size
+#define BLOCK_FOOTER_SIZE sizeof(unsigned int)  // Block footer size
 
-    // 메모리 블록 구조체
+    // Memory block structure
     struct MemBlock {
-        unsigned int signature;  // 블록 헤더의 시그니처
-        unsigned int size;  // 블록의 크기
-        struct MemBlock* next;  // 다음 블록을 가리키는 포인터
-        unsigned char* payload;  // 블록의 페이로드
+        unsigned int signature;  // Block header signature
+        unsigned int size;  // Block size
+        struct MemBlock* next;  // Pointer to the next block
+        unsigned char* payload;  // Block payload
     };
 
-    // 메모리 청크 구조체
+    // Memory chunk structure
     struct MemChunk {
-        unsigned char* payload;  // 메모리 청크의 페이로드
+        unsigned char* payload;  // Payload of the memory chunk
     };
 
-    // 자유 블록 항목 구조체
+    // Free block entry structure
     struct FreeBlockEntry {
-        size_t size;  // 블록의 크기
-        struct MemBlock* head;  // 자유 블록 리스트의 헤드
-        size_t hitCount;  // 블록 사용 히트 카운트
-        size_t numBlocks;  // 현재 블록 수
+        size_t size;  // Block size
+        struct MemBlock* head;  // Head of the free block list
+        size_t hitCount;  // Block usage hit count
+        size_t numBlocks;  // Current number of blocks
     };
 
-    static CustomAllocator* instance[MEM_MANAGER_SIZE];  // 싱글턴 인스턴스 배열
+    static CustomAllocator* instance[MEM_MANAGER_SIZE];  // Singleton instance array
 
-    std::vector<MemChunk*> memChunkList;  // 메모리 청크 리스트
-    FreeBlockEntry freeBlockEntryList[FREE_BLOCK_ENTRY_SIZE];  // 자유 블록 항목 리스트
-    Mutex* mutex;  // Mutex 객체
+    std::vector<MemChunk*> memChunkList;  // List of memory chunks
+    FreeBlockEntry freeBlockEntryList[FREE_BLOCK_ENTRY_SIZE];  // List of free block entries
+    Mutex* mutex;  // Mutex object
 
-    MemBlock* allocateMemBlocks(size_t size, size_t numBlocks);  // 메모리 블록을 할당하는 함수
+    MemBlock* allocateMemBlocks(size_t size, size_t numBlocks);  // Function to allocate memory blocks
 
-    // 주어진 크기에 맞는 자유 블록 리스트의 인덱스를 찾는 함수
+    // Function to find the index of the free block list that matches the given size
     int findFreeListIndex(size_t size) {
-        size = ALIGN(size, MIN_BLOCK_SIZE);  // 요청된 크기를 정렬합니다.
+        size = ALIGN(size, MIN_BLOCK_SIZE);  // Align the requested size
         int index = 0;
         size_t block_size = MIN_BLOCK_SIZE;
 
@@ -77,126 +67,127 @@ private:
             block_size <<= 1;  // 8, 16, 32, 64, 128, 256, ..., 134217728
             index++;
         }
-        return index;  // 적절한 인덱스 반환
+        return index;  // Return the appropriate index
     }
 };
 
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
 
 CustomAllocator::CustomAllocator() {
-    // 자유 블록 항목 초기화
+    // Initialize free block entries
     for (int i = 0; i < FREE_BLOCK_ENTRY_SIZE; i++) {
-        freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;  // 각 블록 항목의 크기를 설정
-        freeBlockEntryList[i].head = NULL;  // 블록 리스트의 헤드를 NULL로 초기화
-        freeBlockEntryList[i].hitCount = 0;  // 히트 카운트 초기화
-        freeBlockEntryList[i].numBlocks = std::max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_BLOCKS_PER_ENTRY);  // 블록 수 설정
+        freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;  // Set the size of each block entry
+        freeBlockEntryList[i].head = NULL;  // Initialize the head of the block list to NULL
+        freeBlockEntryList[i].hitCount = 0;  // Initialize hit count
+        freeBlockEntryList[i].numBlocks = max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_BLOCKS_PER_ENTRY);  // Set the number of blocks
     }
-    mutex = new Mutex;  // Mutex 객체 생성
+    mutex = new Mutex;  // Create Mutex object
 }
 
 CustomAllocator::~CustomAllocator() {
-    // 메모리 청크 리스트를 순회하며 메모리 해제
+    // Iterate through the memory chunk list and free memory
     for (std::vector<MemChunk*>::iterator it = memChunkList.begin(); it != memChunkList.end(); ++it) {
         MemChunk* memChunk = *it;
-        delete[] memChunk->payload;  // 메모리 청크의 페이로드 삭제
-        delete memChunk;  // 메모리 청크 객체 삭제
+        delete[] memChunk->payload;  // Delete the payload of the memory chunk
+        delete memChunk;  // Delete the memory chunk object
     }
-    memChunkList.clear();  // 메모리 청크 리스트 비우기
-    delete mutex;  // Mutex 객체 삭제
+    memChunkList.clear();  // Clear the memory chunk list
+    delete mutex;  // Delete the Mutex object
 }
 
 CustomAllocator* CustomAllocator::Instance(int num) {
     if (!instance[num])
-        instance[num] = new CustomAllocator();  // 인스턴스가 없으면 새로 생성
-    return instance[num];  // 인스턴스 반환
+        instance[num] = new CustomAllocator();  // Create a new instance if one does not exist
+    return instance[num];  // Return the instance
 }
 
-// 메모리 할당 함수
+// Memory allocation function
 void* CustomAllocator::allocate(size_t size) {
-    int index = findFreeListIndex(size);  // 요청된 크기에 맞는 인덱스 찾기
-    size_t newSize = freeBlockEntryList[index].size;  // 할당할 블록의 크기
+    int index = findFreeListIndex(size);  // Find the index that matches the requested size
+    size_t newSize = freeBlockEntryList[index].size;  // Get the size of the block to be allocated
 
-    mutex->lock();  // Mutex 잠금
+    mutex->lock();  // Lock the Mutex
 
     MemBlock* memBlock = freeBlockEntryList[index].head;
 
-    if (!memBlock) {// 자유 블록이 없으면 새 메모리 블록을 할당합니다.
+    if (!memBlock) { // If there are no free blocks, allocate a new memory block
         freeBlockEntryList[index].hitCount++;
 
-        // 블록 사용 횟수가 임계값을 초과하고 블록 수가 최대 블록 수보다 작으면 블록 수를 확장
+        // If the block usage exceeds the threshold and the number of blocks is less than the maximum, expand the number of blocks
         if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_BLOCKS_PER_ENTRY) {
-            freeBlockEntryList[index].numBlocks = std::min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
+            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
             freeBlockEntryList[index].hitCount = 0;
         }
-
-        memBlock = allocateMemBlocks(newSize, freeBlockEntryList[index].numBlocks);  // 새 메모리 블록 할당
+        memBlock = allocateMemBlocks(newSize, freeBlockEntryList[index].numBlocks);  // Allocate a new memory block
     }
 
     if (memBlock) {
-        freeBlockEntryList[index].head = memBlock->next;  // 자유 블록 리스트에서 블록을 제거
+        freeBlockEntryList[index].head = memBlock->next;  // Remove the block from the free block list
     }
 
-    mutex->unlock();  // Mutex 잠금 해제
+    mutex->unlock();  // Unlock the Mutex
 
-    return memBlock ? (void*)&(memBlock->payload) : NULL;  // 메모리 블록의 페이로드 반환
+    return memBlock ? (void*)&(memBlock->payload) : NULL;  // Return the payload of the memory block
 }
 
-// 메모리 해제 함수
+// Memory free function
 void CustomAllocator::free(void* object, size_t size) {
-    // 객체를 메모리 블록으로 변환
+    // Convert the object to a memory block
     MemBlock* memBlock = reinterpret_cast<MemBlock*>(reinterpret_cast<unsigned char*>(object) - BLOCK_HEADER_SIZE);
     unsigned int* footer = reinterpret_cast<unsigned int*>(reinterpret_cast<unsigned char*>(object) + memBlock->size);
 
-    // 시그니처가 일치하지 않으면 일반 delete[]로 처리합니다.
+    // If the signature does not match, handle it as a regular delete[]
     if (memBlock->signature != HEADER_SIGNATURE || *footer != FOOTER_SIGNATURE) {
-        delete[] reinterpret_cast<unsigned char*>(object);  // 잘못된 블록 처리
+        delete[] reinterpret_cast<unsigned char*>(object);  // Handle incorrect block
         return;
     }
 
-    int index = findFreeListIndex(memBlock->size);  // 블록 크기에 맞는 인덱스 찾기
+    int index = findFreeListIndex(memBlock->size);  // Find the index that matches the block size
 
-    mutex->lock();  // Mutex 잠금
-    memBlock->next = freeBlockEntryList[index].head;  // 자유 블록 리스트의 헤드에 블록 추가
-    freeBlockEntryList[index].head = memBlock;    // 자유 블록 리스트의 헤드에 블록 추가
-    mutex->unlock();  // Mutex 잠금 해제
+    mutex->lock();  // Lock the Mutex
+    memBlock->next = freeBlockEntryList[index].head;  // Add the block to the head of the free block list
+    freeBlockEntryList[index].head = memBlock;    // Add the block to the head of the free block list
+    mutex->unlock();  // Unlock the Mutex
 }
 
-// 메모리 블록을 할당하는 함수
+// Function to allocate memory blocks
 CustomAllocator::MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
-    // 블록 크기 계산 (헤더와 푸터를 포함)
+    // Calculate the block size (including header and footer)
     size_t blockSize = ALIGN(size + BLOCK_HEADER_SIZE, MIN_BLOCK_SIZE) + BLOCK_FOOTER_SIZE;
 
     MemChunk* currentMemChunk = NULL;
 
     try {
-        currentMemChunk = new MemChunk;// 새로운 메모리 청크 할당
-        currentMemChunk->payload = new unsigned char[numBlocks * blockSize];  // 요청된 수의 블록을 담을 메모리 할당
-    } catch (std::bad_alloc& ex) {
-        printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());// 메모리 할당 실패 시 예외 처리
-        delete currentMemChunk;  // 할당된 메모리 청크 삭제
-        return NULL;  // NULL 반환
+        currentMemChunk = new MemChunk;  // Allocate a new memory chunk
+        currentMemChunk->payload = new unsigned char[numBlocks * blockSize];  // Allocate memory to hold the requested number of blocks
+    }
+    catch (std::bad_alloc& ex) {
+        printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());  // Handle memory allocation failure
+        delete currentMemChunk;  // Delete the allocated memory chunk
+        return NULL;  // Return NULL
     }
 
-    memChunkList.push_back(currentMemChunk);  // 메모리 청크 리스트에 추가
+    memChunkList.push_back(currentMemChunk);  // Add the memory chunk to the list
 
     MemBlock* firstBlock = reinterpret_cast<MemBlock*>(currentMemChunk->payload);
     MemBlock* currentBlock = firstBlock;
 
     for (size_t i = 0; i < numBlocks; ++i) {
-        currentBlock->size = static_cast<unsigned int>(size);  // 요청된 크기 저장
-        currentBlock->signature = HEADER_SIGNATURE;  // 헤더 시그니처 설정
+        currentBlock->size = static_cast<unsigned int>(size);  // Store the requested size
+        currentBlock->signature = HEADER_SIGNATURE;  // Set the header signature
 
-        // 블록 푸터에 시그니처 저장
+        // Store the signature in the block footer
         unsigned int* footer = reinterpret_cast<unsigned int*>(reinterpret_cast<unsigned char*>(currentBlock) + blockSize - BLOCK_FOOTER_SIZE);
         *footer = FOOTER_SIGNATURE;
 
-        // 다음 블록을 설정
+        // Set the next block
         if (i < numBlocks - 1) {
             currentBlock->next = reinterpret_cast<MemBlock*>(reinterpret_cast<unsigned char*>(currentBlock) + blockSize);
             currentBlock = currentBlock->next;
-        } else {
-            currentBlock->next = NULL;  // 마지막 블록의 경우 next는 NULL
+        }
+        else {
+            currentBlock->next = NULL;  // For the last block, set next to NULL
         }
     }
-    return firstBlock;  // 첫 번째 블록의 포인터 반환
+    return firstBlock;  // Return the pointer to the first block
 }
