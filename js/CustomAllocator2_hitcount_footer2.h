@@ -21,8 +21,8 @@ public:
     static CustomAllocator* Instance(int num = 0);
 
 private:
-    static const unsigned int HEADER_SIGNATURE = 0xAA435453U;//0xDEADBEEF
-    static const unsigned int FOOTER_SIGNATURE = 0xBB21474DU;//0xBEEFDEAD
+    static const unsigned int HEADER_SIGNATURE = 0x435348ABU;
+    static const unsigned int FOOTER_SIGNATURE = 0xEF474D4BU;
 
     static const int MEM_POOL_SIZE = 32 * 1024;  // 32KB
     static const int FREE_BLOCK_ENTRY_SIZE = 24; // 24 (128MB)
@@ -39,8 +39,8 @@ private:
     #define BLOCK_FOOTER_SIZE sizeof(unsigned int)
 
     struct MemBlock {
-        unsigned int signature;  // 4바이트로 변경
-        unsigned int size;       // 4바이트로 변경
+        unsigned int signature;
+        unsigned int size;
         struct MemBlock* next;
         unsigned char* payload;
     };
@@ -65,12 +65,12 @@ private:
     MemBlock* allocateMemBlocks(size_t size, size_t numBlocks);
 
     int findFreeListIndex(size_t size) {
-        size = ALIGN(size, MIN_BLOCK_SIZE); // 정렬
+        size = ALIGN(size, MIN_BLOCK_SIZE); 
         int index = 0;
         size_t block_size = MIN_BLOCK_SIZE;
 
         while (block_size < size && index < FREE_BLOCK_ENTRY_SIZE - 1) {
-            block_size <<= 1; // 2배씩 증가
+            block_size <<= 1; // 8, 16, 32, 64, 128, 256, ..., 134217728
             index++;
         }
         return index;
