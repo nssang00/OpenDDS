@@ -17,13 +17,13 @@ private:
     static const size_t FOOTER_SIGNATURE = 0xBB21474DL;
 
     static const int MEM_POOL_SIZE = 32 * 1024;  // 32KB
-    static const int MIN_CAPACITY = 1;
     static const int FREE_BLOCK_ENTRY_SIZE = 24; // 24(128MB)
 
     static const int MIN_BLOCK_SIZE = 8;
     static const int MAX_BLOCK_SIZE = 4096;
     static const int MEM_MANAGER_SIZE = 2;
-    static const size_t MAX_BLOCKS_PER_ENTRY = 1024;  // 할당할 수 있는 최대 블록 수
+    static const int MAX_BLOCKS_PER_ENTRY = 1024;  // 할당할 수 있는 최대 블록 수
+    static const int MIN_BLOCKS_PER_ENTRY = 1;
     static const int HIT_COUNT_THRESHOLD = 10;    // 블록 확장을 위한 임계값
 
     #define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
@@ -76,7 +76,7 @@ CustomAllocator::CustomAllocator() {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
         freeBlockEntryList[i].head = NULL;
         freeBlockEntryList[i].hitCount = 0;  // hitCount 초기화
-        freeBlockEntryList[i].numBlocks = max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_CAPACITY);
+        freeBlockEntryList[i].numBlocks = max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_BLOCKS_PER_ENTRY);
     }
     mutex = new Mutex;
 }
