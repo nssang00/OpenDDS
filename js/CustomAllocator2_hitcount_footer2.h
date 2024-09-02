@@ -154,7 +154,7 @@ void CustomAllocator::free(void* object, size_t size) {
 }
 
 CustomAllocator::MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
-    size_t blockSize = ALIGN(size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE, MIN_BLOCK_SIZE);
+    size_t blockSize = ALIGN(size + BLOCK_HEADER_SIZE, MIN_BLOCK_SIZE) + BLOCK_FOOTER_SIZE;
 
     MemChunk* currentMemChunk = NULL;
 
