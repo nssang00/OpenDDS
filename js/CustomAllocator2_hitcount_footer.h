@@ -31,7 +31,7 @@ private:
     #define BLOCK_FOOTER_SIZE sizeof(size_t)
 
     struct MemBlock {
-        size_t headerSignature;
+        size_t signature;
         size_t size;
         struct MemBlock* next;
         unsigned char* payload;
@@ -123,12 +123,6 @@ void* CustomAllocator::allocate(size_t size) {
 
     mutex->unlock();
 
-    if (memBlock) {
-        // 푸터 설정
-        size_t* footer = reinterpret_cast<size_t*>(reinterpret_cast<unsigned char*>(memBlock) + size - BLOCK_FOOTER_SIZE);
-        *footer = FOOTER_SIGNATURE;
-    }
-
     return memBlock ? (void*)&(memBlock->payload) : NULL;
 }
 
@@ -136,7 +130,7 @@ void CustomAllocator::free(void* object, size_t size) {
     MemBlock* memBlock = (MemBlock*)((char*)object - BLOCK_HEADER_SIZE);
     size_t* footer = (size_t*)((char*)object + memBlock->size);
 
-    if (memBlock->headerSignature != HEADER_SIGNATURE || *footer != FOOTER_SIGNATURE) {
+    if (memBlock->signature != HEADER_SIGNATURE || *footer != FOOTER_SIGNATURE) {
         (size == 1) ? delete (char*)object : delete[](char*)object;
         return;
     }
@@ -170,7 +164,7 @@ CustomAllocator::MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_
 
     for (size_t i = 0; i < numBlocks; ++i) {
         currentBlock->size = size;
-        currentBlock->headerSignature = HEADER_SIGNATURE;
+        currentBlock->signature = HEADER_SIGNATURE;
 
         size_t* footer = reinterpret_cast<size_t*>(reinterpret_cast<unsigned char*>(currentBlock) + blockSize - BLOCK_FOOTER_SIZE);
         *footer = FOOTER_SIGNATURE;
