@@ -1,8 +1,5 @@
-#include <windows.h>
+
 #include <vector>
-#include <stdexcept>
-#include <cstdio>
-#include <cstring> // for memset
 
 class Mutex {
 public:
@@ -24,8 +21,8 @@ public:
     static CustomAllocator* Instance(int num = 0);
 
 private:
-    static const unsigned int HEADER_SIGNATURE = 0xAA435453U;
-    static const unsigned int FOOTER_SIGNATURE = 0xBB21474DU;
+    static const unsigned int HEADER_SIGNATURE = 0xAA435453U;//0xDEADBEEF
+    static const unsigned int FOOTER_SIGNATURE = 0xBB21474DU;//0xBEEFDEAD
 
     static const int MEM_POOL_SIZE = 32 * 1024;  // 32KB
     static const int FREE_BLOCK_ENTRY_SIZE = 24; // 24 (128MB)
