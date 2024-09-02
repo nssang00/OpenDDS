@@ -23,13 +23,13 @@ private:
 
     static const int MIN_BLOCK_SIZE = 8;
     static const int MAX_BLOCK_SIZE = 4096;
-    static const int BLOCK_ENTRY_SIZE = MAX_BLOCK_SIZE / MIN_BLOCK_SIZE;
+    //static const int BLOCK_ENTRY_SIZE = MAX_BLOCK_SIZE / MIN_BLOCK_SIZE;
     static const int MEM_MANAGER_SIZE = 2;
     static const size_t MAX_BLOCKS_PER_ENTRY = 1024;  // 할당할 수 있는 최대 블록 수
     static const int HIT_COUNT_THRESHOLD = 10;    // 블록 확장을 위한 임계값
 
     #define ALIGN(size, alignment) (((size) + (alignment - 1)) & ~(alignment - 1))
-    #define BLOCK_HEADER_SIZE ALIGN(sizeof(MemBlock), MIN_BLOCK_SIZE)
+    #define BLOCK_HEADER_SIZE ALIGN(sizeof(MemBlock) - sizeof(unsigned char*), MIN_BLOCK_SIZE)
 
     // 구조체 정의
     typedef struct _MemBlock {
