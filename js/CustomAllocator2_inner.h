@@ -14,8 +14,8 @@ public:
 
 private:
     // 상수 및 매크로
-    static const size_t SDDS_MEMORY_MANAGER_MAGIC_NUMBER1 = 0xAA435453L;
-    static const size_t SDDS_MEMORY_MANAGER_MAGIC_NUMBER2 = 0xBB21474DL;
+    static const size_t SDDS_MEMORY_MANAGER_SIGNATURE1 = 0xAA435453L;
+    static const size_t SDDS_MEMORY_MANAGER_SIGNATURE2 = 0xBB21474DL;
 
     static const int MEM_POOL_SIZE = 32 * 1024;  // 32KB
     static const int MIN_CAPACITY = 1;
@@ -84,7 +84,7 @@ CustomAllocator::CustomAllocator() {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;
         freeBlockEntryList[i].head = NULL;
         freeBlockEntryList[i].hitCount = 0;  // hitCount 초기화
-        freeBlockEntryList[i].numBlocks = std::max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE), (size_t)MIN_CAPACITY);
+        freeBlockEntryList[i].numBlocks = max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE), (size_t)MIN_CAPACITY);
     }
     mutex = new Mutex;
 }
@@ -118,7 +118,7 @@ void* CustomAllocator::allocate(size_t size) {
         freeBlockEntryList[index].hitCount++;
 
         if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_BLOCKS_PER_ENTRY) {
-            freeBlockEntryList[index].numBlocks = std::min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
+            freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
             freeBlockEntryList[index].hitCount = 0;  // hitCount 초기화
         }
 
@@ -137,8 +137,8 @@ void* CustomAllocator::allocate(size_t size) {
 void CustomAllocator::free(void* object, size_t size) {
     MemBlock* memBlock = (MemBlock*)((char*)object - BLOCK_HEADER_SIZE);
 
-    if ((memBlock->signature1 != SDDS_MEMORY_MANAGER_MAGIC_NUMBER1) ||
-        (memBlock->signature2 != SDDS_MEMORY_MANAGER_MAGIC_NUMBER2)) {
+    if ((memBlock->signature1 != SDDS_MEMORY_MANAGER_SIGNATURE1) ||
+        (memBlock->signature2 != SDDS_MEMORY_MANAGER_SIGNATURE2)) {
         (size == 1) ? delete (char*)object : delete[](char*)object;
         return;
     }
@@ -173,8 +173,8 @@ CustomAllocator::MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_
 
     for (size_t i = 0; i < numBlocks; ++i) {
         currentBlock->size = size;
-        currentBlock->signature1 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER1;
-        currentBlock->signature2 = SDDS_MEMORY_MANAGER_MAGIC_NUMBER2;
+        currentBlock->signature1 = SDDS_MEMORY_MANAGER_SIGNATURE1;
+        currentBlock->signature2 = SDDS_MEMORY_MANAGER_SIGNATURE2;
 
         if (i < numBlocks - 1) {
             currentBlock->next = reinterpret_cast<MemBlock*>(reinterpret_cast<unsigned char*>(currentBlock) + blockSize);
