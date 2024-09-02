@@ -62,12 +62,10 @@ private:
     MemBlock* allocateMemBlocks(size_t size, size_t numBlocks);
 
     int findFreeListIndex(size_t size) {
-        size += BLOCK_HEADER_SIZE; // 헤더 크기 포함
         size = ALIGN(size, MIN_BLOCK_SIZE); // 정렬
-
         int index = 0;
         size_t block_size = MIN_BLOCK_SIZE;
-
+    
         while (block_size < size && index < FREE_BLOCK_ENTRY_SIZE - 1) {
             block_size <<= 1; // 2배씩 증가
             index++;
@@ -143,8 +141,8 @@ void CustomAllocator::free(void* object, size_t size) {
         return;
     }
 
-    size = ALIGN(memBlock->size + BLOCK_HEADER_SIZE, MIN_BLOCK_SIZE); // 정렬 및 헤더 크기 포함
-    int index = findFreeListIndex(size);
+    
+    int index = findFreeListIndex(memBlock->size);
 
     mutex->lock();
     memBlock->next = freeBlockEntryList[index].head;
