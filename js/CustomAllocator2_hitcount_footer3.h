@@ -15,7 +15,7 @@ private:
     static const unsigned int HEADER_SIGNATURE = 0x435348ABU;  // Signature value of the block header
     static const unsigned int FOOTER_SIGNATURE = 0xEF474D4BU;  // Signature value of the block footer
 
-    static const int MEM_POOL_SIZE = 32 * 1024;  // Memory pool size (32KB)
+    static const int BLOCK_ALLOCATION_SIZE = 32 * 1024;  // Memory pool size (32KB)
     static const int MIN_BLOCK_SIZE = 8;  // Minimum block size
     static const int MAX_BLOCK_SIZE = 134217728;  // Maximum block size
     static const int MEM_MANAGER_SIZE = 2;  // Size of memory manager array
@@ -71,7 +71,7 @@ CustomAllocator::CustomAllocator() {
         entry.size = block_size;  // Set the current block size
         entry.head = NULL;  // Initialize the head of the block list to NULL
         entry.hitCount = 0;  // Initialize hit count
-        entry.numBlocks = max(MEM_POOL_SIZE / (block_size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_BLOCKS_PER_ENTRY);  // Set the number of blocks
+        entry.numBlocks = max(BLOCK_ALLOCATION_SIZE / (block_size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_BLOCKS_PER_ENTRY);  // Set the number of blocks
 
         freeBlockEntryList.push_back(entry);
 
