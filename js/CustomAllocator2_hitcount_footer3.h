@@ -154,23 +154,24 @@ void CustomAllocator::free(void* object, size_t size) {
 }
 
 int CustomAllocator::findFreeListIndex(size_t size) {
-    size = ALIGN(size, MIN_BLOCK_SIZE);  // 요청된 사이즈를 정렬합니다.
-
-    // 요청된 사이즈가 MAX_BLOCK_SIZE를 초과하면 -1을 반환하여 오류를 처리합니다.
+    // If the requested size exceeds the maximum block size, return -1
     if (size > MAX_BLOCK_SIZE) {
-        return -1;
+        return -1;  // Error: Size exceeds maximum block size
     }
 
+    // Align the requested size to the nearest multiple of MIN_BLOCK_SIZE
+    size = ALIGN(size, MIN_BLOCK_SIZE);
+    
     int index = 0;
     size_t block_size = MIN_BLOCK_SIZE;
 
-    // 사이즈에 맞는 인덱스를 찾습니다.
-    while (block_size < size && index < FREE_BLOCK_ENTRY_SIZE - 1) {
-        block_size <<= 1;  // 블록 사이즈를 2배로 증가시킵니다.
+    // Determine the index of the free block entry list that matches the requested size
+    while (block_size < size && index < freeBlockEntryList.size() - 1) {
+        block_size <<= 1;  // Double the block size
         index++;
     }
 
-    return index;
+    return index;  // Return the appropriate index for the free block entry list
 }
 
 // Function to allocate memory blocks
