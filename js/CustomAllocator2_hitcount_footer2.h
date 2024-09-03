@@ -58,17 +58,7 @@ private:
     MemBlock* allocateMemBlocks(size_t size, size_t numBlocks);  // Function to allocate memory blocks
 
     // Function to find the index of the free block list that matches the given size
-    int findFreeListIndex(size_t size) {
-        size = ALIGN(size, MIN_BLOCK_SIZE);  // Align the requested size
-        int index = 0;
-        size_t block_size = MIN_BLOCK_SIZE;
-
-        while (block_size < size && index < FREE_BLOCK_ENTRY_SIZE - 1) {
-            block_size <<= 1;  // 8, 16, 32, 64, 128, 256, ..., 134217728
-            index++;
-        }
-        return index;  // Return the appropriate index
-    }
+    int findFreeListIndex(size_t size);
 };
 
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
@@ -114,7 +104,8 @@ void* CustomAllocator::allocate(size_t size) {
         freeBlockEntryList[index].hitCount++;
 
         // If the block usage exceeds the threshold and the number of blocks is less than the maximum, expand the number of blocks
-        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && freeBlockEntryList[index].numBlocks < MAX_BLOCKS_PER_ENTRY) {
+        if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && 
+            freeBlockEntryList[index].numBlocks < MAX_BLOCKS_PER_ENTRY) {
             freeBlockEntryList[index].numBlocks = min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
             freeBlockEntryList[index].hitCount = 0;
         }
@@ -148,6 +139,18 @@ void CustomAllocator::free(void* object, size_t size) {
     memBlock->next = freeBlockEntryList[index].head;  // Add the block to the head of the free block list
     freeBlockEntryList[index].head = memBlock;    // Add the block to the head of the free block list
     mutex->unlock();  // Unlock the Mutex
+}
+
+int CustomAllocator::findFreeListIndex(size_t size) {
+    size = ALIGN(size, MIN_BLOCK_SIZE);  // Align the requested size
+    int index = 0;
+    size_t block_size = MIN_BLOCK_SIZE;
+
+    while (block_size < size && index < FREE_BLOCK_ENTRY_SIZE - 1) {
+        block_size <<= 1;  // 8, 16, 32, 64, 128, 256, ..., 134217728
+        index++;
+    }
+    return index;  // Return the appropriate index
 }
 
 // Function to allocate memory blocks
