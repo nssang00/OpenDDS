@@ -17,7 +17,7 @@ private:
 
     static const int MEM_POOL_SIZE = 32 * 1024;  // Memory pool size (32KB)
     static const int MIN_BLOCK_SIZE = 8;  // Minimum block size
-    static const int MAX_BLOCK_SIZE = 4096;  // Maximum block size
+    static const int MAX_BLOCK_SIZE = 134217728;  // Maximum block size
     static const int MEM_MANAGER_SIZE = 2;  // Size of memory manager array
     static const int MAX_BLOCKS_PER_ENTRY = 1024;  // Maximum number of blocks per entry
     static const int MIN_BLOCKS_PER_ENTRY = 1;  // Minimum number of blocks per entry
