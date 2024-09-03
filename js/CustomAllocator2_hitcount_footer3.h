@@ -60,10 +60,6 @@ private:
     int findFreeListIndex(size_t size);
 };
 
-#include "CustomAllocator.h"
-#include <iostream>
-#include <new>  // For std::bad_alloc
-
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
 
 CustomAllocator::CustomAllocator() {
@@ -122,7 +118,7 @@ void* CustomAllocator::allocate(size_t size) {
         // If the block usage exceeds the threshold and the number of blocks is less than the maximum, expand the number of blocks
         if (freeBlockEntryList[index].hitCount >= HIT_COUNT_THRESHOLD && 
             freeBlockEntryList[index].numBlocks < MAX_BLOCKS_PER_ENTRY) {
-            freeBlockEntryList[index].numBlocks = std::min(freeBlockEntryList[index].numBlocks * 2, static_cast<size_t>(MAX_BLOCKS_PER_ENTRY));
+            freeBlockEntryList[index].numBlocks = std::min(freeBlockEntryList[index].numBlocks * 2, MAX_BLOCKS_PER_ENTRY);
             freeBlockEntryList[index].hitCount = 0;
         }
         memBlock = allocateMemBlocks(newSize, freeBlockEntryList[index].numBlocks);  // Allocate a new memory block
@@ -150,11 +146,6 @@ void CustomAllocator::free(void* object, size_t size) {
     }
 
     int index = findFreeListIndex(memBlock->size);  // Find the index that matches the block size
-    if (index == -1) {
-        std::cerr << "Free error: Block size exceeds maximum block size" << std::endl;
-        delete[] reinterpret_cast<unsigned char*>(object);
-        return;
-    }
 
     mutex->lock();  // Lock the Mutex
     memBlock->next = freeBlockEntryList[index].head;  // Add the block to the head of the free block list
@@ -163,20 +154,23 @@ void CustomAllocator::free(void* object, size_t size) {
 }
 
 int CustomAllocator::findFreeListIndex(size_t size) {
-    size = ALIGN(size, MIN_BLOCK_SIZE);  // Align the requested size
+    size = ALIGN(size, MIN_BLOCK_SIZE);  // 요청된 사이즈를 정렬합니다.
+
+    // 요청된 사이즈가 MAX_BLOCK_SIZE를 초과하면 -1을 반환하여 오류를 처리합니다.
+    if (size > MAX_BLOCK_SIZE) {
+        return -1;
+    }
+
     int index = 0;
     size_t block_size = MIN_BLOCK_SIZE;
 
-    while (block_size < size && index < freeBlockEntryList.size() - 1) {
-        block_size <<= 1;  // 8, 16, 32, 64, 128, 256, ..., 134217728
+    // 사이즈에 맞는 인덱스를 찾습니다.
+    while (block_size < size && index < FREE_BLOCK_ENTRY_SIZE - 1) {
+        block_size <<= 1;  // 블록 사이즈를 2배로 증가시킵니다.
         index++;
     }
 
-    if (block_size > MAX_BLOCK_SIZE) {
-        return -1;  // Size exceeds maximum block size
-    }
-
-    return index;  // Return the appropriate index
+    return index;
 }
 
 CustomAllocator::MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
