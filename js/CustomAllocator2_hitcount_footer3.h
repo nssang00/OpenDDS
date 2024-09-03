@@ -63,19 +63,19 @@ private:
 CustomAllocator* CustomAllocator::instance[MEM_MANAGER_SIZE] = { NULL, NULL };
 
 CustomAllocator::CustomAllocator() {
-    // Calculate the number of free block entries
     size_t block_size = MIN_BLOCK_SIZE;
-    while (block_size <= MAX_BLOCK_SIZE) {
-        freeBlockEntryList.push_back(FreeBlockEntry());
-        block_size <<= 1;
-    }
 
-    // Initialize free block entries
-    for (int i = 0; i < freeBlockEntryList.size(); i++) {
-        freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;  // Set the size of each block entry
-        freeBlockEntryList[i].head = NULL;  // Initialize the head of the block list to NULL
-        freeBlockEntryList[i].hitCount = 0;  // Initialize hit count
-        freeBlockEntryList[i].numBlocks = std::max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_BLOCKS_PER_ENTRY));  // Set the number of blocks
+    // Calculate and initialize free block entries
+    while (block_size <= MAX_BLOCK_SIZE) {
+        FreeBlockEntry entry;
+        entry.size = block_size;  // Set the current block size
+        entry.head = NULL;  // Initialize the head of the block list to NULL
+        entry.hitCount = 0;  // Initialize hit count
+        entry.numBlocks = max(MEM_POOL_SIZE / (block_size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_BLOCKS_PER_ENTRY);  // Set the number of blocks
+
+        freeBlockEntryList.push_back(entry);
+
+        block_size <<= 1;  // Move to the next block size
     }
 
     mutex = new Mutex;  // Create Mutex object
