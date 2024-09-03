@@ -173,6 +173,7 @@ int CustomAllocator::findFreeListIndex(size_t size) {
     return index;
 }
 
+// Function to allocate memory blocks
 CustomAllocator::MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_t numBlocks) {
     // Calculate the block size (including header and footer)
     size_t blockSize = ALIGN(size + BLOCK_HEADER_SIZE, MIN_BLOCK_SIZE) + BLOCK_FOOTER_SIZE;
@@ -184,31 +185,32 @@ CustomAllocator::MemBlock* CustomAllocator::allocateMemBlocks(size_t size, size_
         currentMemChunk->payload = new unsigned char[numBlocks * blockSize];  // Allocate memory to hold the requested number of blocks
     }
     catch (std::bad_alloc& ex) {
-        std::cerr << "CustomAllocator::allocateMemBlocks() Stack Overflow!! - " << ex.what() << std::endl;
-        delete currentMemChunk;  // 메모리 청크를 삭제합니다.
-        return NULL;  // NULL을 반환합니다.
+        printf("CustomAllocator::allocateMemBlocks() Stack Overflow!! - %s\n", ex.what());  // Handle memory allocation failure
+        delete currentMemChunk;  // Delete the allocated memory chunk
+        return NULL;  // Return NULL
     }
 
-    memChunkList.push_back(currentMemChunk);  // 메모리 청크를 리스트에 추가합니다.
+    memChunkList.push_back(currentMemChunk);  // Add the memory chunk to the list
 
-    MemBlock* firstBlock = reinterpret_cast<MemBlock*>(currentMemChunk->payload);  // 메모리 블록의 시작을 설정합니다.
+    MemBlock* firstBlock = reinterpret_cast<MemBlock*>(currentMemChunk->payload);
     MemBlock* currentBlock = firstBlock;
 
-    // 메모리 블록을 연결합니다.
-    for (size_t i = 0; i < numBlocks - 1; ++i) {
-        currentBlock->signature = HEADER_SIGNATURE;
-        currentBlock->size = size;
-        currentBlock->next = reinterpret_cast<MemBlock*>(reinterpret_cast<unsigned char*>(currentBlock) + blockSize);
-        currentBlock->payload = reinterpret_cast<unsigned char*>(currentBlock) + BLOCK_HEADER_SIZE;
-        currentBlock = currentBlock->next;
+    for (size_t i = 0; i < numBlocks; ++i) {
+        currentBlock->size = static_cast<unsigned int>(size);  // Store the requested size
+        currentBlock->signature = HEADER_SIGNATURE;  // Set the header signature
+
+        // Store the signature in the block footer
+        unsigned int* footer = reinterpret_cast<unsigned int*>(reinterpret_cast<unsigned char*>(currentBlock) + blockSize - BLOCK_FOOTER_SIZE);
+        *footer = FOOTER_SIGNATURE;
+
+        // Set the next block
+        if (i < numBlocks - 1) {
+            currentBlock->next = reinterpret_cast<MemBlock*>(reinterpret_cast<unsigned char*>(currentBlock) + blockSize);
+            currentBlock = currentBlock->next;
+        }
+        else {
+            currentBlock->next = NULL;  // For the last block, set next to NULL
+        }
     }
-
-    currentBlock->signature = HEADER_SIGNATURE;
-    currentBlock->size = size;
-    currentBlock->next = NULL;
-    currentBlock->payload = reinterpret_cast<unsigned char*>(currentBlock) + BLOCK_HEADER_SIZE;
-
-    return firstBlock;  // 첫 번째 메모리 블록을 반환합니다.
+    return firstBlock;  // Return the pointer to the first block
 }
-
-          
