@@ -75,7 +75,7 @@ CustomAllocator::CustomAllocator() {
         freeBlockEntryList[i].size = MIN_BLOCK_SIZE << i;  // Set the size of each block entry
         freeBlockEntryList[i].head = NULL;  // Initialize the head of the block list to NULL
         freeBlockEntryList[i].hitCount = 0;  // Initialize hit count
-        freeBlockEntryList[i].numBlocks = std::max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), static_cast<size_t>(MIN_BLOCKS_PER_ENTRY));  // Set the number of blocks
+        freeBlockEntryList[i].numBlocks = std::max(MEM_POOL_SIZE / (freeBlockEntryList[i].size + BLOCK_HEADER_SIZE + BLOCK_FOOTER_SIZE), (size_t)MIN_BLOCKS_PER_ENTRY));  // Set the number of blocks
     }
 
     mutex = new Mutex;  // Create Mutex object
