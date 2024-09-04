@@ -1,17 +1,24 @@
-$interval = 10
-$logFile = "C:\monitoring_log.txt"
+$processName = "subprocess.exe"  # 모니터링할 프로세스 이름
+$interval = 10                   # 기록 간격(초)
+$logFile = "C:\process_monitoring_log.txt"  # 로그 파일 경로
 
 while ($true) {
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $cpuUsage = Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average
-    $memoryUsage = Get-WmiObject Win32_OperatingSystem | Select-Object -ExpandProperty FreePhysicalMemory
-    $totalMemory = Get-WmiObject Win32_ComputerSystem | Select-Object -ExpandProperty TotalPhysicalMemory
-
-    $usedMemory = [math]::round(($totalMemory - $memoryUsage * 1KB) / 1GB, 2)
-    $totalMemoryGB = [math]::round($totalMemory / 1GB, 2)
+    $processes = Get-Process -Name $processName -ErrorAction SilentlyContinue
     
-    $logEntry = "$timestamp - CPU Usage: $cpuUsage%, Memory Usage: $usedMemory GB / $totalMemoryGB GB"
-    Add-Content -Path $logFile -Value $logEntry
-
+    if ($processes) {
+        foreach ($process in $processes) {
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $pid = $process.Id
+            $cpuUsage = $process | Measure-Object -Property CPU -Sum | Select-Object -ExpandProperty Sum
+            $memoryUsage = [math]::round(($process.WorkingSet / 1MB), 2)
+            
+            $logEntry = "$timestamp - PID: $pid, Process: $processName, CPU Usage: $cpuUsage, Memory Usage: $memoryUsage MB"
+            Add-Content -Path $logFile -Value $logEntry
+        }
+    } else {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Add-Content -Path $logFile -Value "$timestamp - Process $processName not found"
+    }
+    
     Start-Sleep -Seconds $interval
 }
