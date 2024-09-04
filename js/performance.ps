@@ -5,25 +5,26 @@ while ($true) {
     # 현재 날짜와 시간
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
-    # 전체 CPU 사용량과 코어 수 측정
+    # 전체 CPU 사용량 측정
     $cpuCounter = Get-Counter '\Processor(_Total)\% Processor Time'
-    $cpuUsage = $cpuCounter.CounterSamples.CookedValue
-    
+    $cpuUsage = [math]::round($cpuCounter.CounterSamples.CookedValue, 2)
+
     # CPU 코어 수 확인
     $numOfCores = (Get-WmiObject Win32_Processor).NumberOfCores | Measure-Object -Minimum | Select-Object -ExpandProperty Minimum
     
     # 각 코어의 사용량을 측정하고 평균 계산
     $coreUsageTotal = 0
     $coreCounter = Get-Counter '\Processor(*)\% Processor Time'
+    $coreCount = $coreCounter.CounterSamples.Count
     foreach ($sample in $coreCounter.CounterSamples) {
         $coreUsageTotal += $sample.CookedValue
     }
     
     # 코어 수가 0이 아닌 경우만 평균 계산
-    if ($numOfCores -gt 0) {
-        $averageCpuUsage = [math]::round($coreUsageTotal / $numOfCores, 2)
+    if ($coreCount -gt 0) {
+        $averageCoreUsage = [math]::round($coreUsageTotal / $coreCount, 2)
     } else {
-        $averageCpuUsage = 0
+        $averageCoreUsage = 0
     }
 
     # 전체 메모리 사용량
@@ -41,7 +42,7 @@ while ($true) {
     }
 
     # 로그 항목 작성
-    $logEntry = "$timestamp - CPU Usage: $averageCpuUsage%, Memory Usage: $memoryUsagePercent% ($usedMemoryMB MB / $totalMemoryMB MB)"
+    $logEntry = "$timestamp - CPU Usage: $averageCoreUsage%, Memory Usage: $memoryUsagePercent% ($usedMemoryMB MB / $totalMemoryMB MB)"
     
     # 로그 파일에 기록
     Add-Content -Path $logFile -Value $logEntry
