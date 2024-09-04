@@ -13,11 +13,22 @@ while ($true) {
             $memoryUsage = [math]::round(($process.WorkingSet / 1MB), 2)
             
             $logEntry = "$timestamp - PID: $pid, Process: $processName, CPU Usage: $cpuUsage, Memory Usage: $memoryUsage MB"
+            
+            # 로그 파일에 기록
             Add-Content -Path $logFile -Value $logEntry
+            
+            # 콘솔에 출력
+            Write-Host $logEntry
         }
     } else {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        Add-Content -Path $logFile -Value "$timestamp - Process $processName not found"
+        $logEntry = "$timestamp - Process $processName not found"
+        
+        # 로그 파일에 기록
+        Add-Content -Path $logFile -Value $logEntry
+        
+        # 콘솔에 출력
+        Write-Host $logEntry
     }
     
     Start-Sleep -Seconds $interval
