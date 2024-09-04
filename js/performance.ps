@@ -5,19 +5,18 @@ while ($true) {
     # 현재 날짜와 시간
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     
-    # 전체 CPU 사용량 (모든 프로세서의 평균 로드)
-    $cpuUsage = Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average
+    # 전체 CPU 사용량
+    $cpuUsage = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
     
     # 전체 메모리 사용량
-    $totalMemory = Get-WmiObject Win32_OperatingSystem | Select-Object -ExpandProperty TotalVisibleMemorySize
-    $freeMemory = Get-WmiObject Win32_OperatingSystem | Select-Object -ExpandProperty FreePhysicalMemory
-    $usedMemory = $totalMemory - $freeMemory
-    $memoryUsage = [math]::round($usedMemory / $totalMemory * 100, 2)
-    $memoryInUseMB = [math]::round($usedMemory / 1MB, 2)
-    $totalMemoryMB = [math]::round($totalMemory / 1MB, 2)
+    $osInfo = Get-WmiObject Win32_OperatingSystem
+    $totalMemoryMB = [math]::round($osInfo.TotalVisibleMemorySize / 1MB, 2)
+    $freeMemoryMB = [math]::round($osInfo.FreePhysicalMemory / 1MB, 2)
+    $usedMemoryMB = $totalMemoryMB - $freeMemoryMB
+    $memoryUsagePercent = [math]::round(($usedMemoryMB / $totalMemoryMB) * 100, 2)
 
     # 로그 항목 작성
-    $logEntry = "$timestamp - CPU Usage: $cpuUsage%, Memory Usage: $memoryUsage% ($memoryInUseMB MB / $totalMemoryMB MB)"
+    $logEntry = "$timestamp - CPU Usage: $cpuUsage%, Memory Usage: $memoryUsagePercent% ($usedMemoryMB MB / $totalMemoryMB MB)"
     
     # 로그 파일에 기록
     Add-Content -Path $logFile -Value $logEntry
