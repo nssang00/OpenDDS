@@ -2,36 +2,29 @@ $interval = 10  # 기록 간격(초)
 $logFile = "C:\system_monitoring_log.txt"  # 로그 파일 경로
 
 while ($true) {
+    # 현재 날짜와 시간
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     
-    # 측정 샘플 수
-    $sampleCount = 10
-    $totalCpuUsage = 0
+    # 전체 CPU 사용량
+    $cpuCounter = Get-Counter '\Processor(_Total)\% Processor Time'
+    $cpuUsage = $cpuCounter.CounterSamples.CookedValue
 
-    for ($i = 0; $i -lt $sampleCount; $i++) {
-        $cpuCounter = Get-Counter '\Processor(_Total)\% Processor Time'
-        $totalCpuUsage += $cpuCounter.CounterSamples.CookedValue
-        Start-Sleep -Milliseconds 100  # 짧은 주기로 측정
-    }
-
-    # 평균 CPU 사용량 계산
-    $averageCpuUsage = [math]::round($totalCpuUsage / $sampleCount, 2)
-    
     # 전체 메모리 사용량
     $osInfo = Get-WmiObject Win32_OperatingSystem
     $totalMemoryMB = [math]::round($osInfo.TotalVisibleMemorySize / 1MB, 2)
     $freeMemoryMB = [math]::round($osInfo.FreePhysicalMemory / 1MB, 2)
-    $usedMemoryMB = $totalMemoryMB - $freeMemoryMB
-    
-    # 메모리 사용량 퍼센트 계산
+
+    # 전체 메모리가 0이 아닐 때만 계산
     if ($totalMemoryMB -gt 0) {
+        $usedMemoryMB = $totalMemoryMB - $freeMemoryMB
         $memoryUsagePercent = [math]::round(($usedMemoryMB / $totalMemoryMB) * 100, 2)
     } else {
+        $usedMemoryMB = 0
         $memoryUsagePercent = 0
     }
 
     # 로그 항목 작성
-    $logEntry = "$timestamp - CPU Usage: $averageCpuUsage%, Memory Usage: $memoryUsagePercent% ($usedMemoryMB MB / $totalMemoryMB MB)"
+    $logEntry = "$timestamp - CPU Usage: $cpuUsage%, Memory Usage: $memoryUsagePercent% ($usedMemoryMB MB / $totalMemoryMB MB)"
     
     # 로그 파일에 기록
     Add-Content -Path $logFile -Value $logEntry
