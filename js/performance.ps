@@ -5,18 +5,11 @@ while ($true) {
     # 현재 날짜와 시간
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
-    # 전체 CPU 사용량 측정
-    $cpuCounter = Get-Counter '\Processor(_Total)\% Processor Time'
-    $cpuUsage = [math]::round($cpuCounter.CounterSamples.CookedValue, 2)
-
-    # CPU 코어 수 확인
-    $numOfCores = (Get-WmiObject Win32_Processor).NumberOfCores | Measure-Object -Minimum | Select-Object -ExpandProperty Minimum
-    
     # 각 코어의 사용량을 측정하고 평균 계산
     $coreUsageTotal = 0
-    $coreCounter = Get-Counter '\Processor(*)\% Processor Time'
-    $coreCount = $coreCounter.CounterSamples.Count
-    foreach ($sample in $coreCounter.CounterSamples) {
+    $cpuCounter = Get-Counter '\Processor(_Total)\% Processor Time'
+    $coreCount = $cpuCounter.CounterSamples.Count
+    foreach ($sample in $cpuCounter.CounterSamples) {
         $coreUsageTotal += $sample.CookedValue
     }
     
