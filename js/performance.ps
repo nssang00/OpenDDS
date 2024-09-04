@@ -1,0 +1,17 @@
+$interval = 10
+$logFile = "C:\monitoring_log.txt"
+
+while ($true) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $cpuUsage = Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average
+    $memoryUsage = Get-WmiObject Win32_OperatingSystem | Select-Object -ExpandProperty FreePhysicalMemory
+    $totalMemory = Get-WmiObject Win32_ComputerSystem | Select-Object -ExpandProperty TotalPhysicalMemory
+
+    $usedMemory = [math]::round(($totalMemory - $memoryUsage * 1KB) / 1GB, 2)
+    $totalMemoryGB = [math]::round($totalMemory / 1GB, 2)
+    
+    $logEntry = "$timestamp - CPU Usage: $cpuUsage%, Memory Usage: $usedMemory GB / $totalMemoryGB GB"
+    Add-Content -Path $logFile -Value $logEntry
+
+    Start-Sleep -Seconds $interval
+}
