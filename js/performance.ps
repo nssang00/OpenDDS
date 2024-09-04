@@ -1,35 +1,30 @@
-$processName = "subprocess.exe"  # 모니터링할 프로세스 이름
-$interval = 10                   # 기록 간격(초)
-$logFile = "C:\process_monitoring_log.txt"  # 로그 파일 경로
+$interval = 10  # 기록 간격(초)
+$logFile = "C:\system_monitoring_log.txt"  # 로그 파일 경로
 
 while ($true) {
-    $processes = Get-Process -Name $processName -ErrorAction SilentlyContinue
+    # 현재 날짜와 시간
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     
-    if ($processes) {
-        foreach ($process in $processes) {
-            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            $pid = $process.Id
-            $cpuUsage = $process | Measure-Object -Property CPU -Sum | Select-Object -ExpandProperty Sum
-            $memoryUsage = [math]::round(($process.WorkingSet / 1MB), 2)
-            
-            $logEntry = "$timestamp - PID: $pid, Process: $processName, CPU Usage: $cpuUsage, Memory Usage: $memoryUsage MB"
-            
-            # 로그 파일에 기록
-            Add-Content -Path $logFile -Value $logEntry
-            
-            # 콘솔에 출력
-            Write-Host $logEntry
-        }
-    } else {
-        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $logEntry = "$timestamp - Process $processName not found"
-        
-        # 로그 파일에 기록
-        Add-Content -Path $logFile -Value $logEntry
-        
-        # 콘솔에 출력
-        Write-Host $logEntry
-    }
+    # 전체 CPU 사용량 (모든 프로세서의 평균 로드)
+    $cpuUsage = Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average
     
+    # 전체 메모리 사용량
+    $totalMemory = Get-WmiObject Win32_OperatingSystem | Select-Object -ExpandProperty TotalVisibleMemorySize
+    $freeMemory = Get-WmiObject Win32_OperatingSystem | Select-Object -ExpandProperty FreePhysicalMemory
+    $usedMemory = $totalMemory - $freeMemory
+    $memoryUsage = [math]::round($usedMemory / $totalMemory * 100, 2)
+    $memoryInUseMB = [math]::round($usedMemory / 1MB, 2)
+    $totalMemoryMB = [math]::round($totalMemory / 1MB, 2)
+
+    # 로그 항목 작성
+    $logEntry = "$timestamp - CPU Usage: $cpuUsage%, Memory Usage: $memoryUsage% ($memoryInUseMB MB / $totalMemoryMB MB)"
+    
+    # 로그 파일에 기록
+    Add-Content -Path $logFile -Value $logEntry
+    
+    # 콘솔에 출력
+    Write-Host $logEntry
+    
+    # 지정된 간격만큼 대기
     Start-Sleep -Seconds $interval
 }
