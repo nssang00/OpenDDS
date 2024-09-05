@@ -1,9 +1,10 @@
 $interval = 10  # 기록 간격(초)
 $logFile = "C:\temp\system_monitoring_log.txt"  # 로그 파일 경로
+$processName = "notepad"  # 조사할 프로세스 이름
 
 # 로그 파일이 없는 경우, 첫 번째 줄에 컬럼 헤더 작성
 if (-not (Test-Path $logFile)) {
-    $header = "Timestamp, CPU Usage (%), Memory Usage (%), Memory In Use (GB), Total Memory (GB), Committed Memory (GB), Handle Count"
+    $header = "Timestamp, CPU Usage (%), Memory Usage (%), Memory In Use (GB), Total Memory (GB), Committed Memory (GB), Handle Count, $processName Handle Count"
     Add-Content -Path $logFile -Value $header
 }
 
@@ -38,11 +39,19 @@ while ($true) {
     $committedMemoryBytes = (Get-Counter '\Memory\Committed Bytes').CounterSamples[0].CookedValue
     $committedMemoryGB = [math]::round($committedMemoryBytes / 1GB, 2)
 
-    # 핸들 수 가져오기
+    # 시스템 전체 핸들 수 가져오기
     $handleCount = (Get-Counter '\Process(_Total)\Handle Count').CounterSamples[0].CookedValue
 
+    # 특정 프로세스의 핸들 수 가져오기
+    $process = Get-Process -Name $processName -ErrorAction SilentlyContinue
+    if ($process) {
+        $processHandleCount = $process.Handle
+    } else {
+        $processHandleCount = "Process not found"
+    }
+
     # 로그 항목 작성 (CSV 형식)
-    $logEntry = "$timestamp, $averageCoreUsage, $memoryUsage, $memoryInUseGB, $totalMemoryGB, $committedMemoryGB, $handleCount"
+    $logEntry = "$timestamp, $averageCoreUsage, $memoryUsage, $memoryInUseGB, $totalMemoryGB, $committedMemoryGB, $handleCount, $processHandleCount"
         
     # 로그 파일에 기록
     Add-Content -Path $logFile -Value $logEntry
