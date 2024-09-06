@@ -50,6 +50,16 @@ while ($true) {
         $processHandleCount = "Process not found"
     }
 
+####
+$processName = "notepad"
+
+# 해당 프로세스의 핸들 수 가져오기
+$handleCount = (Get-Counter "\Process($processName)\Handle Count").CounterSamples[0].CookedValue
+
+# 콘솔에 출력
+Write-Host "Handle Count for $processName: $handleCount"
+####
+
     # 로그 항목 작성 (CSV 형식)
     $logEntry = "$timestamp, $averageCoreUsage, $memoryUsage, $memoryInUseGB, $totalMemoryGB, $committedMemoryGB, $handleCount, $processHandleCount"
         
