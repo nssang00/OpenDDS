@@ -1,3 +1,0 @@
-ignore path _build
-ignore path .venv
-ignore path sphinx_extensions/__pycache__
