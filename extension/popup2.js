@@ -1,12 +1,14 @@
-document.getElementById('download-btn').addEventListener('click', function() {
-  chrome.runtime.sendMessage({ action: 'startDownload' }, function(response) {
-    const m3u8Url = response.url;
+document.addEventListener('DOMContentLoaded', () => {
+  const streamCountElement = document.getElementById('stream-count');
+  const openPlayerButton = document.getElementById('open-player');
 
-    if (m3u8Url) {
-      // download.html 페이지에서 다운로드 처리
-      chrome.tabs.create({ url: chrome.runtime.getURL('download.html?url=' + encodeURIComponent(m3u8Url)) });
-    } else {
-      alert('No active stream found!');
-    }
+  // 백그라운드에서 현재 감지된 스트림 수를 받아와서 표시
+  chrome.runtime.sendMessage({ action: 'getStreamCount' }, (response) => {
+    streamCountElement.textContent = response.count;
+  });
+
+  // 버튼 클릭 시 새 탭 열거나 기존 탭을 업데이트
+  openPlayerButton.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'openPlayerTab' });
   });
 });
