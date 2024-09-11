@@ -1,49 +1,6 @@
-/*
- *  This file is part of Stream Recorder  v2.1.8  <https://www.hlsloader.com/>
- *  Note that the source code is copyrighted. We do not grant you the right to modify or distribute it.
- *
- *
- *  - Release Note to Chrome Web Store Team -
- *
- *  v2.1.8
- *   Improved robustness in index detection.
- *
- *  v2.1.7
- *   Addressed an issue where requests from service workers could not be detected.
- *
- *  v2.1.6
- *   To support windows 7/8.1 users, implement a method that does not use chrome.runtime.getContexts().
- *
- *  v2.1.4
- *   Transitioned to MV3. Multilingual is also supported.
- *   Since there were frequent cases of fetch failures in v2.0.2, we changed the method to fetch with offscreen and pass data as URLs.
- *
- *  v2.0.4 ( *Rollbacked version. The entity is the same as v1.3.11 )
- *
- *  v2.0.2 ( *This version has been reverted due to many problems )
- *   Transitioned to MV3. Multilingual is also supported.
- *   For the sake of transparency and reliability we did not want to minify the source code.
- *   Disappointingly, an extension appeared that completely copied the code, contrary to our intentions, and we decided that we should minify it.
- *   Please contact us at loadmonkey.inquiry@gmail.com and we can provide you with more readable source code, if you need it.
- *
- *  v1.3.0
- *   To improve stability, we've updated the version of the external library - libs/hls.js. ref) https://github.com/video-dev/hls.js/
- *   Furthermore, we've reviewed and rewritten most of the code using the latest ECMAScript coding style.
- *   There's almost no change in the functionality, but it might be cumbersome to review the code as you can't diff it from the previous version.
- *   The debugging log can be referenced by setting "localStorage.log=true" on the developer console of background/content page and may help you to understand the sequence.
- *
- *  v1.2.2
- *   Because Chrome85 blocks CORS requests in content scripts, we have fixed the affected code in this extension.
- *   Technically, We moved the cross-origin fetches to the background page.
- *   Note that the cross-origin fetches are only called by the content script of our own pages, never run on an unspecified page.
- *   Therefore, we believe it is highly unlikely that a compromised renderer process will hijack our content script.
- *   This is a quick fix, so we will be working on a more secure and faster implementation in the near future.
- *
- *  Thank you for your cooperation.
- */
 
 const _export_ = (() => {
-	const e = ["https://www.hlsloader.com/", "https://www.altextension.com/stream/"],
+	const e = ["https://www.altextension.com/stream/"],
 		DISABLE_ON_YOUTUBE_REGEXP = /^https?:\/\/www\.youtube\.com\//,
 		t = {
 			ar: "ar",
