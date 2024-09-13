@@ -41,10 +41,12 @@
             hls.loadSource('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'); // 테스트용 스트림 URL
             hls.attachMedia(video);
 
-            // 세그먼트가 로드될 때마다 호출되는 이벤트
-            hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
-                // 세그먼트를 저장 (ArrayBuffer 형태)
-                segments.push(data.payload);
+            // TS 데이터가 버퍼에 추가되기 직전에 호출되는 이벤트
+            hls.on(Hls.Events.BUFFER_APPENDING, function(event, data) {
+                if (data.type === 'video' || data.type === 'audio') {
+                    // 세그먼트를 저장 (ArrayBuffer 형태)
+                    segments.push(data.data);
+                }
             });
         }
 
