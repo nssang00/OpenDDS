@@ -15,8 +15,15 @@
 
     <!-- 다운로드 및 변환 버튼들 -->
     <div>
-        <button id="convertToMP4Btn">Convert to MP4</button>
-        <button id="mergeTSBtn">Merge as TS</button>
+        <label>
+            <input type="radio" name="conversion" value="mp4" checked>
+            Convert to MP4
+        </label>
+        <label>
+            <input type="radio" name="conversion" value="ts">
+            Merge as TS
+        </label>
+        <br>
         <button id="downloadBtn">Download</button>
         <button id="startAutoSaveBtn">Start Auto Save</button>
         <button id="stopAutoSaveBtn">Stop Auto Save</button>
@@ -26,9 +33,6 @@
         // 세그먼트를 저장할 배열
         let segments = [];
         let mp4data = [];
-
-        // 변환 방식 플래그 (true: MP4, false: TS)
-        let convertToMP4Flag = true; // 기본적으로 MP4로 변환
 
         // Auto-Save 관련 변수
         let autoSaveInterval = null;
@@ -57,6 +61,17 @@
             // MP4 데이터 저장 배열 초기화
             mp4data = [];
 
+            // `data` 이벤트 핸들러
+            transmuxer.on('data', (segment) => {
+                mp4data.push(segment.initSegment);
+                mp4data.push(segment.data);
+            });
+
+            // `done` 이벤트 핸들러
+            transmuxer.on('done', () => {
+                downloadMP4();  // 변환이 완료된 후에 다운로드 실행
+            });
+
             // 각 세그먼트를 transmuxer로 푸시
             segments.forEach((segment) => {
                 transmuxer.push(new Uint8Array(segment));
@@ -64,15 +79,6 @@
 
             // 변환 후 flush 호출
             transmuxer.flush();
-
-            // 변환된 MP4 데이터를 mp4data에 저장
-            transmuxer.on('data', (segment) => {
-                mp4data.push(segment.initSegment);
-                mp4data.push(segment.data);
-            });
-
-            // 변환이 완료된 후에 다운로드 실행
-            transmuxer.on('done', downloadMP4);
         }
 
         // MP4 파일을 Blob으로 만들어 다운로드
@@ -104,22 +110,14 @@
 
         // 다운로드 버튼 핸들러
         document.getElementById('downloadBtn').addEventListener('click', () => {
-            if (convertToMP4Flag) {
+            // 선택된 라디오 버튼의 값을 가져오기
+            const selectedConversion = document.querySelector('input[name="conversion"]:checked').value;
+
+            if (selectedConversion === 'mp4') {
                 convertToMP4();  // MP4로 변환 후 다운로드
             } else {
                 mergeAndDownloadTS();  // TS 병합 후 다운로드
             }
-        });
-
-        // 변환 방식 선택 (예: 버튼을 통해 플래그 값 설정)
-        document.getElementById('convertToMP4Btn').addEventListener('click', () => {
-            convertToMP4Flag = true;  // MP4 변환
-            alert("MP4로 변환하여 저장합니다.");
-        });
-
-        document.getElementById('mergeTSBtn').addEventListener('click', () => {
-            convertToMP4Flag = false;  // TS 병합
-            alert("TS 세그먼트를 병합하여 저장합니다.");
         });
 
         // 자동 저장 기능 시작
