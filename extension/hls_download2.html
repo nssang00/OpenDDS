@@ -31,6 +31,38 @@
         let autoSaveInterval = null;
         const autoSaveDuration = 600000; // 10분마다 자동 저장 (600,000ms = 10분)
 
+// 커스텀 프래그먼트 로더 (TS 세그먼트 처리)
+class CustomFragLoader extends Hls.DefaultConfig.loader {
+    constructor(config) {
+        super(config);
+    }
+
+    load(context, config, callbacks) {
+        // 'context.frag'가 프래그먼트 관련 데이터를 담고 있음
+        if (context.frag) {
+            console.log('Custom Frag Loader for TS segment:', context.frag.url);
+        }
+
+        // 기본 프래그먼트 로딩 유지
+        super.load(context, config, {
+            onSuccess: (response, stats, context) => {
+                if (context.frag) {
+                    const segment = new Uint8Array(response.data);
+                    console.log('TS Segment loaded:', segment);
+
+                    // TS 세그먼트 데이터를 저장
+                    segments.video.push(segment);
+                }
+
+                // 성공 콜백 처리
+                callbacks.onSuccess(response, stats, context);
+            },
+            onError: callbacks.onError,
+            onTimeout: callbacks.onTimeout,
+        });
+    }
+}
+        
         // 커스텀 프래그먼트 로더 (TS 세그먼트 처리)
         class CustomFragLoader extends Hls.DefaultConfig.loader {
             constructor(config) {
