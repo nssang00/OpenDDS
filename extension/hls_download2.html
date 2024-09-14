@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HLS Stream Downloader with Auto-Save</title>
+    <title>HLS Stream Downloader with Custom Fragment Loader</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/mux.js@latest"></script>
 </head>
 <body>
-    <h1>HLS Stream Downloader with Auto-Save</h1>
+    <h1>HLS Stream Downloader with Custom Fragment Loader</h1>
 
     <!-- 비디오 플레이어 -->
     <video id="video" controls width="640" height="360"></video>
@@ -23,31 +23,38 @@
     </div>
 
     <script>
+        // 세그먼트를 저장할 배열
         const segments = {
             video: [],
             audio: []
         };
         let autoSaveInterval = null;
-        const autoSaveDuration = 600000; // 10분마다 자동 저장
+        const autoSaveDuration = 600000; // 10분마다 자동 저장 (600,000ms = 10분)
 
-        // CustomLoader를 통한 TS 세그먼트 읽기
-        class CustomLoader extends Hls.DefaultConfig.loader {
+        // 커스텀 프래그먼트 로더 (TS 세그먼트 처리)
+        class CustomFragLoader extends Hls.DefaultConfig.loader {
             constructor(config) {
                 super(config);
             }
 
             load(context, config, callbacks) {
-                const { frag } = context;
+                if (context.type === 'fragment') {
+                    console.log('Custom fragLoader for TS segment:', context.frag.url);
+                }
+
+                // 기본 프래그먼트 로딩 유지
                 super.load(context, config, {
                     onSuccess: (response, stats, context) => {
-                        // TS 세그먼트를 Uint8Array로 변환하여 저장
-                        const segment = new Uint8Array(response.data);
-                        if (frag.type === 'audio') {
-                            segments.audio.push(segment);
-                        } else if (frag.type === 'video') {
+                        if (context.type === 'fragment') {
+                            const segment = new Uint8Array(response.data);
+                            console.log('TS Segment loaded:', segment);
+
+                            // TS 세그먼트 데이터를 저장
                             segments.video.push(segment);
                         }
-                        callbacks.onSuccess(response, stats, context); // 기본 성공 콜백 호출
+
+                        // 성공 콜백 처리
+                        callbacks.onSuccess(response, stats, context);
                     },
                     onError: callbacks.onError,
                     onTimeout: callbacks.onTimeout,
@@ -59,15 +66,10 @@
         if (Hls.isSupported()) {
             const video = document.getElementById('video');
             const hls = new Hls({
-                loader: CustomLoader // CustomLoader 사용
+                fragLoader: CustomFragLoader // 커스텀 프래그먼트 로더 사용
             });
             hls.loadSource('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'); // 테스트용 스트림 URL
             hls.attachMedia(video);
-
-            // 세그먼트 로드 완료 시 이벤트 핸들러
-            hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
-                console.log('Fragment loaded:', data.frag.sn);
-            });
         }
 
         // Mux.js를 사용하여 MP4 파일로 변환
@@ -84,21 +86,15 @@
                 downloadMP4(mp4data);
             });
 
-            transmuxer.on('error', (error) => {
-                console.error('Transmuxer Error:', error);
-            });
-
-            // 비디오 및 오디오 세그먼트를 transmuxer로 푸시
-            Object.keys(segments).forEach((type) => {
-                segments[type].forEach((segment) => {
-                    transmuxer.push(segment); // Uint8Array로 푸시
-                });
+            // 비디오 세그먼트를 transmuxer로 푸시
+            segments.video.forEach((segment) => {
+                transmuxer.push(segment);
             });
 
             transmuxer.flush();
         }
 
-        // MP4 파일을 Blob으로 만들어 다운로드
+        // MP4 파일 다운로드
         function downloadMP4(mp4data) {
             const blob = new Blob(mp4data, { type: 'video/mp4' });
             const url = URL.createObjectURL(blob);
@@ -110,13 +106,10 @@
             document.body.removeChild(a);
         }
 
-        // TS 파일을 병합하여 다운로드
+        // TS 파일 병합 후 다운로드
         function mergeAndDownloadTS() {
             const videoBlob = new Blob(segments.video, { type: 'video/mp2t' });
-            const audioBlob = new Blob(segments.audio, { type: 'audio/mp2t' });
-            const combinedBlob = new Blob([videoBlob, audioBlob], { type: 'video/mp2t' });
-
-            const url = URL.createObjectURL(combinedBlob);
+            const url = URL.createObjectURL(videoBlob);
             const a = document.createElement('a');
             a.href = url;
             a.download = 'live_stream.ts';
@@ -129,23 +122,23 @@
         document.getElementById('downloadBtn').addEventListener('click', () => {
             const format = document.querySelector('input[name="format"]:checked').value;
             if (format === 'mp4') {
-                convertToMP4();  // MP4로 변환 후 다운로드
+                convertToMP4();
             } else {
-                mergeAndDownloadTS();  // TS 병합 후 다운로드
+                mergeAndDownloadTS();
             }
         });
 
-        // 자동 저장 시작
+        // 자동 저장 기능
         function startAutoSave() {
             if (!autoSaveInterval) {
                 autoSaveInterval = setInterval(() => {
+                    console.log("자동으로 TS 파일 저장 중...");
                     mergeAndDownloadTS();
                 }, autoSaveDuration);
                 alert("자동 저장이 시작되었습니다. 10분마다 TS 파일이 저장됩니다.");
             }
         }
 
-        // 자동 저장 중지
         function stopAutoSave() {
             if (autoSaveInterval) {
                 clearInterval(autoSaveInterval);
@@ -154,15 +147,9 @@
             }
         }
 
-        // 자동 저장 시작 버튼 핸들러
-        document.getElementById('startAutoSaveBtn').addEventListener('click', () => {
-            startAutoSave();
-        });
-
-        // 자동 저장 중지 버튼 핸들러
-        document.getElementById('stopAutoSaveBtn').addEventListener('click', () => {
-            stopAutoSave();
-        });
+        // 자동 저장 시작 및 중지 버튼 핸들러
+        document.getElementById('startAutoSaveBtn').addEventListener('click', startAutoSave);
+        document.getElementById('stopAutoSaveBtn').addEventListener('click', stopAutoSave);
     </script>
 </body>
 </html>
