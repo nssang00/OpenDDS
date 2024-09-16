@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M3U8 Downloader</title>
+    <script src="https://cdn.jsdelivr.net/npm/m3u8-parser@5.0.0/dist/m3u8-parser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mux.js@6.0.0/dist/mux.js"></script>
+</head>
+<body>
+    <h1>M3U8 Stream Downloader</h1>
+    <input type="text" id="m3u8Url" placeholder="Enter m3u8 URL">
+    <button onclick="startDownload()">Download</button>
+
+    <script>
+        async function parseM3U8(url) {
+            const response = await fetch(url);
+            const m3u8Text = await response.text();
+
+            const parser = new m3u8Parser.Parser();
+            parser.push(m3u8Text);
+            parser.end();
+
+            const highestQualityPlaylist = parser.manifest.playlists
+                .reduce((prev, current) => (prev.attributes.BANDWIDTH > current.attributes.BANDWIDTH ? prev : current));
+
+            return highestQualityPlaylist.uri; // 가장 높은 품질의 m3u8 URI 반환
+        }
+
+        async function downloadTSFiles(playlistUrl) {
+            const response = await fetch(playlistUrl);
+            const m3u8Text = await response.text();
+
+            const parser = new m3u8Parser.Parser();
+            parser.push(m3u8Text);
+            parser.end();
+
+            const segments = parser.manifest.segments;
+
+            const tsFiles = [];
+            for (const segment of segments) {
+                const tsResponse = await fetch(segment.uri);
+                const tsData = await tsResponse.arrayBuffer();
+                tsFiles.push(tsData);
+            }
+            return tsFiles;
+        }
+
+        function mergeTSFiles(tsFiles) {
+            let mergedArray = new Uint8Array(tsFiles.reduce((acc, ts) => acc + ts.byteLength, 0));
+            let offset = 0;
+
+            for (const ts of tsFiles) {
+                mergedArray.set(new Uint8Array(ts), offset);
+                offset += ts.byteLength;
+            }
+
+            // 병합된 TS 파일을 Blob으로 변환
+            const tsBlob = new Blob([mergedArray], { type: 'video/mp2t' });
+            return tsBlob;
+        }
+
+        function downloadBlob(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url); // 메모리 해제
+        }
+
+        async function convertTSToMP4(tsFiles) {
+            const transmuxer = new muxjs.mp4.Transmuxer();
+            const mp4Segments = [];
+
+            transmuxer.on('data', (segment) => {
+                mp4Segments.push(segment);
+            });
+
+            for (const ts of tsFiles) {
+                transmuxer.push(new Uint8Array(ts));
+            }
+
+            transmuxer.flush();
+
+            const mp4Blob = new Blob(mp4Segments.map(segment => segment.initSegment.concat(segment.data)), { type: 'video/mp4' });
+            return mp4Blob;
+        }
+
+        async function startDownload() {
+            const m3u8Url = document.getElementById('m3u8Url').value;
+            const highestQualityM3u8 = await parseM3U8(m3u8Url);
+
+            const tsFiles = await downloadTSFiles(highestQualityM3u8);
+
+            // TS 파일 병합 및 다운로드
+            const mergedTSBlob = mergeTSFiles(tsFiles);
+            downloadBlob(mergedTSBlob, 'video.ts');
+
+            // MP4로 변환 및 다운로드
+            const mp4Blob = await convertTSToMP4(tsFiles);
+            downloadBlob(mp4Blob, 'video.mp4');
+        }
+    </script>
+</body>
+</html>
