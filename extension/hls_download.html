@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLS Stream Downloader with Custom Fragment Loader</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mux.js@latest"></script>
+</head>
+<body>
+    <h1>HLS Stream Downloader with Custom Fragment Loader</h1>
+
+    <!-- 비디오 플레이어 -->
+    <video id="video" controls width="640" height="360"></video>
+
+    <!-- 다운로드 및 변환 버튼들 -->
+    <div>
+        <label><input type="radio" name="format" value="mp4" checked> MP4</label>
+        <label><input type="radio" name="format" value="ts"> TS</label>
+        <button id="downloadBtn">Download</button>
+        <button id="startAutoSaveBtn">Start Auto Save</button>
+        <button id="stopAutoSaveBtn">Stop Auto Save</button>
+    </div>
+
+    <script>
+        // 세그먼트를 저장할 배열
+        const segments = {
+            video: [],
+            audio: []
+        };
+        let autoSaveInterval = null;
+        const autoSaveDuration = 600000; // 10분마다 자동 저장 (600,000ms = 10분)
+        let totalDuration = 0; // 전체 스트림의 총 길이 (초 단위)
+
+
+// 커스텀 프래그먼트 로더 (TS 세그먼트 처리)
+class CustomFragLoader extends Hls.DefaultConfig.loader {
+    constructor(config) {
+        super(config);
+    }
+
+    load(context, config, callbacks) {
+        // 'context.frag'가 프래그먼트 관련 데이터를 담고 있음
+        if (context.frag) {
+            console.log('Custom Frag Loader for TS segment:', context.frag.url);
+        }
+
+        // 기본 프래그먼트 로딩 유지
+        super.load(context, config, {
+                    onSuccess: (response, stats, context) => {
+                        if (context.frag) {
+                            const segment = new Uint8Array(response.data).slice();
+                            console.log('TS Segment loaded:', segment);
+
+                            // TS 세그먼트 데이터를 저장
+                            segments.video.push(segment);
+
+                            // 각 세그먼트의 duration을 계산하여 총 길이 업데이트 (초 단위로 업데이트)
+                            totalDuration += context.frag.duration;
+                        }
+
+                        // 성공 콜백 처리
+                        callbacks.onSuccess(response, stats, context);
+                    },
+                    onError: callbacks.onError,
+                    onTimeout: callbacks.onTimeout,
+                });
+    }
+}
+       
+
+        // HLS.js 설정 및 초기화
+        if (Hls.isSupported()) {
+            const video = document.getElementById('video');
+            const hls = new Hls({
+                fLoader: CustomFragLoader // 커스텀 프래그먼트 로더 사용
+            });
+            hls.loadSource('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'); // 테스트용 스트림 URL
+            hls.attachMedia(video);
+
+
+        }
+
+        // MP4 파일의 duration을 수정하는 함수
+        function fixFileDuration(data, duration) {
+            // duration을 타임스케일로 변환 (90000이 기본 타임스케일)
+            let mvhdBoxDuration = duration * 90000;
+
+            function getBoxDuration(data, duration, index) {
+                let boxDuration = "";
+                index += 16;    // 타임스케일의 위치
+                boxDuration += data[index].toString(16);
+                boxDuration += data[++index].toString(16);
+                boxDuration += data[++index].toString(16);
+                boxDuration += data[++index].toString(16);
+                boxDuration = parseInt(boxDuration, 16);
+                boxDuration *= duration;
+                return boxDuration;
+            }
+
+            for (let i = 0; i < data.length; i++) {
+                // mvhd 박스 수정
+                if (data[i] == 0x6D && data[i + 1] == 0x76 && data[i + 2] == 0x68 && data[i + 3] == 0x64) {
+                    mvhdBoxDuration = getBoxDuration(data, duration, i);   // 타임스케일 추출
+                    i += 20;    // mvhd 박스에서 duration의 위치로 이동
+                    data[i] = (mvhdBoxDuration & 0xFF000000) >> 24;
+                    data[++i] = (mvhdBoxDuration & 0xFF0000) >> 16;
+                    data[++i] = (mvhdBoxDuration & 0xFF00) >> 8;
+                    data[++i] = mvhdBoxDuration & 0xFF;
+                    continue;
+                }
+                // tkhd 박스 수정
+                if (data[i] == 0x74 && data[i + 1] == 0x6B && data[i + 2] == 0x68 && data[i + 3] == 0x64) {
+                    i += 24;    // tkhd 박스에서 duration의 위치로 이동
+                    data[i] = (mvhdBoxDuration & 0xFF000000) >> 24;
+                    data[++i] = (mvhdBoxDuration & 0xFF0000) >> 16;
+                    data[++i] = (mvhdBoxDuration & 0xFF00) >> 8;
+                    data[++i] = mvhdBoxDuration & 0xFF;
+                    continue;
+                }
+                // mdhd 박스 수정
+                if (data[i] == 0x6D && data[i + 1] == 0x64 && data[i + 2] == 0x68 && data[i + 3] == 0x64) {
+                    let mdhdBoxDuration = getBoxDuration(data, duration, i);   // 타임스케일 추출
+                    i += 20;    // mdhd 박스에서 duration의 위치로 이동
+                    data[i] = (mdhdBoxDuration & 0xFF000000) >> 24;
+                    data[++i] = (mdhdBoxDuration & 0xFF0000) >> 16;
+                    data[++i] = (mdhdBoxDuration & 0xFF00) >> 8;
+                    data[++i] = mdhdBoxDuration & 0xFF;
+                    continue;
+                }
+                // mdat 박스가 시작되면 수정 끝
+                if (data[i] == 0x6D && data[i + 1] == 0x64 && data[i + 2] == 0x61 && data[i + 3] == 0x74) {
+                    return data;
+                }
+            }
+            return data;
+        }
+
+        // Mux.js를 사용하여 MP4 파일로 변환
+        function convertToMP4() {
+            const transmuxer = new muxjs.mp4.Transmuxer();
+            let mp4data = [];
+
+            transmuxer.on('data', (segment) => {
+                let data = new Uint8Array(segment.initSegment.byteLength + segment.data.byteLength);
+                data.set(segment.initSegment, 0);
+                data.set(segment.data, segment.initSegment.byteLength);
+
+                // MP4 파일의 duration 수정
+                const fixedData = fixFileDuration(data, totalDuration);
+                mp4data.push(fixedData);
+            });
+
+            transmuxer.on('done', () => {
+                downloadMP4(mp4data);
+            });
+
+            // 비디오 세그먼트를 transmuxer로 푸시
+            segments.video.forEach((segment) => {
+                transmuxer.push(segment);
+            });
+
+            transmuxer.flush();
+        }
+
+        // MP4 파일 다운로드
+        function downloadMP4(mp4data) {
+            const blob = new Blob(mp4data, { type: 'video/mp4' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'live_stream.mp4';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // TS 파일 병합 후 다운로드
+        function mergeAndDownloadTS() {
+            const videoBlob = new Blob(segments.video, { type: 'video/mp2t' });
+            const url = URL.createObjectURL(videoBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'live_stream.ts';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // 다운로드 버튼 핸들러
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const format = document.querySelector('input[name="format"]:checked').value;
+            if (format === 'mp4') {
+                convertToMP4();
+            } else {
+                mergeAndDownloadTS();
+            }
+        });
+
+        // 자동 저장 기능
+        function startAutoSave() {
+            if (!autoSaveInterval) {
+                autoSaveInterval = setInterval(() => {
+                    console.log("자동으로 TS 파일 저장 중...");
+                    mergeAndDownloadTS();
+                }, autoSaveDuration);
+                alert("자동 저장이 시작되었습니다. 10분마다 TS 파일이 저장됩니다.");
+            }
+        }
+
+        function stopAutoSave() {
+            if (autoSaveInterval) {
+                clearInterval(autoSaveInterval);
+                autoSaveInterval = null;
+                alert("자동 저장이 중지되었습니다.");
+            }
+        }
+
+        // 자동 저장 시작 및 중지 버튼 핸들러
+        document.getElementById('startAutoSaveBtn').addEventListener('click', startAutoSave);
+        document.getElementById('stopAutoSaveBtn').addEventListener('click', stopAutoSave);
+    </script>
+</body>
+</html>
