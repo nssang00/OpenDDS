@@ -273,6 +273,7 @@ export default class MapLoader {
               'icon-displacement': offset,
             }
           };
+          break;	
         default:
           break;
       }
@@ -286,30 +287,30 @@ export default class MapLoader {
 
   // Line Symbolizer 객체를 OpenLayers Line 스타일로 변환하는 함수
   toOlLineSymbolizer(symbolizer) {
-    const lineJoins = ['miter', 'bevel', 'round'];
-    const lineCaps = ['butt', 'square', 'round'];
+    const lineJoins = ['miter', 'bevel', 'round'];//JoinType
+    const lineCaps = ['butt', 'square', 'round'];//StartCap
 
     let olSymbolizer;
     switch (symbolizer.type) {
       case "SIMPLE":
         olSymbolizer = {
           style: {
-            'stroke-color': this.toRGBAArray(symbolizer.Color),
-            'stroke-width': symbolizer.Width,
-            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],
-            'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],
+            'stroke-color': this.toRGBAArray(symbolizer.Color),//Color
+            'stroke-width': symbolizer.Width,//Width
+            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//JoinType
+            'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//StartCap, EndCap
           }
         };
         break;
       case "DASH":
         olSymbolizer = {
           style: {
-            'stroke-color': this.toRGBAArray(symbolizer.Color),
-            'stroke-width': symbolizer.Width,
-            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],
-            'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],
-            'stroke-line-dash-offset': symbolizer.DashOffset,
-            'stroke-line-dash': symbolizer.Dash.map(Number),
+            'stroke-color': this.toRGBAArray(symbolizer.Color),//Color
+            'stroke-width': symbolizer.Width,//Width
+            'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//JoinType
+            'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//DashCap
+            'stroke-line-dash-offset': symbolizer.DashOffset,//DashOffset
+            'stroke-line-dash': symbolizer.Dash.map(Number),//Dash, DashItem
           }
         };
         break;
@@ -318,26 +319,27 @@ export default class MapLoader {
           olSymbolizer = {
             symbol: {
               'type': 'picture',
-              'picture-texture-line': false,
+              'picture-texture-line': false,//TextureLine
             },
             style: {
-              'stroke-pattern-src': symbolizer.Picture,
-              'stroke-width': Number(symbolizer.Width),
-              'stroke-pattern-start-offset': Number(symbolizer.StartPos),
-              'stroke-pattern-spacing': Number(symbolizer.Interval),
+              'stroke-pattern-src': symbolizer.Picture,//Picture
+              'stroke-width': Number(symbolizer.Width),//Width
+              'stroke-pattern-start-offset': Number(symbolizer.StartPos),//StartPos
+              'stroke-pattern-spacing': Number(symbolizer.Interval),//Interval
             }
           };
-        } else if (symbolizer.TextureLine === "true") {
+        } else if (symbolizer.TextureLine === "true") {//StrokePattern, stylefunction, canvas
           olSymbolizer = {
             symbol: {
               'type': 'picture',
-              'picture-texture-line': true,
+              'picture-texture-line': true,//TextureLine
             },
             style: {
-              'stroke-pattern-src': symbolizer.Picture,
+              'stroke-pattern-src': symbolizer.Picture,//Picture
+              //'icon-src': symbolizer.Picture,//Picture	
               'stroke-width': Number(symbolizer.Width),
-              'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],
-              'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],
+              'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//Width
+              'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//DashCap, 0:butt, 1:round
             }
           };
         }
@@ -346,14 +348,14 @@ export default class MapLoader {
         olSymbolizer = {
           symbol: {
             'type': 'vertical',
-            'vertical-color': `rgba(${this.toRGBAArray(symbolizer.Color).join(', ')})`,
-            'vertical-width': Number(symbolizer.Width),
-            'vertical-vertical-type': Number(symbolizer.VerticalType),
-            'vertical-left-length': Number(symbolizer.leftLength),
-            'vertical-right-length': Number(symbolizer.rightLength),
-            'vertical-line-cap': Number(symbolizer?.StartCap),
-            'vertical-start-pos': Number(symbolizer?.StartPos),
-            'vertical-interval': Number(symbolizer?.Interval),        
+            'vertical-color': `rgba(${this.toRGBAArray(symbolizer.Color).join(', ')})`,//Color
+            'vertical-width': Number(symbolizer.Width),//Width
+            'vertical-vertical-type': Number(symbolizer.VerticalType),//VerticalType
+            'vertical-left-length': Number(symbolizer.leftLength),//LeftLength
+            'vertical-right-length': Number(symbolizer.rightLength),//RightLength
+            'vertical-line-cap': Number(symbolizer?.StartCap),//StartCap, EndCap
+            'vertical-start-pos': Number(symbolizer?.StartPos),//StartPos
+            'vertical-interval': Number(symbolizer?.Interval),//Interval        
           },                        
         };
         break;
@@ -361,11 +363,11 @@ export default class MapLoader {
         olSymbolizer = {
           symbol: {
             'type': 'double-line',
-            'double-line-color': this.toRGBAArray(symbolizer.Color),
-            'double-line-width': Number(symbolizer.Width),
-            'double-line-type': Number(symbolizer.Type),
-            'double-line-space': Number(symbolizer.Space),
-            'double-line-line-join': lineJoins[Number(symbolizer.JoinType)],
+            'double-line-color': this.toRGBAArray(symbolizer.Color),//Color
+            'double-line-width': Number(symbolizer.Width),//Width
+            'double-line-type': Number(symbolizer.Type),//Type
+            'double-line-space': Number(symbolizer.Space),//Space
+            'double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//JoinType, 0:miter, 1:bevel, 2:round
           },  
         };
         break;
@@ -437,12 +439,12 @@ export default class MapLoader {
       },
       style: {
         'text-value': ['var', 'text'],
-        'text-font': (bold ? 'bold ' : '') + (italic ? 'italic ' : '') + size + 'px ' + font,
-        'text-fill-color': this.toRGBAArray(labelStyleObj.Color),
-        'text-align': align,
-        'text-baseline': baseline,
-        'text-offset-x': offsetX,
-        'text-offset-y': offsetY,
+        'text-font': (bold ? 'bold ' : '') + (italic ? 'italic ' : '') + size + 'px ' + font,//Font, Size, Bold, Italic
+        'text-fill-color': this.toRGBAArray(labelStyleObj.Color),//Color
+        'text-align': align,//Align
+        'text-baseline': baseline,//Align
+        'text-offset-x': offsetX,//OffsetX
+        'text-offset-y': offsetY,//OffsetY
       }
     };
 
