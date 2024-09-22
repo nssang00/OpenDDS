@@ -102,6 +102,20 @@ const layerUrl = "path/to/LAYER.xml";
 
 const mapLoader = new MapLoader();
 
+class MapStyler {
+  parseMapStyle(xmlText) {
+    throw new Error("parseMapStyle must be implemented by strategy");
+  }
+
+  parseMapLayer(xmlText) {
+    throw new Error("parseMapLayer must be implemented by strategy");
+  }
+
+  applyMap(map, styles, layers) {
+    throw new Error("applyMap must be implemented by strategy");
+  }
+}
+
 (async () => {
   try {
     // Load the map
