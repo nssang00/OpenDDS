@@ -106,10 +106,11 @@ const xmlMapLayer = `<MapLayer Version="1.0">
 	</Group>  
 </MapLayer>`;
 export default class MapLoader {
-  constructor() {
+  constructor(mapStyler) {
     this.parsedStyles = null;
     this.parsedLayers = null;
-    this.olStyles = null;
+    this.mapStyler = mapStyler;
+    //this.olStyles = null;
   }
 
   async loadMap(styleUrl, layerUrl) {
@@ -128,6 +129,10 @@ export default class MapLoader {
     } catch (error) {
       console.error('Error loading map:', error);
     }
+  }
+
+  applyMap() {
+	  //this.mapStyler.processMapStyle(this.parsedStyles);
   }
 
   parseMap(styleXmlString, layerXmlString) {
@@ -537,6 +542,8 @@ export default class MapLoader {
   }
 
 }
+//const mapStyler = new OlMapStyler(map);
+//const mapLoader = new MapLoader(mapStyler);
 const mapLoader = new MapLoader();
 
 const styles = mapLoader.parseMapStyle(xmlMapStyle);
