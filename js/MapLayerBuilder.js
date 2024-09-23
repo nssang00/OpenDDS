@@ -388,22 +388,21 @@ export default class MapLayerBuilder {
 
     const resolutions = layerObj.Map.split(',').map(v => scaleMap[v.trim()]);
 
-    const olFilters = [
+    const baseFilters = [
       'all',
       ['<=', ['resolution'], Math.max(...resolutions)],
       ['>', ['resolution'], Math.min(...resolutions)],
     ];
 
-    const olStyles = {};
-    for (const featureObj of layerObj.features) {
-      const { styleNames, filters } = this.toOlFeature(featureObj);
-      olFilters.push(...filters);
-    }
-
     return {
       source: layerObj.SHPSource,
-      filters: olFilters,
-      styles: olStyles
+      rules: layerObj.features.map(featureObj => {
+        const { styleNames, filters } = this.toOlFeature(featureObj);
+        return {
+          styleNames,
+          filter: [...baseFilters, ...filters]
+        };
+      })
     };
   }
 
