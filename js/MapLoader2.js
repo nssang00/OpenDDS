@@ -105,7 +105,7 @@ const xmlMapLayer = `<MapLayer Version="1.0">
 	</Layer>	    
 	</Group>  
 </MapLayer>`;
-export default class MapLoader {
+class MapLoader {
   constructor(mapStyler) {
     this.parsedStyles = null;
     this.parsedLayers = null;
@@ -495,27 +495,26 @@ export default class MapLoader {
 
     const resolutions = layerObj.Map.split(',').map(v => scaleMap[v.trim()]);
 
-    const olFilters = [
+    const baseFilters = [
       'all',
       ['<=', ['resolution'], Math.max(...resolutions)],
       ['>', ['resolution'], Math.min(...resolutions)],
     ];
 
-    const olStyles = {};
-    for (const featureObj of layerObj.features) {
-      const { style, filter } = this.toOlFeature(featureObj);
-      olFilters.push(...filter);
-    }
-
     return {
       source: layerObj.SHPSource,
-      filters: olFilters,
-      styles: olStyles
+      rules: layerObj.features.map(featureObj => {
+        const { styleNames, filters } = this.toOlFeature(featureObj);
+        return {
+          styleNames,
+          filter: [...baseFilters, ...filters]
+        };
+      })
     };
   }
 
   toOlFeature(featureObj) {
-    const styles = [featureObj.GeometryStyle, featureObj.LabelStyle].filter(Boolean);
+    const styleNames = [featureObj.GeometryStyle, featureObj.LabelStyle].filter(Boolean);
 
     const filters = [];
     for (const prop in featureObj.VVTStyle) {
@@ -536,8 +535,8 @@ export default class MapLoader {
     }
 
     return {
-      style: styles,
-      filter: filters,
+      styleNames: styleNames,
+      filters: filters,
     };
   }
 
@@ -553,7 +552,7 @@ console.log(JSON.stringify(olResult, null, 2));
 const layers = mapLoader.parseMapLayer(xmlMapLayer);
 let olResultStyle = mapLoader.toOlMapLayer(layers);
 
-console.log(JSON.stringify(layers, null, 2));
+console.log(JSON.stringify(olResultStyle, null, 2));
 
     </script>
   </body>
