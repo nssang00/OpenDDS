@@ -396,8 +396,8 @@ export default class MapLayerBuilder {
 
     const olStyles = {};
     for (const featureObj of layerObj.features) {
-      const { style, filter } = this.toOlFeature(featureObj);
-      olFilters.push(...filter);
+      const { styleNames, filters } = this.toOlFeature(featureObj);
+      olFilters.push(...filters);
     }
 
     return {
@@ -408,7 +408,7 @@ export default class MapLayerBuilder {
   }
 
   toOlFeature(featureObj) {
-    const styles = [featureObj.GeometryStyle, featureObj.LabelStyle].filter(Boolean);
+    const styleNames = [featureObj.GeometryStyle, featureObj.LabelStyle].filter(Boolean);
 
     const filters = [];
     for (const prop in featureObj.VVTStyle) {
@@ -429,8 +429,8 @@ export default class MapLayerBuilder {
     }
 
     return {
-      style: styles,
-      filter: filters,
+      styleNames: styleNames,
+      filters: filters,
     };
   }
 
