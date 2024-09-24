@@ -379,14 +379,14 @@ buildMapLayer(layersObj) {
   const olLayers = [];
   for (const layerObj of layersObj) {
     olLayers.push({ 
-	    name: layerObj.Name, 
-	    layer: layerObj.type === "Layer" 
-        ? this.buildLayer(layerObj)
-        : this.buildMapLayer(layerObj.layers)
+      name: layerObj.Name,  // Name과 같은 레벨로 추가
+      ...(layerObj.type === "Layer" 
+        ? this.buildLayer(layerObj) 
+        : this.buildMapLayer(layerObj.layers))
     });
   }
   return olLayers;
-}	
+}
 
   // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
   buildLayer(layerObj) {
