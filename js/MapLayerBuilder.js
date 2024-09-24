@@ -379,8 +379,8 @@ buildMapLayer(layersObj) {
   const olLayers = [];
   for (const layerObj of layersObj) {
     olLayers.push({ 
-	    layerObj.Name, 
-	    layerObj.type === "Layer" 
+	    name: layerObj.Name, 
+	    layer: layerObj.type === "Layer" 
         ? this.buildLayer(layerObj)
         : this.buildMapLayer(layerObj.layers)
     });
