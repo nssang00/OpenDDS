@@ -116,6 +116,395 @@ class MapStyler {
   }
 }
 
+/////////////////
+[
+  {
+    "name": "해안선",
+    "source": "LBA010",
+    "rules": [
+      {
+        "styleNames": [
+          "BA010L01"
+        ],
+        "filter": [
+          "all",
+          [
+            "<=",
+            [
+              "resolution"
+            ],
+            611.49622628141
+          ],
+          [
+            ">",
+            [
+              "resolution"
+            ],
+            152.8740565703525
+          ],
+          [
+            "==",
+            [
+              "get",
+              "ACC"
+            ],
+            0
+          ],
+          [
+            "in",
+            [
+              "get",
+              "SLT"
+            ],
+            [
+              1,
+              10,
+              11,
+              13
+            ]
+          ]
+        ]
+      },
+      {
+        "styleNames": [
+          "BA010L02"
+        ],
+        "filter": [
+          "all",
+          [
+            "<=",
+            [
+              "resolution"
+            ],
+            611.49622628141
+          ],
+          [
+            ">",
+            [
+              "resolution"
+            ],
+            152.8740565703525
+          ],
+          [
+            "==",
+            [
+              "get",
+              "ACC"
+            ],
+            0
+          ],
+          [
+            "in",
+            [
+              "get",
+              "SLT"
+            ],
+            [
+              2,
+              10,
+              11,
+              13
+            ]
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "name": "표고점",
+    "source": "PCA010",
+    "rules": [
+      {
+        "styleNames": [
+          "CA030P01",
+          "CA030T01"
+        ],
+        "filter": [
+          "all",
+          [
+            "<=",
+            [
+              "resolution"
+            ],
+            611.49622628141
+          ],
+          [
+            ">",
+            [
+              "resolution"
+            ],
+            152.8740565703525
+          ],
+          [
+            "==",
+            [
+              "get",
+              "ACC"
+            ],
+            1
+          ],
+          [
+            "in",
+            [
+              "get",
+              "ELA"
+            ],
+            [
+              0,
+              2
+            ]
+          ]
+        ]
+      },
+      {
+        "styleNames": [
+          "CA030P01",
+          "CA030T02"
+        ],
+        "filter": [
+          "all",
+          [
+            "<=",
+            [
+              "resolution"
+            ],
+            611.49622628141
+          ],
+          [
+            ">",
+            [
+              "resolution"
+            ],
+            152.8740565703525
+          ],
+          [
+            "==",
+            [
+              "get",
+              "ACC"
+            ],
+            1
+          ],
+          [
+            "in",
+            [
+              "get",
+              "ELA"
+            ],
+            [
+              0,
+              2
+            ]
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "name": "간석지",
+    "layers": [
+      {
+        "name": "암초",
+        "source": "PBD130",
+        "rules": [
+          {
+            "styleNames": [
+              "BD130P01"
+            ],
+            "filter": [
+              "all",
+              [
+                "<=",
+                [
+                  "resolution"
+                ],
+                611.49622628141
+              ],
+              [
+                ">",
+                [
+                  "resolution"
+                ],
+                152.8740565703525
+              ],
+              [
+                "in",
+                [
+                  "get",
+                  "VRR"
+                ],
+                [
+                  0,
+                  1,
+                  8
+                ]
+              ]
+            ]
+          },
+          {
+            "styleNames": [
+              "BD130P02"
+            ],
+            "filter": [
+              "all",
+              [
+                "<=",
+                [
+                  "resolution"
+                ],
+                611.49622628141
+              ],
+              [
+                ">",
+                [
+                  "resolution"
+                ],
+                152.8740565703525
+              ],
+              [
+                "in",
+                [
+                  "get",
+                  "VRR"
+                ],
+                [
+                  2,
+                  4
+                ]
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
+
+
+function createStyledLayers(vtSourceUrl, stylesArray) {
+  const vectorTileSource = new VectorTileSource({
+    format: new MVT(),
+    url: vtSourceUrl
+  });
+
+  return stylesArray.map((style) => {
+    if (typeof style === 'function') {
+      // If the style is a function, create a Canvas-based VectorTileLayer
+      return new VectorTileLayer({
+        source: vectorTileSource,
+        style: style, 
+      });
+    } else {//useWebGL
+      // If the style is not a function, create a WebGL-based VectorTileLayer
+      return new (class extends VectorTileLayer {
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: style // flat styles
+          });
+        }
+      })({
+        source: vectorTileSource,
+      });
+    }
+  });
+}
+
+class MapStyler {
+  applyMap(map) {
+    throw new Error("applyMap method must be implemented");
+  }
+  buildMapLayer(layersObj) {
+    throw new Error("buildMapLayer method must be implemented");
+  }
+  buildMapStyle(compiledStyles) {
+    throw new Error("buildMapStyle method must be implemented");
+  }
+}
+
+
+// ... existing code ...
+
+function createStyledLayers(vtSourceUrl, stylesArray) {
+  const vectorTileSource = new VectorTileSource({
+    format: new MVT(),
+    url: vtSourceUrl
+  });
+
+  return stylesArray.map((style) => {
+    if (typeof style === 'function') {
+      // If the style is a function, create a Canvas-based VectorTileLayer
+      return new VectorTileLayer({
+        source: vectorTileSource,
+        style: style, 
+      });
+    } else {//useWebGL
+      // If the style is not a function, create a WebGL-based VectorTileLayer
+      return new (class extends VectorTileLayer {
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: style // flat styles
+          });
+        }
+      })({
+
+        source: vectorTileSource,
+
+      });
+
+    }
+
+  });
+}
+
+class MapStyler {
+  applyMap(map) {
+    throw new Error("applyMap method must be implemented");
+  }
+  buildMapLayer(layersObj) {
+    throw new Error("buildMapLayer method must be implemented");
+  }
+  buildMapStyle(compiledStyles) {
+    throw new Error("buildMapStyle method must be implemented");
+  }
+}
+
+class OlMapStyler extends MapStyler {
+  buildMapLayer(layerObj) {
+    if (layerObj.layers) {
+      return new LayerGroup({
+        layers: layerObj.layers.map((subLayer) => {
+          return createStyledLayers(subLayer.source, subLayer.rules.map(rule => rule.styleNames));
+        })
+      });
+    } else {
+      return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
+    }
+  }
+
+  applyMap(map, jsonConfig) {
+    for (const layerConfig of jsonConfig) {
+      const layers = this.buildMapLayer(layerConfig);
+      if (Array.isArray(layers)) {
+        for (const layer of layers) {
+          map.addLayer(layer);
+        }
+      } else {
+        map.addLayer(layers);
+      }
+    }
+  }
+
+  buildMapStyle(compiledStyles) {
+    // Implement your logic to build map styles
+  }
+}
+
+// Usage example
+const mapStyler = new OlMapStyler();
+mapStyler.applyMap(map, jsonConfig);
+
+////////////
+
 (async () => {
   try {
     // Load the map
