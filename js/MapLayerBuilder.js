@@ -374,7 +374,7 @@ export default class MapLayerBuilder {
     }
     return olLayers;
   }
-*/	
+
 buildMapLayer(layersObj) {
   const olLayers = [];
   for (const layerObj of layersObj) {
@@ -386,7 +386,19 @@ buildMapLayer(layersObj) {
     });
   }
   return olLayers;
-}
+}*/
+buildMapLayer(layersObj) {
+  return layersObj.map(layerObj => {
+    if (layerObj.type === "Layer") {
+      return this.buildLayer(layerObj); // Directly build layer for type "Layer"
+    } 
+    // For other types, return an object with name and nested layers
+    return {
+      name: layerObj.Name,
+      layers: this.buildMapLayer(layerObj.layers) // Recursively build layers
+    };
+  });
+}	
 
   // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
   buildLayer(layerObj) {
