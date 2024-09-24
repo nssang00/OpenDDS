@@ -408,6 +408,7 @@ buildMapLayer(layersObj) {
     ];
 
     return {
+      name: layerObj.Name,
       source: layerObj.SHPSource,
       rules: layerObj.features.map(featureObj => {
         const { styleNames, filters } = this.buildFeature(featureObj);
