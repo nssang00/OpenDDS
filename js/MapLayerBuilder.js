@@ -120,12 +120,12 @@ export default class MapLayerBuilder {
   }
 
   // 스타일 객체를 OpenLayers 스타일로 변환하는 함수
-  toOlMapStyle(stylesObj) {
+  buildMapStyle(stylesObj) {
     const olStyleFunctionMap = {
-      point: this.toOlPointStyle,
-      line: this.toOlLineStyle,
-      polygon: this.toOlPolygonStyle,
-      Label: this.toOlLabelStyle
+      point: this.buildPointStyle,
+      line: this.buildLineStyle,
+      polygon: this.buildPolygonStyle,
+      Label: this.buildLabelStyle
     };
 
     const olStyles = {};
@@ -139,7 +139,7 @@ export default class MapLayerBuilder {
   }
 
   // Point 스타일 객체를 OpenLayers 스타일로 변환하는 함수
-  toOlPointStyle(pointStyleObj) {
+  buildPointStyle(pointStyleObj) {
     const offset = [Number(pointStyleObj.OffsetX), Number(pointStyleObj.OffsetY)];
     for (const symbolizer of pointStyleObj.symbolizers) {
       switch (symbolizer.type) {
@@ -179,12 +179,12 @@ export default class MapLayerBuilder {
   }
 
   // Line 스타일 객체를 OpenLayers 스타일로 변환하는 함수
-  toOlLineStyle(lineStyleObj) {
-    return lineStyleObj.symbolizers.map(symbolizer => this.toOlLineSymbolizer(symbolizer));
+  buildLineStyle(lineStyleObj) {
+    return lineStyleObj.symbolizers.map(symbolizer => this.buildLineSymbolizer(symbolizer));
   }
 
   // Line Symbolizer 객체를 OpenLayers Line 스타일로 변환하는 함수
-  toOlLineSymbolizer(symbolizer) {
+  buildLineSymbolizer(symbolizer) {
     const lineJoins = ['miter', 'bevel', 'round'];//JoinType
     const lineCaps = ['butt', 'square', 'round'];//StartCap
 
@@ -276,7 +276,7 @@ export default class MapLayerBuilder {
   }
 
   // Polygon 스타일 객체를 OpenLayers 스타일로 변환하는 함수
-  toOlPolygonStyle(polygonStyleObj) {
+  buildPolygonStyle(polygonStyleObj) {
     return polygonStyleObj.symbolizers.map(symbolizer => {
       const olPolygonStyleObj = { style: {} };
 
@@ -296,13 +296,13 @@ export default class MapLayerBuilder {
         };
       }
 
-      Object.assign(olPolygonStyleObj.style, this.toOlLineSymbolizer(symbolizer.symbolizers[0]).style);
+      Object.assign(olPolygonStyleObj.style, this.buildLineSymbolizer(symbolizer.symbolizers[0]).style);
       return olPolygonStyleObj;
     });
   }
 
   // Label 스타일 객체를 OpenLayers 스타일로 변환하는 함수
-  toOlLabelStyle(labelStyleObj) {
+  buildLabelStyle(labelStyleObj) {
     const font = labelStyleObj.Font;
     const size = Number(labelStyleObj.Size);
     const offsetX = Number(labelStyleObj.OffsetX);
@@ -365,18 +365,18 @@ export default class MapLayerBuilder {
   }
 
   // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
-  toOlMapLayer(layersObj) {
+  buildMapLayer(layersObj) {
     const olLayers = {};
     for (const layerObj of layersObj) {
       olLayers[layerObj.Name] = layerObj.type === "Layer" 
-        ? this.toOlLayer(layerObj)
-        : this.toOlMapLayer(layerObj.layers);
+        ? this.buildLayer(layerObj)
+        : this.buildMapLayer(layerObj.layers);
     }
     return olLayers;
   }
 
   // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
-  toOlLayer(layerObj) {
+  buildLayer(layerObj) {
     const scaleMap = {
       "25K": 9.554628535647032,
       "50K": 19.109257071294063,
@@ -397,7 +397,7 @@ export default class MapLayerBuilder {
     return {
       source: layerObj.SHPSource,
       rules: layerObj.features.map(featureObj => {
-        const { styleNames, filters } = this.toOlFeature(featureObj);
+        const { styleNames, filters } = this.buildFeature(featureObj);
         return {
           styleNames,
           filter: [...baseFilters, ...filters]
@@ -406,7 +406,7 @@ export default class MapLayerBuilder {
     };
   }
 
-  toOlFeature(featureObj) {
+  buildFeature(featureObj) {
     const styleNames = [featureObj.GeometryStyle, featureObj.LabelStyle].filter(Boolean);
 
     const filters = [];
