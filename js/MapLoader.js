@@ -505,6 +505,59 @@ mapStyler.applyMap(map, jsonConfig);
 
 ////////////
 
+class OlMapStyler extends MapStyler {
+    constructor() {
+        super();
+        this.styles = [];
+        this.layers = [];
+    }
+
+    setStyles(styles) {
+        this.styles = this.convertToOlStyles(styles);
+    }
+
+    setLayers(layers) {
+        this.layers = this.convertToOlLayers(layers);
+    }
+
+    applyMap(map) {
+        this.layers.forEach(layer => {
+            map.addLayer(layer); // Add each layer to the map
+        });
+    }
+
+    convertToOlStyles(styles) {
+        return styles.map(style => {
+            return new ol.style.Style({
+                fill: new ol.style.Fill({
+                    color: style.fillColor || 'rgba(255,255,255,0.4)'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: style.strokeColor || '#3399CC',
+                    width: style.strokeWidth || 2
+                })
+            });
+        });
+    }
+
+    convertToOlLayers(layers) {
+        return layers.map(layer => {
+            return new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    url: layer.sourceUrl,
+                    format: new ol.format.GeoJSON()
+                }),
+                style: this.getStyleByName(layer.styleName)
+            });
+        });
+    }
+
+    getStyleByName(styleName) {
+        return this.styles.find(style => style.get('name') === styleName) || null;
+    }
+}
+/////////
+
 (async () => {
   try {
     // Load the map
