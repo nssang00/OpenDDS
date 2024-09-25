@@ -23,17 +23,16 @@ class OlMapStyler extends MapStyler {
     }
   }
 
-  createOlLayers(layerObj) {
-    return layersObj.map(layerObj => {
-      if(!layerObj.layers) {
-        return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
-      }
-      return new LayerGroup({
-        layers: createOlLayers(layerObj.layers)
-      });
+createOlLayers(layersObj) {
+  return layersObj.map(layerObj => {
+    if (!layerObj.layers) {
+      return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
+    }
+    return new LayerGroup({
+      layers: this.createOlLayers(layerObj.layers) 
     });
-  }
-  }
+  });
+}
 
 
 applyMap(map, jsonConfig) {
