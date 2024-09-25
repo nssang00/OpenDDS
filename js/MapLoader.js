@@ -22,7 +22,17 @@ class OlMapStyler extends MapStyler {
       return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
     }
   }
-
+createOlLayers(layersObj) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
+      return new LayerGroup({
+        layers: this.createOlLayers(layerObj.layers)
+      });
+    }
+    return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
+  });
+}
+  /*
 createOlLayers(layersObj) {
   return layersObj.map(layerObj => {
     if (!layerObj.layers) {
@@ -33,7 +43,7 @@ createOlLayers(layersObj) {
     });
   });
 }
-
+*/
 
 applyMap(map, jsonConfig) {
   for (const layerConfig of jsonConfig) {
