@@ -23,18 +23,12 @@ class OlMapStyler extends MapStyler {
     }
   }
 
-  applyMap(map, jsonConfig) {
-    for (const layerConfig of jsonConfig) {
-      const layers = this.buildMapLayer(layerConfig);
-      if (Array.isArray(layers)) {
-        for (const layer of layers) {
-          map.addLayer(layer);
-        }
-      } else {
-        map.addLayer(layers);
-      }
-    }
+applyMap(map, jsonConfig) {
+  for (const layerConfig of jsonConfig) {
+    const layers = this.buildMapLayer(layerConfig);
+    map.addLayer(layers);
   }
+}  
 
   buildMapStyle(compiledStyles) {
     // Implement your logic to build map styles
