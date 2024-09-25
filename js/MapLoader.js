@@ -1,3 +1,17 @@
+class LayerGroup {
+  constructor(options = {}) {
+    this.layers = options.layers || []; // 레이어 그룹을 초기화
+  }
+
+  addLayer(layer) {
+    this.layers.push(layer); // 레이어 추가
+  }
+
+  getLayers() {
+    return this.layers; // 레이어 목록 반환
+  }
+}
+
 class MapStyler {
   applyMap(map) {
     throw new Error("applyMap method must be implemented");
