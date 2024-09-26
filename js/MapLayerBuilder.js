@@ -288,8 +288,8 @@ export default class MapLayerBuilder {
         }
       } else if (symbolizer.type === "PICTURE") {
         olPolygonStyleObj.symbol = {
-          'type': 'polygon',
-          'polygon-picture-texture-fill': Boolean(symbolizer.TextureFill), // TextureFill
+          'type': 'picture',
+          'picture-texture-fill': Boolean(symbolizer.TextureFill), // TextureFill
         };
         olPolygonStyleObj.style = {
           'fill-pattern-src': symbolizer.Picture, // Picture
