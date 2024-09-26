@@ -1,3 +1,14 @@
+    const flatCoordinates = geometry.getFlatCoordinates();
+    const ends = [flatCoordinates.length];
+    // 새로 Polygon 객체 생성
+    const newPolygon = new Polygon([flatCoordinates], 'XY', ends);
+
+const newPolygon = new Polygon(coordinates);
+
+// getInteriorPoint 등 필요한 메서드 호출 가능
+const interiorPoint = newPolygon.getInteriorPoint();
+/////////////
+
 // 아이콘 이미지 설정 (캐싱 처리)
 const iconStyle = new ol.style.Style({
   image: new ol.style.Icon({
