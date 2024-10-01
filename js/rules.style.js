@@ -7,16 +7,15 @@ export function rulesToStyleFunction(rules) {
 
   // symbol 처리를 위한 함수
   function processSymbols(context) {
-    const symbolStyles = [];
-    rules.forEach((rule) => {
+    return rules.reduce((styles, rule) => {
       if (rule.filter(context) && rule.symbol) {
         const symbolStyle = createSymbolStyle(rule.symbol);
         if (symbolStyle) {
-          symbolStyles.push(symbolStyle);
+          styles.push(symbolStyle);
         }
       }
-    });
-    return symbolStyles;
+      return styles;
+    }, []);
   }
 
   return function (feature, resolution) {
@@ -37,9 +36,7 @@ export function rulesToStyleFunction(rules) {
     }
     
     // 기존 evaluator와 symbol 처리를 직접 조합
-    const baseStyles = evaluator(evaluationContext);
-    const symbolStyles = processSymbols(evaluationContext);
-    return baseStyles.concat(symbolStyles);
+    return evaluator(evaluationContext).concat(processSymbols(evaluationContext));
   };
 }
 
