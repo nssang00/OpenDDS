@@ -19,9 +19,7 @@ export function extendedRulesToStyleFunction(rules) {
   }
 
   return function(feature, resolution) {
-    const baseStyles = baseStyleFunction(feature, resolution);
-    const symbolStyles = processSymbols(feature, resolution);
-    return baseStyles.concat(symbolStyles);
+    return baseStyleFunction(feature, resolution).concat(processSymbols(feature, resolution));
   };
 }
 
