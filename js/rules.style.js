@@ -6,25 +6,18 @@ export function rulesToStyleFunction(rules) {
   const evaluationContext = newEvaluationContext();
 
   // symbol 처리를 위한 함수
-  function processSymbol(rule, styles) {
-    if (rule.symbol) {
-      const symbolStyle = createSymbolStyle(rule.symbol);
-      if (symbolStyle) {
-        styles.push(symbolStyle);
-      }
-    }
-  }
-
-  // evaluator 수정
-  const modifiedEvaluator = function(context) {
-    const styles = evaluator(context);
+  function processSymbols(context) {
+    const symbolStyles = [];
     rules.forEach((rule) => {
-      if (rule.filter(context)) {
-        processSymbol(rule, styles);
+      if (rule.filter(context) && rule.symbol) {
+        const symbolStyle = createSymbolStyle(rule.symbol);
+        if (symbolStyle) {
+          symbolStyles.push(symbolStyle);
+        }
       }
     });
-    return styles;
-  };
+    return symbolStyles;
+  }
 
   return function (feature, resolution) {
     evaluationContext.properties = feature.getPropertiesInternal();
@@ -43,7 +36,10 @@ export function rulesToStyleFunction(rules) {
       );
     }
     
-    return modifiedEvaluator(evaluationContext);
+    // 기존 evaluator와 symbol 처리를 직접 조합
+    const baseStyles = evaluator(evaluationContext);
+    const symbolStyles = processSymbols(evaluationContext);
+    return baseStyles.concat(symbolStyles);
   };
 }
 
