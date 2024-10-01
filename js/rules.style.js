@@ -1,5 +1,31 @@
-// ... 기존 코드 ...
+export function extendedRulesToStyleFunction(rules) {
+  const baseStyleFunction = rulesToStyleFunction(rules);
 
+  function processSymbols(context, feature) {
+    const styles = [];
+    for (const rule of rules) {
+      if (rule.filter(context) && rule.symbol) {
+        const symbolStyle = createSymbolStyle(rule.symbol, feature);
+        if (symbolStyle) {
+          styles.push(symbolStyle);
+        }
+      }
+    }
+    return styles;
+  }
+
+  return function(feature, resolution) {
+    const evaluationContext = {
+      properties: feature.getProperties(),
+      resolution: resolution
+    };
+
+    const baseStyles = baseStyleFunction(feature, resolution);
+    const symbolStyles = processSymbols(evaluationContext, feature);
+
+    return baseStyles.concat(symbolStyles);
+  };
+}
 // ... 기존 코드 유지 ...
 
 // 새로운 함수 추가
