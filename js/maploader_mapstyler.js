@@ -1,3 +1,37 @@
+class MapLoader {
+    constructor(mapStyler) {
+        this.mapStyler = mapStyler; // 의존성 주입
+    }
+
+    loadMap(map, xmlData) {
+        // XML 데이터를 로드하고, 파싱한 후 JSON 데이터로 변환
+        const jsonData = this.parseXML(xmlData);
+
+        // 스타일 적용
+        this.mapStyler.applyMap(map, jsonData);
+    }
+
+    parseXML(xmlData) {
+        // XML을 JSON 형식으로 변환하는 로직
+        return jsonToXML(xmlData); 
+    }
+}
+
+class OlMapStyler {
+    applyMap(map, layerData) {
+        // OpenLayers 스타일링 및 레이어 추가 로직
+        const styledLayer = this.createStyledLayer(layerData);
+        map.addLayer(styledLayer);
+    }
+
+    createStyledLayer(layerData) {
+        // 레이어 생성 및 스타일 적용
+        return new ol.layer.Vector({
+            // OpenLayers 소스 및 스타일 설정
+        });
+    }
+}
+///////////
 // MapLoader: XML 데이터를 로드하는 클래스
 class MapLoader {
     loadMap(data) {
