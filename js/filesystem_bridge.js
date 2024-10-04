@@ -15,16 +15,6 @@ class WindowsOS extends OS {
   }
 }
 
-class LinuxOS extends OS {
-  readFile(path) {
-    console.log(`Reading file from Linux: ${path}`);
-  }
-
-  writeFile(path, content) {
-    console.log(`Writing file to Linux: ${path} with content: ${content}`);
-  }
-}
-
 // Abstraction
 class FileSystem {
   constructor(os) {
@@ -40,18 +30,8 @@ class FileSystem {
   }
 }
 
-// RefinedAbstraction
-class AdvancedFileSystem extends FileSystem {
-  encryptFile(path) {
-    console.log(`Encrypting file: ${path}`);
-  }
-}
-
 // Client code
 const windowsFileSystem = new FileSystem(new WindowsOS());
 windowsFileSystem.readFile('file.txt');  // Output: Reading file from Windows: file.txt
 windowsFileSystem.writeFile('file.txt', 'Hello World');  // Output: Writing file to Windows: file.txt with content: Hello World
 
-const linuxFileSystem = new AdvancedFileSystem(new LinuxOS());
-linuxFileSystem.readFile('file.txt');  // Output: Reading file from Linux: file.txt
-linuxFileSystem.encryptFile('file.txt');  // Output: Encrypting file: file.txt
