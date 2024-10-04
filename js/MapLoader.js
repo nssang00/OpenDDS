@@ -280,8 +280,7 @@ class MapBuilder {
 }
 
 // 사용 예시
-const mapStyler = new OlMapStyler();
-const mapBuilder = new MapBuilder(mapStyler);
+const mapBuilder = new MapBuilder(new OlMapStyler());
 
 // 직접 URL 객체를 전달하여 스타일과 레이어를 적용
 mapBuilder.applyMap(map, {
