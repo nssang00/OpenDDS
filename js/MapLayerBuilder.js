@@ -1,9 +1,12 @@
-export default class MapLayerBuilder {
+class MapStyler {
+  applyMap(map, { styles, layers }) {
+    throw new Error("applyMap() must be implemented");
+  }
+}
+
+class MapLayerBuilder {
   constructor(mapStyler) {
-    this.parsedStyles = null;
-    this.parsedLayers = null;
     this.mapStyler = mapStyler;
-    //this.olStyles = null;
   }
 
   async loadMap(styleUrl, layerUrl) {
@@ -17,24 +20,31 @@ export default class MapLayerBuilder {
 
       const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
 
-      this.parseMap(styleXmlString, layerXmlString);
+      return this.parseMap(styleXmlString, layerXmlString);
 
     } catch (error) {
       console.error('Error loading map:', error);
+      throw error; // 상위 함수에서 에러 처리 가능      
     }
   }
 
   async applyMap(map, { styleUrl, layerUrl }) {
-        // 1. XML 데이터를 URL로부터 비동기적으로 로드하고 하나의 객체로 묶기
-        await this.loadMap(styleUrl, layerUrl);
+    try {
+      // 1. 스타일과 레이어 데이터를 비동기적으로 로드하고 파싱
+      const { styles, layers } = await this.loadMap(styleUrl, layerUrl);
 
-        // 2. 스타일 및 레이어 적용
-        this.styler.applyMap(map, {styles:this.parsedStyles, layers:this.parsedLayers}); // 객체에서 각각의 데이터 추출하여 넘김
+      // 2. mapStyler를 통해 맵에 스타일과 레이어 적용
+      this.mapStyler.applyMap(map, { styles, layers });
+    } catch (error) {
+      console.error('Error applying map:', error);
+    }
   }
 
   parseMap(styleXmlString, layerXmlString) {
-    this.parsedStyles = this.parseMapStyle(styleXmlString);
-    this.parsedLayers = this.parseMapLayer(layerXmlString);
+    return {
+      styles: this.parseMapStyle(styleXmlString),
+      layers: this.parseMapLayer(layerXmlString)
+    };
   }
 
   // RGBA 문자열을 배열로 변환하는 함수
@@ -441,3 +451,5 @@ export default class MapLayerBuilder {
   }
 
 }
+
+export { MapLayerBuilder, MapStyler };
