@@ -183,6 +183,23 @@ class OlMapStyler extends MapStyler {
         layers.forEach(layer => map.addLayer(layer));
     }
 
+    applyMap(map) {
+    if (!this.parsedStyles || !this.parsedLayers) {
+      throw new Error("Map data has not been loaded. Call loadMap first.");
+    }
+    this.olStyles = processMapStyle(this.parsedStyles);
+
+    // 레이어 데이터 처리
+    for (const layer of this.parsedLayers) {
+        const { source, styles } = processLayer(layer);
+        const vectorLayers = createStyledLayers(source, styles);
+        for (const layer of vectorLayers) {
+            map.addLayer(layer);
+        }
+    }
+      
+  }
+
     createStyledLayer(layerData, styles) {
         // JSON 데이터를 바탕으로 레이어 생성
         return layerData.map(data => new ol.layer.Vector({
