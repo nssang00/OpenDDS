@@ -452,4 +452,5 @@ class MapLayerBuilder {
 
 }
 
-export { MapLayerBuilder, MapStyler };
+export default MapLayerBuilder;
+export { MapStyler };
