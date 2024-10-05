@@ -72,76 +72,6 @@ applyMap(map, jsonConfig) {
 }
 
 
-export default class MapLoader {
-  constructor() {
-    this.parsedStyles = null;
-    this.parsedLayers = null;
-    this.olStyles = null;
-  }
-
-  async loadMap(styleUrl, layerUrl) {
-    try {
-      const urls = [styleUrl, layerUrl];
-      const responses = await Promise.all(urls.map(url => fetch(url)));
-
-      if (!responses[0].ok || !responses[1].ok) {
-          throw new Error('Failed to fetch one or both files');
-      }
-
-      // styleText와 layerText를 Promise.all을 사용하여 병렬로 처리
-      const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
-
-      this.parseMap(styleXmlString, layerXmlString);
-
-    } catch (error) {
-      console.error('Error loading map:', error);
-    }
-  }
-
-  parseMap(styleXmlString, layerXmlString) {
-    this.parsedStyles = this.parseMapStyle(styleXmlString);
-    this.parsedLayers = this.parseMapLayer(layerXmlString);
-  }
-      
-  applyMap(map) {
-    if (!this.parsedStyles || !this.parsedLayers) {
-      throw new Error("Map data has not been loaded. Call loadMap first.");
-    }
-    this.olStyles = processMapStyle(this.parsedStyles);
-
-    // 레이어 데이터 처리
-    for (const layer of this.parsedLayers) {
-        const { source, styles } = processLayer(layer);
-        const vectorLayers = createStyledLayers(source, styles);
-        for (const layer of vectorLayers) {
-            map.addLayer(layer);
-        }
-    }
-      
-  }
-
-  processLayer(layer) {
-
-    return { source, styles }; 
-  }    
-
-  parseMapStyle(xmlText) {
-    const xmlDoc = new DOMParser().parseFromString(xmlText, 'application/xml');
-    const styleElements = xmlDoc.getElementsByTagName('style');
-    const styles = [];
-
-    return styles;
-  }
-
-  parseMapLayer(xmlText) {
-      const xmlDoc = new DOMParser().parseFromString(xmlText, 'application/xml');
-      const layerElements = xmlDoc.getElementsByTagName('layer');
-      const layers = [];
-
-      return layers;
-  }  
-    
-}
 
 function createStyledLayers(vtSourceUrl, stylesArray) {
   const vectorTileSource = new VectorTileSource({
@@ -184,19 +114,19 @@ class OlMapStyler extends MapStyler {
     }
 
     applyMap(map) {
-    if (!this.parsedStyles || !this.parsedLayers) {
-      throw new Error("Map data has not been loaded. Call loadMap first.");
-    }
-    this.olStyles = processMapStyle(this.parsedStyles);
+      if (!this.parsedStyles || !this.parsedLayers) {
+        throw new Error("Map data has not been loaded. Call loadMap first.");
+      }
+      this.olStyles = processMapStyle(this.parsedStyles);
 
-    // 레이어 데이터 처리
-    for (const layer of this.parsedLayers) {
+      // 레이어 데이터 처리
+      for (const layer of this.parsedLayers) {
         const { source, styles } = processLayer(layer);
         const vectorLayers = createStyledLayers(source, styles);
         for (const layer of vectorLayers) {
             map.addLayer(layer);
         }
-    }
+      }
       
   }
 
@@ -231,4 +161,3 @@ const mapBuilder = new MapBuilder(new OlMapStyler());
         console.error('Error applying map:', error);
     }
 })();
-
