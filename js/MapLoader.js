@@ -219,11 +219,6 @@ import MapLayerBuilder from './mapLayerBuilder.js';
 import OlMapStyler from './olMapStyler.js';
 const mapBuilder = new MapBuilder(new OlMapStyler());
 
-// 직접 URL 객체를 전달하여 스타일과 레이어를 적용
-mapBuilder.applyMap(map, {
-    styleUrl: 'https://example.com/path/to/style.xml',
-    layerUrl: 'https://example.com/path/to/layer.xml'
-});
 
 (async () => {
     try {
