@@ -26,10 +26,10 @@ export default class MapLayerBuilder {
 
   async applyMap(map, { styleUrl, layerUrl }) {
         // 1. XML 데이터를 URL로부터 비동기적으로 로드하고 하나의 객체로 묶기
-        const mapData = await this.loadMap(styleUrl, layerUrl);
+        await this.loadMap(styleUrl, layerUrl);
 
         // 2. 스타일 및 레이어 적용
-        this.styler.applyMap(map, mapData.styleData, mapData.layerData); // 객체에서 각각의 데이터 추출하여 넘김
+        this.styler.applyMap(map, {styles:this.parsedStyles, layers:this.parsedLayers}); // 객체에서 각각의 데이터 추출하여 넘김
   }
 
   parseMap(styleXmlString, layerXmlString) {
