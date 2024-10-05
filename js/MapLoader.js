@@ -279,7 +279,7 @@ class MapBuilder {
     }
 }
 
-import { MapLayerBuilder } from './mapLayerBuilder.js';
+import MapLayerBuilder from './mapLayerBuilder.js';
 import OlMapStyler from './olMapStyler.js';
 const mapBuilder = new MapBuilder(new OlMapStyler());
 
