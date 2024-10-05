@@ -171,27 +171,6 @@ function createStyledLayers(vtSourceUrl, stylesArray) {
   });
 }
 
-const styleUrl = "path/to/STYLE.xml";
-const layerUrl = "path/to/LAYER.xml";
-
-const mapLoader = new MapLoader();
-
-(async () => {
-  try {
-    // Load the map
-    await mapLoader.loadMap(styleUrl, layerUrl);
-
-    // Assuming you have an OpenLayers map object available
-    const map = new ol.Map({
-      // Your map configuration
-    });
-
-    // Apply the loaded map to the OpenLayers map
-    mapLoader.applyMap(map);
-  } catch (error) {
-    console.error("Error loading and applying map:", error);
-  }
-})();
 
 // OlMapStyler 클래스가 MapStyler를 구현
 class OlMapStyler extends MapStyler {
@@ -228,4 +207,16 @@ mapBuilder.applyMap(map, {
     styleUrl: 'https://example.com/path/to/style.xml',
     layerUrl: 'https://example.com/path/to/layer.xml'
 });
+
+(async () => {
+    try {
+        await mapBuilder.applyMap(map, {
+            styleUrl: 'https://example.com/path/to/style.xml',
+            layerUrl: 'https://example.com/path/to/layer.xml'
+        });
+        // applyMap 완료 후 수행할 코드
+    } catch (error) {
+        console.error('Error applying map:', error);
+    }
+})();
 
