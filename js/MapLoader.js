@@ -72,36 +72,6 @@ applyMap(map, jsonConfig) {
 }
 
 
-
-function createStyledLayers(vtSourceUrl, stylesArray) {
-  const vectorTileSource = new VectorTileSource({
-    format: new MVT(),
-    url: vtSourceUrl
-  });
-
-  return stylesArray.map((style) => {
-    if (typeof style === 'function') {
-      // If the style is a function, create a Canvas-based VectorTileLayer
-      return new VectorTileLayer({
-        source: vectorTileSource,
-        style: style, 
-      });
-    } else {//useWebGL
-      // If the style is not a function, create a WebGL-based VectorTileLayer
-      return new (class extends VectorTileLayer {
-        createRenderer() {
-          return new WebGLVectorTileLayerRenderer(this, {
-            style: style // flat styles
-          });
-        }
-      })({
-        source: vectorTileSource,
-      });
-    }
-  });
-}
-
-
 // OlMapStyler 클래스가 MapStyler를 구현
 class OlMapStyler extends MapStyler {
     applyMap(map, styleData, layerData) {
