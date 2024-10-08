@@ -104,6 +104,44 @@ function createOlLayers(styleObj, layersObj) {
     return createStyledLayers(vectorTileSource, styles);
   });
 }
+
+function createStyledOlLayers(styleObj, layersObj) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
+      // 그룹인 경우, LayerGroup을 생성
+      return new LayerGroup({
+        layers: createOlLayers(layerObj.layers) // 재귀적으로 하위 레이어 처리
+      });
+    }
+
+    const vectorTileSource = new VectorTileSource({
+      format: new MVT(),
+      url: layerObj.source // 레이어마다 개별 소스를 사용
+    });
+
+    const styles = layerObj.rules.map(rule =>
+      rule.styleNames.map(styleName => styleObj[styleName])
+    );
+
+    if (typeof styles === 'function') {// 스타일이 함수인 경우, Canvas 기반 VectorTileLayer를 생성
+      return new VectorTileLayer({
+        source: vectorTileSource,
+        style: styles,
+      });
+    } else {
+      return new (class extends VectorTileLayer {      // 스타일이 객체인 경우, WebGL 기반 VectorTileLayer를 생성
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: styles // flat styles
+          });
+        }
+      })({
+        source: vectorTileSource,
+      });
+    }
+  });
+}
+
   
 
 applyMap(map, jsonConfig) {
