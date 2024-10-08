@@ -46,6 +46,7 @@ createOlLayers(layersObj) {
     return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
   });
 }
+  
   /*
 createOlLayers(layersObj) {
   return layersObj.map(layerObj => {
@@ -58,6 +59,23 @@ createOlLayers(layersObj) {
   });
 }
 */
+createOlLayers(layersObj) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
+      return new LayerGroup({
+        layers: this.createOlLayers(layerObj.layers)
+      });
+    }
+    
+    // Map the rule style names to actual style objects from this.olStyles
+    const styles = layerObj.rules.map(rule => 
+      rule.styleNames.map(styleName => this.olStyles[styleName])
+    );
+    
+    return createStyledLayers(layerObj.source, styles);
+  });
+}
+  
 
 applyMap(map, jsonConfig) {
   for (const layerConfig of jsonConfig) {
