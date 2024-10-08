@@ -197,7 +197,7 @@ class MapLayerBuilder {
 
     // Line 스타일 객체를 OpenLayers 스타일로 변환하는 함수
     buildLineStyle(lineStyleObj) {
-        return lineStyleObj.symbolizers.map(symbolizer => this.buildLineSymbolizer(symbolizer));
+        return (lineStyleObj.symbolizers || []).map(symbolizer => this.buildLineSymbolizer(symbolizer));
     }
 
     // Line Symbolizer 객체를 OpenLayers Line 스타일로 변환하는 함수
