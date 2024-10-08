@@ -59,20 +59,49 @@ createOlLayers(layersObj) {
   });
 }
 */
-createOlLayers(layersObj) {
+function createStyledLayers(vectorTileSource, styles) {
+  if (typeof styles === 'function') {
+    // 스타일이 함수인 경우, Canvas 기반 VectorTileLayer를 생성
+    return new VectorTileLayer({
+      source: vectorTileSource,
+      style: styles,
+    });
+  } else {
+    // 스타일이 객체인 경우, WebGL 기반 VectorTileLayer를 생성
+    return new (class extends VectorTileLayer {
+      createRenderer() {
+        return new WebGLVectorTileLayerRenderer(this, {
+          style: styles // flat styles
+        });
+      }
+    })({
+      source: vectorTileSource,
+    });
+  }
+}
+
+function createOlLayers(styleObj, layersObj) {
   return layersObj.map(layerObj => {
     if (layerObj.layers) {
+      // 그룹인 경우, LayerGroup을 생성
       return new LayerGroup({
-        layers: this.createOlLayers(layerObj.layers)
+        layers: createOlLayers(layerObj.layers) // 재귀적으로 하위 레이어 처리
       });
     }
-    
-    // Map the rule style names to actual style objects from this.olStyles
-    const styles = layerObj.rules.map(rule => 
-      rule.styleNames.map(styleName => this.olStyles[styleName])
+
+    // 벡터 타일 소스 생성
+    const vectorTileSource = new VectorTileSource({
+      format: new MVT(),
+      url: layerObj.source // 레이어마다 개별 소스를 사용
+    });
+
+    // 스타일 이름을 스타일 객체로 매핑
+    const styles = layerObj.rules.map(rule =>
+      rule.styleNames.map(styleName => styleObj[styleName])
     );
-    
-    return createStyledLayers(layerObj.source, styles);
+
+    // 스타일 객체가 하나의 함수 또는 스타일 객체 배열로 전달
+    return createStyledLayers(vectorTileSource, styles);
   });
 }
   
