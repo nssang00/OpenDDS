@@ -92,7 +92,7 @@ function createOlLayers(styleObj, layersObj) {
     // 벡터 타일 소스 생성
     const vectorTileSource = new VectorTileSource({
       format: new MVT(),
-      url: layerObj.source // 레이어마다 개별 소스를 사용
+      url: `https://api.maptiler.com/tiles/${layerObj.source}/{z}/{x}/{y}.pbf`
     });
 
     // 스타일 이름을 스타일 객체로 매핑
@@ -100,8 +100,9 @@ function createOlLayers(styleObj, layersObj) {
       rule.styleNames.map(styleName => styleObj[styleName])
     );
 
-    // 스타일 객체가 하나의 함수 또는 스타일 객체 배열로 전달
+    //const styledLayers = createStyledLayers(vtSourceUrl, [canvasStyle, webGLStyle]);
     return createStyledLayers(vectorTileSource, styles);
+
   });
 }
 
@@ -162,6 +163,7 @@ class OlMapStyler extends MapStyler {
     applyMap(map, styleData, layerData) {
         // 스타일 적용
         const styles = this.createOlStyles(styleData);
+        //processMapStyle, toOlMapStyle
 
         // 레이어 생성 및 맵에 추가
         const layers = this.createStyledLayer(layerData, styles);
@@ -184,19 +186,6 @@ class OlMapStyler extends MapStyler {
       }
       
   }
-
-    createStyledLayer(layerData, styles) {
-        // JSON 데이터를 바탕으로 레이어 생성
-        return layerData.map(data => new ol.layer.Vector({
-            source: new ol.source.Vector({ ... }),
-            style: new ol.style.Style({ ... })
-        }));
-    }
-
-    createOlStyles(styleData) {
-        // 스타일 데이터를 바탕으로 OpenLayers 스타일 생성
-        // ... 스타일 생성 로직 ...
-    }
 }
 
 
