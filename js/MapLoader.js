@@ -106,6 +106,27 @@ function createOlLayers(styleObj, layersObj) {
   });
 }
 
+//[stylefunction, flatStyles]
+function createRulesToOlStyles(rules) {
+  if(!rules) {
+    return null;
+  }
+  let compiledRules = [];
+  for(const rule of rules) {
+    let compiledRule = null;
+    if(rule.symbol) {//symbol이 존재할 경우
+      compiledRule = rulesToStyleFunction([rule]);
+    }
+    else {
+      if(rule.style) {//style이 존재할 경우 webgl flatstyle은 style을 복사.
+        compiledRule = {filter: rule.filter, ...rule.style}
+      }
+      if(compiledRule !=== null)
+        compiledRules.push(compiledRule);
+    }
+    return compiledRules;
+}
+  
 function createStyledOlLayers(styleObj, layersObj) {
   return layersObj.map(layerObj => {
     if (layerObj.layers) {
