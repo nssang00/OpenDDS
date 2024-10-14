@@ -1,3 +1,38 @@
+function createRulesToOlStyles(rules) {
+  if (!rules) {
+    return null;
+  }
+
+  let compiledRules = [];
+  let symbolStyles = []; // symbol과 관련된 스타일 규칙
+  let flatStyles = [];   // 일반 style 규칙
+
+  for (const rule of rules) {
+    if (rule.symbol) {
+      // symbol이 존재하는 rule은 symbolStyles에 저장
+      symbolStyles.push(rule);
+    } else if (rule.style) {
+      // style이 존재하는 경우 flatStyles에 추가
+      let flatStyle = { filter: rule.filter, ...rule.style };
+      flatStyles.push(flatStyle);
+    }
+  }
+
+  // symbolStyles가 존재하면 rulesToStyleFunction으로 처리한 결과를 추가
+  if (symbolStyles.length > 0) {
+    const styleFunction = rulesToStyleFunction(symbolStyles);
+    compiledRules.push(styleFunction);
+  }
+
+  // flatStyles가 존재하면 이를 compiledRules에 추가
+  if (flatStyles.length > 0) {
+    compiledRules.push(flatStyles);
+  }
+
+  return compiledRules;
+}
+/////////
+
 class LayerGroup {
   constructor(options = {}) {
     this.layers = options.layers || []; // 레이어 그룹을 초기화
