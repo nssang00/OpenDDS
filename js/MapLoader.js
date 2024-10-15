@@ -3,6 +3,24 @@ function createRulesToOlStyles(rules) {
     return null;
   }
 
+  let symbolStyles = rules.filter(rule => rule.symbol);
+  let flatStyles = rules
+    .filter(rule => rule.style)
+    .map(rule => ({ filter: rule.filter, ...rule.style }));
+
+  let compiledRules = [
+    ...symbolStyles.length > 0 ? [rulesToStyleFunction(symbolStyles)] : [],
+    ...flatStyles.length > 0 ? [flatStyles] : []
+  ];
+
+  return compiledRules;
+}
+
+function createRulesToOlStyles(rules) {
+  if (!rules) {
+    return null;
+  }
+
   let compiledRules = [];
   let symbolStyles = []; // symbol과 관련된 스타일 규칙
   let flatStyles = [];   // 일반 style 규칙
