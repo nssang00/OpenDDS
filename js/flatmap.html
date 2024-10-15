@@ -1,0 +1,39 @@
+const styleObj = {
+  "BD130P01": function() { /* 스타일 함수 */ },
+  "BD130P02": { /* 스타일 객체 */ }
+};
+
+const layersObj = [
+  {
+    "name": "암초",
+    "source": "PBD130",
+    "rules": [
+      {
+        "styleNames": ["BD130P01"],
+        "filter": [
+          "all",
+          ["<=", ["resolution"], 611.49622628141],
+          [">", ["resolution"], 152.8740565703525],
+          ["in", ["get", "VRR"], [0, 1, 8]]
+        ]
+      },
+      {
+        "styleNames": ["BD130P02"],
+        "filter": [
+          "all",
+          ["<=", ["resolution"], 611.49622628141],
+          [">", ["resolution"], 152.8740565703525],
+          ["in", ["get", "VRR"], [2, 4]]
+        ]
+      }
+    ]
+  }
+];
+
+// createStyledOlLayers 함수 내 styles 부분
+const styles = layersObj[0].rules.flatMap(rule =>
+  rule.styleNames.map(styleName => styleObj[styleName])
+);
+
+console.log(styles);
+// [function() { /* 스타일 함수 */ }, { /* 스타일 객체 */ }]
