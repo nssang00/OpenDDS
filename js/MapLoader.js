@@ -1,6 +1,50 @@
 function createStyledOlLayers(styleObj, layersObj) {
   return layersObj.map(layerObj => {
     if (layerObj.layers) {
+      // 그룹인 경우, LayerGroup을 생성
+      return new LayerGroup({
+        layers: createStyledOlLayers(styleObj, layerObj.layers) // 재귀적으로 하위 레이어 처리
+      });
+    }
+
+    const vectorTileSource = new VectorTileSource({
+      format: new MVT(),
+      url: layerObj.source // 레이어마다 개별 소스를 사용
+    });
+
+    const styles = layerObj.rules.flatMap(rule =>
+      rule.styleNames.map(styleName => styleObj[styleName])
+    );
+
+    // styles.map의 결과를 LayerGroup으로 반환
+    return new LayerGroup({
+      layers: styles.map(style => {
+        if (typeof style === 'function') {
+          // 스타일이 함수인 경우, Canvas 기반 VectorTileLayer를 생성
+          return new VectorTileLayer({
+            source: vectorTileSource,
+            style: style,
+          });
+        } else {
+          // 스타일이 객체인 경우, WebGL 기반 VectorTileLayer를 생성
+          return new (class extends VectorTileLayer {
+            createRenderer() {
+              return new WebGLVectorTileLayerRenderer(this, {
+                style: style // 단일 스타일
+              });
+            }
+          })({
+            source: vectorTileSource,
+          });
+        }
+      })
+    });
+  });
+}
+
+function createStyledOlLayers(styleObj, layersObj) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
       // 하위 레이어가 있는 경우, 재귀적으로 LayerGroup 생성
       return new LayerGroup({
         layers: createStyledOlLayers(styleObj, layerObj.layers) // 재귀적으로 하위 레이어 처리
