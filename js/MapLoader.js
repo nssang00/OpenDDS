@@ -9,19 +9,15 @@ function createRulesToOlStyles(rules) {
 
   for (const rule of rules) {
     if (rule.symbol) {
-      // symbol이 존재하는 rule은 symbolStyles에 저장
       symbolStyles.push(rule);
     } else if (rule.style) {
-      // style이 존재하는 경우 flatStyles에 추가
-      let flatStyle = { filter: rule.filter, ...rule.style };
-      flatStyles.push(flatStyle);
+      flatStyles.push({ filter: rule.filter, ...rule.style });
     }
   }
 
   // symbolStyles가 존재하면 rulesToStyleFunction으로 처리한 결과를 추가
   if (symbolStyles.length > 0) {
-    const styleFunction = rulesToStyleFunction(symbolStyles);
-    compiledRules.push(styleFunction);
+    compiledRules.push(rulesToStyleFunction(symbolStyles));
   }
 
   // flatStyles가 존재하면 이를 compiledRules에 추가
