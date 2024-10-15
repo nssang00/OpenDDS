@@ -1,50 +1,6 @@
 function createStyledOlLayers(styleObj, layersObj) {
   return layersObj.map(layerObj => {
     if (layerObj.layers) {
-      // 그룹인 경우, LayerGroup을 생성
-      return new LayerGroup({
-        layers: createStyledOlLayers(styleObj, layerObj.layers) // 재귀적으로 하위 레이어 처리
-      });
-    }
-
-    const vectorTileSource = new VectorTileSource({
-      format: new MVT(),
-      url: layerObj.source // 레이어마다 개별 소스를 사용
-    });
-
-    const styles = layerObj.rules.flatMap(rule =>
-      rule.styleNames.map(styleName => styleObj[styleName])
-    );
-
-    // styles.map의 결과를 LayerGroup으로 반환
-    return new LayerGroup({
-      layers: styles.map(style => {
-        if (typeof style === 'function') {
-          // 스타일이 함수인 경우, Canvas 기반 VectorTileLayer를 생성
-          return new VectorTileLayer({
-            source: vectorTileSource,
-            style: style,
-          });
-        } else {
-          // 스타일이 객체인 경우, WebGL 기반 VectorTileLayer를 생성
-          return new (class extends VectorTileLayer {
-            createRenderer() {
-              return new WebGLVectorTileLayerRenderer(this, {
-                style: style // 단일 스타일
-              });
-            }
-          })({
-            source: vectorTileSource,
-          });
-        }
-      })
-    });
-  });
-}
-
-function createStyledOlLayers(styleObj, layersObj) {
-  return layersObj.map(layerObj => {
-    if (layerObj.layers) {
       // 하위 레이어가 있는 경우, 재귀적으로 LayerGroup 생성
       return new LayerGroup({
         layers: createStyledOlLayers(styleObj, layerObj.layers) // 재귀적으로 하위 레이어 처리
@@ -56,88 +12,35 @@ function createStyledOlLayers(styleObj, layersObj) {
       url: layerObj.source // 각 레이어는 개별 소스를 사용
     });
 
-    // 여러 스타일에 대응하는 레이어들을 저장할 배열
-    const styledLayers = [];
+    return new LayerGroup({
+      layers: layerObj.rules.flatMap(rule =>
+        rule.styleNames.map(styleName => {
+          const style = styleObj[styleName];
 
-    // rules를 반복하면서 각 rule의 styleNames에 해당하는 레이어 생성
-    for (const rule of layerObj.rules) {
-      for (const styleName of rule.styleNames) {
-        const style = styleObj[styleName];
-
-        if (typeof style === 'function') {
           // 스타일이 함수일 경우, Canvas 기반 VectorTileLayer 생성
-          styledLayers.push(new VectorTileLayer({
-            source: vectorTileSource,
-            style: style
-          }));
-        } else {
-          // 스타일이 객체일 경우, WebGL 기반 VectorTileLayer 생성
-          styledLayers.push(new (class extends VectorTileLayer {
-            createRenderer() {
-              return new WebGLVectorTileLayerRenderer(this, {
-                style: style // WebGL 스타일 객체 적용
-              });
-            }
-          })({
-            source: vectorTileSource
-          }));
-        }
-      }
-    }
-
-    // 여러 스타일별로 생성된 레이어들을 하나의 LayerGroup으로 묶어 반환
-    return new LayerGroup({
-      layers: styledLayers
+          if (typeof style === 'function') {
+            return new VectorTileLayer({
+              source: vectorTileSource,
+              style: style
+            });
+          } else {
+            // 스타일이 객체일 경우, WebGL 기반 VectorTileLayer 생성
+            return new (class extends VectorTileLayer {
+              createRenderer() {
+                return new WebGLVectorTileLayerRenderer(this, {
+                  style: style // WebGL 스타일 객체 적용
+                });
+              }
+            })({
+              source: vectorTileSource
+            });
+          }
+        })
+      )
     });
   });
 }
 
-function createStyledOlLayers(styleObj, layersObj) {
-  return layersObj.map(layerObj => {
-    if (layerObj.layers) {
-      // 하위 레이어가 있는 경우, 재귀적으로 LayerGroup 생성
-      return new LayerGroup({
-        layers: createStyledOlLayers(styleObj, layerObj.layers) // 재귀적으로 하위 레이어 처리
-      });
-    }
-
-    const vectorTileSource = new VectorTileSource({
-      format: new MVT(),
-      url: layerObj.source // 각 레이어는 개별 소스를 사용
-    });
-
-    // 스타일 이름에 따라 각 스타일별 레이어 생성
-    const styledLayers = layerObj.rules.flatMap(rule =>
-      rule.styleNames.map(styleName => {
-        const style = styleObj[styleName];
-
-        // 스타일이 함수일 경우, Canvas 기반 VectorTileLayer 생성
-        if (typeof style === 'function') {
-          return new VectorTileLayer({
-            source: vectorTileSource,
-            style: style
-          });
-        } else {
-          // 스타일이 객체일 경우, WebGL 기반 VectorTileLayer 생성
-          return new (class extends VectorTileLayer {
-            createRenderer() {
-              return new WebGLVectorTileLayerRenderer(this, {
-                style: style // WebGL 스타일 객체 적용
-              });
-            }
-          })({
-            source: vectorTileSource
-          });
-        }
-      })
-    );
-
-    // 여러 스타일별로 생성된 레이어들을 하나의 LayerGroup으로 묶어 반환
-    return new LayerGroup({
-      layers: styledLayers
-    });
-  });
-}
 
 /*
 function createRulesToOlStyles(rules)
