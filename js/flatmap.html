@@ -1,3 +1,47 @@
+function createStyledLayer({ style, source }) {
+  if (typeof style === 'function') {
+    return new VectorTileLayer({
+      source: source,
+      style: style
+    });
+  } else {
+    return new (class extends VectorTileLayer {
+      createRenderer() {
+        return new WebGLVectorTileLayerRenderer(this, {
+          style: style
+        });
+      }
+    })({
+      source: source
+    });
+  }
+}
+
+function createStyledOlLayers(styleObj, layersObj) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
+      return new LayerGroup({
+        layers: createStyledOlLayers(styleObj, layerObj.layers)
+      });
+    }
+
+    const vectorTileSource = new VectorTileSource({
+      format: new MVT(),
+      url: layerObj.source
+    });
+
+    const layers = layerObj.rules.flatMap(rule =>
+      rule.styleNames.map(styleName =>
+        createStyledLayer({ style: styleObj[styleName], source: vectorTileSource })
+      )
+    );
+
+    return layers.length === 1 ? layers[0] : new LayerGroup({ layers });
+  });
+}
+
+
+
 const styleObj = {
   "BD130P01": function() { /* 스타일 함수 */ },
   "BD130P02": { /* 스타일 객체 */ }
