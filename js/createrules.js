@@ -40,7 +40,7 @@ function createRulesToOlStyles(rules) {
             // symbol이 존재하는 경우
             const processedSymbol = processSymbol(rule.symbol); // ol flatStyle 형태로 변경 시도
             if (processedSymbol) {// filter를 적용하여 processedSymbol을 처리
-                flatStyles.push(processedSymbol.map(style => ({ filter: rule.filter, ...style })));
+                flatStyles.push(...processedSymbol.map(style => ({ filter: rule.filter, ...style })));
             } else {// filter 기반의 스타일 함수로 변환하여 저장
                 symbolStyles.push(rule);
             }
