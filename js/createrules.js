@@ -39,23 +39,19 @@ function createRulesToOlStyles(rules) {
         if (rule.symbol) {
             // symbol이 존재하는 경우
             const processedSymbol = processSymbol(rule.symbol); // ol flatStyle 형태로 변경 시도
-            if (processedSymbol) {
-                // filter를 적용하여 processedSymbol을 처리
-                symbolStyles.push(processedSymbol.map(style => ({ filter: rule.filter, ...style })));
-            } else {
-                // filter 기반의 스타일 함수로 변환하여 저장
+            if (processedSymbol) {// filter를 적용하여 processedSymbol을 처리
+                flatStyles.push(processedSymbol.map(style => ({ filter: rule.filter, ...style })));
+            } else {// filter 기반의 스타일 함수로 변환하여 저장
                 symbolStyles.push(rule);
             }
         } else if (rule.style) {
-            // style이 존재하는 경우 flatStyles에 추가
-            let flatStyle = { filter: rule.filter, ...rule.style };
-            flatStyles.push(flatStyle);
+            flatStyles.push({ filter: rule.filter, ...rule.style });
         }
     }
 
-    // symbolStyles가 있으면 rulesToStyleFunction 결과를, flatStyles가 있으면 flatStyles를 spread 연산자로 추가
     return [
-        ...(symbolStyles.length > 0 ? [rulesToStyleFunction(symbolStyles)] : []),
-        ...(flatStyles.length > 0 ? [flatStyles] : [])
+        ...(symbolStyles.length ? [rulesToStyleFunction(symbolStyles)] : []),
+        ...(flatStyles.length ? [flatStyles] : [])
     ];
+    
 }
