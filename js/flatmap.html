@@ -32,7 +32,13 @@ function createStyledOlLayers(styleObj, layersObj) {
 
     const layers = layerObj.rules.flatMap(rule =>
       rule.styleNames.map(styleName =>
-        createStyledLayer({ style: styleObj[styleName], source: vectorTileSource })
+        createStyledLayer({
+          style: {
+            ...styleObj[styleName], // Original style
+            filter: rule.filter      // Add the filter directly
+          },
+          source: vectorTileSource
+        })
       )
     );
 
@@ -40,7 +46,7 @@ function createStyledOlLayers(styleObj, layersObj) {
   });
 }
 
-
+///////
 
 const styleObj = {
   "BD130P01": function() { /* 스타일 함수 */ },
