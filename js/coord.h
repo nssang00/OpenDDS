@@ -1,94 +1,97 @@
-#include <iostream>
-#include <list>
 #include <memory>
+#include <list>
+#include <iostream>
 
-// 기본 coord 인터페이스 클래스
-class coordImpl {
+class Coord {
 public:
-    virtual ~coordImpl() = default;
-    virtual void print() const = 0;
-    virtual std::shared_ptr<coordImpl> clone() const = 0;
-};
+    Coord();
+    Coord(const Coord& other);
+    Coord& operator=(const Coord& other);
+    virtual ~Coord() = default;
 
-// coord 클래스 선언 (실제로 리스트에서 관리)
-class coord {
-public:
-    // 기본 2D 생성자
-    coord(int x = 0, int y = 0) 
-        : impl(std::make_shared<coord2DImpl>(x, y)) {}
+    virtual void print() const;
 
-    // 3D 좌표를 생성하는 생성자
-    coord(int x, int y, int z) 
-        : impl(std::make_shared<coord3DImpl>(x, y, z)) {}
-
-    // 복사 생성자와 대입 연산자에서 다형성 유지
-    coord(const coord& other) 
-        : impl(other.impl->clone()) {}
-
-    coord& operator=(const coord& other) {
-        if (this != &other) {
-            impl = other.impl->clone();
-        }
-        return *this;
-    }
-
-    // 출력 함수
-    void print() const {
-        impl->print();
-    }
+protected:
+    class Impl;
+    std::shared_ptr<Impl> _pimpl;
 
 private:
-    std::shared_ptr<coordImpl> impl;  // 다형적 구현을 위한 shared_ptr
-
-    // 내부 2D 구현 클래스
-    class coord2DImpl : public coordImpl {
+    class Impl {
     public:
-        coord2DImpl(int x, int y) : x(x), y(y) {}
-        
-        void print() const override {
-            std::cout << "coord2D(" << x << ", " << y << ")\n";
-        }
-
-        std::shared_ptr<coordImpl> clone() const override {
-            return std::make_shared<coord2DImpl>(*this);
-        }
-
-    private:
-        int x, y;
+        virtual ~Impl() = default;
+        virtual void print() const = 0;
+        virtual std::unique_ptr<Impl> clone() const = 0;
     };
 
-    // 내부 3D 구현 클래스
-    class coord3DImpl : public coordImpl {
+    class Impl2D : public Impl {
     public:
-        coord3DImpl(int x, int y, int z) : x(x), y(y), z(z) {}
-
+        Impl2D(double x, double y) : x(x), y(y) {}
         void print() const override {
-            std::cout << "coord3D(" << x << ", " << y << ", " << z << ")\n";
+            std::cout << "2D Coord: (" << x << ", " << y << ")" << std::endl;
         }
-
-        std::shared_ptr<coordImpl> clone() const override {
-            return std::make_shared<coord3DImpl>(*this);
+        std::unique_ptr<Impl> clone() const override {
+            return std::make_unique<Impl2D>(*this);
         }
-
     private:
-        int x, y, z;
+        double x, y;
     };
+
+    class Impl3D : public Impl {
+    public:
+        Impl3D(double x, double y, double z) : x(x), y(y), z(z) {}
+        void print() const override {
+            std::cout << "3D Coord: (" << x << ", " << y << ", " << z << ")" << std::endl;
+        }
+        std::unique_ptr<Impl> clone() const override {
+            return std::make_unique<Impl3D>(*this);
+        }
+    private:
+        double x, y, z;
+    };
+};
+
+Coord::Coord() : _pimpl(nullptr) {}
+
+Coord::Coord(const Coord& other) : _pimpl(other._pimpl ? other._pimpl->clone() : nullptr) {}
+
+Coord& Coord::operator=(const Coord& other) {
+    if (this != &other) {
+        _pimpl = other._pimpl ? other._pimpl->clone() : nullptr;
+    }
+    return *this;
+}
+
+void Coord::print() const {
+    if (_pimpl) {
+        _pimpl->print();
+    } else {
+        std::cout << "Empty Coord" << std::endl;
+    }
+}
+
+class Coord2D : public Coord {
+public:
+    Coord2D(double x, double y) {
+        _pimpl = std::make_unique<Impl2D>(x, y);
+    }
+};
+
+class Coord3D : public Coord {
+public:
+    Coord3D(double x, double y, double z) {
+        _pimpl = std::make_unique<Impl3D>(x, y, z);
+    }
 };
 
 int main() {
-    std::list<coord> coordList;
+    std::list<Coord> coordList;
 
-    // 2D 좌표 추가
-    coord c1(1, 2);
-    coordList.push_back(c1); // coord2D 객체 추가
+    coordList.push_back(Coord2D(1.0, 2.0));
+    coordList.push_back(Coord3D(3.0, 4.0, 5.0));
+    coordList.push_back(Coord2D(6.0, 7.0));
 
-    // 3D 좌표 추가
-    coord c2(3, 4, 5);
-    coordList.push_back(c2); // coord3D 객체 추가
-
-    // 리스트의 모든 좌표 출력
-    for (const auto& c : coordList) {
-        c.print();  // coord2D 또는 coord3D에 맞게 출력됨
+    for (const auto& coord : coordList) {
+        coord.print();
     }
 
     return 0;
