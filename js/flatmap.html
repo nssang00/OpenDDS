@@ -49,8 +49,32 @@ function createStyledOlLayers(styleObj, layersObj) {
 ///////
 
 const styleObj = {
-  "BD130P01": function() { /* 스타일 함수 */ },
-  "BD130P02": { /* 스타일 객체 */ }
+  "AL015A08": [
+    {
+      "style": {
+        "fill-color": [255,255,255,0],
+        "stroke-pattern-src": "No_Fish.png",
+        "stroke-width": null,
+        "stroke-pattern-start-offset": null,
+        "stroke-pattern-spacing": null
+      }
+    }
+  ],
+  "AL015A05": [
+    {
+      "style": {
+        "fill-pattern-src": "aaa.png",
+        "stroke-pattern-src": "No_Fish.png",
+        "stroke-width": null,
+        "stroke-pattern-start-offset": null,
+        "stroke-pattern-spacing": null
+      },
+      "symbol": {
+        "type": "polygon",
+        "polygon-picture-texture-fill": true
+      }
+    }
+  ]
 };
 
 const layersObj = [
@@ -82,8 +106,21 @@ const layersObj = [
 
 // createStyledOlLayers 함수 내 styles 부분
 const styles = layersObj[0].rules.flatMap(rule =>
-  rule.styleNames.map(styleName => styleObj[styleName])
+  rule.styleNames.map(styleName => {
+    // Get the corresponding style object from styleObj
+    const style = styleObj[styleName];
+    
+    // If the style is found, include the filter from the rule
+    return style ? style.map(style => ({
+      ...style, // Include the original style
+      filter: rule.filter // Add the filter from the rule
+    })) : [];
+  })
 );
+
+console.log(styles);
+
+
 
 console.log(styles);
 // [function() { /* 스타일 함수 */ }, { /* 스타일 객체 */ }]
