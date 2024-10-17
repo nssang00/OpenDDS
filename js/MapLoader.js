@@ -28,7 +28,7 @@ function createStyledOlLayers(styleObj, layersObj) {
 
     const vectorTileSource = new VectorTileSource({
       format: new MVT(),
-      url: `https://api.maptiler.com/tiles/${layerObj.source}/{z}/{x}/{y}.pbf`
+      url: `local://mbtiles/${layerObj.source}/{z}/{x}/{y}.pbf`
     });
 
     for (const rule of layerObj.rules) {
