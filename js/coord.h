@@ -34,8 +34,6 @@ public:
     void print() const {
         if (_pimpl) {
             _pimpl->print();
-        } else {
-            std::cout << "Empty Coord" << std::endl;
         }
     }
 
@@ -71,7 +69,6 @@ private:
 };
 
 int main() {
-    // std::list<Coord> 객체에 다양한 타입의 Coord2D 및 Coord3D 삽입
     std::list<Coord> coordList;
 
     // 명시적인 Coord 캐스팅 없이 직접 객체를 넣을 수 있음
