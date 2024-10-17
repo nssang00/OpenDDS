@@ -1,3 +1,32 @@
+
+function createStyledOlLayers(styleObj, layersObj) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
+      return new LayerGroup({
+        layers: createStyledOlLayers(styleObj, layerObj.layers)
+      });
+    }
+
+    const vectorTileSource = new VectorTileSource({
+      format: new MVT(),
+      url: layerObj.source
+    });
+
+    const layers = layerObj.rules.flatMap(rule =>
+      rule.styleNames.flatMap(styleName =>
+        [...(Array.isArray(styleObj[styleName]) ? styleObj[styleName] : [styleObj[styleName]])].map(style =>
+          createStyledLayer({
+            style: {...style, filter: rule.filter},
+            source: vectorTileSource
+          })
+        )
+      )
+    );
+
+    return layers.length === 1 ? layers[0] : new LayerGroup({ layers });
+  });
+}
+
 function createStyledLayer({ style, source }) {
   if (typeof style === 'function') {
     return new VectorTileLayer({
