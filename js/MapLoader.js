@@ -1,76 +1,58 @@
+
+function createStyledLayer({ style, source }) {
+  if (typeof style === 'function') {
+    return new VectorTileLayer({
+      source: source,
+      style: style
+    });
+  } else {
+    return new (class extends VectorTileLayer {
+      createRenderer() {
+        return new WebGLVectorTileLayerRenderer(this, {
+          style: style
+        });
+      }
+    })({
+      source: source
+    });
+  }
+}
+
 function createStyledOlLayers(styleObj, layersObj) {
   return layersObj.map(layerObj => {
     if (layerObj.layers) {
-      // 하위 레이어가 있는 경우, 재귀적으로 LayerGroup 생성
       return new LayerGroup({
-        layers: createStyledOlLayers(styleObj, layerObj.layers) // 재귀적으로 하위 레이어 처리
+        layers: createStyledOlLayers(styleObj, layerObj.layers)
       });
     }
 
     const vectorTileSource = new VectorTileSource({
       format: new MVT(),
-      url: layerObj.source // 각 레이어는 개별 소스를 사용
+      url: `https://api.maptiler.com/tiles/${layerObj.source}/{z}/{x}/{y}.pbf`
     });
 
-    return new LayerGroup({
-      layers: layerObj.rules.flatMap(rule =>
-        rule.styleNames.map(styleName => {
-          const style = styleObj[styleName];
+    for (const rule of layerObj.rules) {
+      for (const styleName of rule.styleNames) {
+        const styles = Array.isArray(styleObj[styleName]) 
+          ? styleObj[styleName] 
+          : [styleObj[styleName]];  // Ensure array of styles
 
-          // 스타일이 함수일 경우, Canvas 기반 VectorTileLayer 생성
-          if (typeof style === 'function') {
-            return new VectorTileLayer({
-              source: vectorTileSource,
-              style: style
-            });
-          } else {
-            // 스타일이 객체일 경우, WebGL 기반 VectorTileLayer 생성
-            return new (class extends VectorTileLayer {
-              createRenderer() {
-                return new WebGLVectorTileLayerRenderer(this, {
-                  style: style // WebGL 스타일 객체 적용
-                });
-              }
-            })({
-              source: vectorTileSource
-            });
-          }
-        })
-      )
-    });
+        for (const style of styles) {
+          layers.push(createStyledLayer({
+            style: {
+              ...style,       // Original style
+              filter: rule.filter  // Add the filter directly
+            },
+            source: vectorTileSource
+          }));
+        }
+      }
+    }
+
+    return layers.length === 1 ? layers[0] : new LayerGroup({ layers });
   });
 }
 
-
-/*
-function createRulesToOlStyles(rules)
-{
-    if (!rules) {
-        return null;
-    }
-  
-    let compiledRules = [];
-    for (const rule of rules) {
-        let compiledRule = null;
-        if(rule.symbol) {//symbol 이 존재할경우
-            const processedSymbol = processSymbol(rule.symbol);// ol flatStyle형태로 변경처리 시도
-            if(processedSymbol)//filter처리 
-                compiledRule = processedSymbol.map(style => ({filter: rule.filter, ...style}));
-            else//filter기반 스타일 함수로 변환시도
-                compiledRule = rulesToStyleFunction([rule]);
-        }
-        else {
-            if(rule.style) {//style이 존재할경우 webgl flatstyle은 style 을 복사.
-                compiledRule = {filter: rule.filter,...rule.style}
-            }
-        }
-        if(compiledRule !== null)
-            compiledRules.push(compiledRule);
-    }
-  
-    return compiledRules;
-}
-*/
 function createRulesToOlStyles(rules) {
     if (!rules) {
         return null;
@@ -117,16 +99,39 @@ class LayerGroup {
   }
 }
 
+class WebGLVectorTileLayerRenderer {
+  constructor(layer, options) {
+    this.layer = layer;    // 레이어 저장
+    this.style = options.style;    // 스타일 저장
+  }
+}
+
+class VectorTileLayer {
+  constructor(options) {
+    this.source = options.source;    // 소스 저장
+    this.style = options.style;      // 스타일 저장
+  }
+
+  createRenderer() {
+    // WebGLVectorTileLayerRenderer를 생성해 반환
+    return new WebGLVectorTileLayerRenderer(this, {
+      style: this.style
+    });
+  }
+}
+
+
+
 class MapStyler {
-  applyMap(map) {
-    throw new Error("applyMap method must be implemented");
-  }
-  buildMapLayer(layersObj) {
-    throw new Error("buildMapLayer method must be implemented");
-  }
-  buildMapStyle(compiledStyles) {
-    throw new Error("buildMapStyle method must be implemented");
-  }
+	applyMap(map) {
+		throw new Error("applyMap method must be implemented");
+	}
+	buildMapLayer(layersObj) {
+		throw new Error("buildMapLayer method must be implemented");
+	}
+	buildMapStyle(compiledStyles) {
+		throw new Error("buildMapStyle method must be implemented");
+	}
 }
 
 class OlMapStyler extends MapStyler {
@@ -141,135 +146,6 @@ class OlMapStyler extends MapStyler {
       return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
     }
   }
-createOlLayers(layersObj) {
-  return layersObj.map(layerObj => {
-    if (layerObj.layers) {
-      return new LayerGroup({
-        layers: this.createOlLayers(layerObj.layers)
-      });
-    }
-    return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
-  });
-}
-  
-  /*
-createOlLayers(layersObj) {
-  return layersObj.map(layerObj => {
-    if (!layerObj.layers) {
-      return createStyledLayers(layerObj.source, layerObj.rules.map(rule => rule.styleNames));
-    }
-    return new LayerGroup({
-      layers: this.createOlLayers(layerObj.layers) 
-    });
-  });
-}
-*/
-function createStyledLayers(vectorTileSource, styles) {
-  if (typeof styles === 'function') {
-    // 스타일이 함수인 경우, Canvas 기반 VectorTileLayer를 생성
-    return new VectorTileLayer({
-      source: vectorTileSource,
-      style: styles,
-    });
-  } else {
-    // 스타일이 객체인 경우, WebGL 기반 VectorTileLayer를 생성
-    return new (class extends VectorTileLayer {
-      createRenderer() {
-        return new WebGLVectorTileLayerRenderer(this, {
-          style: styles // flat styles
-        });
-      }
-    })({
-      source: vectorTileSource,
-    });
-  }
-}
-
-function createOlLayers(styleObj, layersObj) {
-  return layersObj.map(layerObj => {
-    if (layerObj.layers) {
-      // 그룹인 경우, LayerGroup을 생성
-      return new LayerGroup({
-        layers: createOlLayers(layerObj.layers) // 재귀적으로 하위 레이어 처리
-      });
-    }
-
-    // 벡터 타일 소스 생성
-    const vectorTileSource = new VectorTileSource({
-      format: new MVT(),
-      url: `https://api.maptiler.com/tiles/${layerObj.source}/{z}/{x}/{y}.pbf`
-    });
-
-    // 스타일 이름을 스타일 객체로 매핑
-    const styles = layerObj.rules.map(rule =>
-      rule.styleNames.map(styleName => styleObj[styleName])
-    );
-
-    //const styledLayers = createStyledLayers(vtSourceUrl, [canvasStyle, webGLStyle]);
-    return createStyledLayers(vectorTileSource, styles);
-
-  });
-}
-
-//[stylefunction, flatStyles]
-function createRulesToOlStyles(rules) {
-  if(!rules) {
-    return null;
-  }
-  let compiledRules = [];
-  for(const rule of rules) {
-    let compiledRule = null;
-    if(rule.symbol) {//symbol이 존재할 경우
-      compiledRule = rulesToStyleFunction([rule]);
-    }
-    else {
-      if(rule.style) {//style이 존재할 경우 webgl flatstyle은 style을 복사.
-        compiledRule = {filter: rule.filter, ...rule.style}
-      }
-      if(compiledRule !=== null)
-        compiledRules.push(compiledRule);
-    }
-    return compiledRules;
-}
-  
-function createStyledOlLayers(styleObj, layersObj) {
-  return layersObj.map(layerObj => {
-    if (layerObj.layers) {
-      // 그룹인 경우, LayerGroup을 생성
-      return new LayerGroup({
-        layers: createOlLayers(layerObj.layers) // 재귀적으로 하위 레이어 처리
-      });
-    }
-
-    const vectorTileSource = new VectorTileSource({
-      format: new MVT(),
-      url: layerObj.source // 레이어마다 개별 소스를 사용
-    });
-
-    const styles = layerObj.rules.map(rule =>
-      rule.styleNames.map(styleName => styleObj[styleName])
-    );
-
-    if (typeof styles === 'function') {// 스타일이 함수인 경우, Canvas 기반 VectorTileLayer를 생성
-      return new VectorTileLayer({
-        source: vectorTileSource,
-        style: styles,
-      });
-    } else {
-      return new (class extends VectorTileLayer {      // 스타일이 객체인 경우, WebGL 기반 VectorTileLayer를 생성
-        createRenderer() {
-          return new WebGLVectorTileLayerRenderer(this, {
-            style: styles // flat styles
-          });
-        }
-      })({
-        source: vectorTileSource,
-      });
-    }
-  });
-}
-
-  
 
 applyMap(map, jsonConfig) {
   for (const layerConfig of jsonConfig) {
@@ -313,6 +189,64 @@ class OlMapStyler extends MapStyler {
       
   }
 }
+
+
+const styleObj = {
+	"AL015A08": [
+		{
+		"style": {
+			"fill-color": [255,255,255,0],
+			"stroke-pattern-src": "No_Fish.png",
+			"stroke-width": null,
+			"stroke-pattern-start-offset": null,
+			"stroke-pattern-spacing": null
+		}
+		}
+	],
+	"AL015A05": [
+		{
+		"style": {
+			"fill-pattern-src": "aaa.png",
+			"stroke-pattern-src": "No_Fish.png",
+			"stroke-width": null,
+			"stroke-pattern-start-offset": null,
+			"stroke-pattern-spacing": null
+		},
+		"symbol": {
+			"type": "polygon",
+			"polygon-picture-texture-fill": true
+		}
+		}
+	]
+};
+
+const layersObj = [
+  {
+    "name": "암초",
+    "source": "PBD130",
+    "rules": [
+      {
+        "styleNames": ["BD130P01"],
+        "filter": [
+          "all",
+          ["<=", ["resolution"], 611.49622628141],
+          [">", ["resolution"], 152.8740565703525],
+          ["in", ["get", "VRR"], [0, 1, 8]]
+        ]
+      },
+      {
+        "styleNames": ["BD130P02"],
+        "filter": [
+          "all",
+          ["<=", ["resolution"], 611.49622628141],
+          [">", ["resolution"], 152.8740565703525],
+          ["in", ["get", "VRR"], [2, 4]]
+        ]
+      }
+    ]
+  }
+];
+
 
 
 import MapLayerBuilder from './mapLayerBuilder.js';
