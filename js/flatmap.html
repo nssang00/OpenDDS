@@ -120,6 +120,21 @@ const styles = layersObj[0].rules.flatMap(rule =>
 
 console.log(styles);
 
+const stylesWithFilter = layersObj[0].rules.flatMap(rule =>
+  rule.styleNames.flatMap(styleName => {
+    const styles = Array.isArray(styleObj[styleName]) 
+      ? styleObj[styleName] 
+      : [styleObj[styleName]];  // Wrap single object in array if necessary
+
+    return styles.map(style => ({
+      ...style,  // Spread the style object
+      filter: rule.filter  // Add the filter from the rule
+    }));
+  })
+);
+
+console.log(stylesWithFilter);            
+
 
 
 console.log(styles);
