@@ -2,94 +2,83 @@
 #include <list>
 #include <iostream>
 
+// ICoord 인터페이스 정의
+class ICoord {
+public:
+    virtual ~ICoord() = default;
+    virtual void print() const = 0;  // 인터페이스 함수
+};
+
+// Coord 클래스는 ICoord 인터페이스만 참조
 class Coord {
 public:
-    Coord();
-    Coord(const Coord& other);
-    Coord& operator=(const Coord& other);
+    // 템플릿 생성자: 어떤 ICoord 타입이든 받아서 처리 가능
+    template<typename T, typename = std::enable_if_t<std::is_base_of_v<ICoord, T>>>
+    Coord(T impl) : _pimpl(std::make_shared<T>(impl)) {}
+
+    // 복사 생성자
+    Coord(const Coord& other) : _pimpl(other._pimpl ? other._pimpl : nullptr) {}
+
+    // 대입 연산자
+    Coord& operator=(const Coord& other) {
+        if (this != &other) {
+            _pimpl = other._pimpl;
+        }
+        return *this;
+    }
+
     virtual ~Coord() = default;
 
-    virtual void print() const;
-
-protected:
-    class Impl;
-    std::shared_ptr<Impl> _pimpl;
+    // print 함수 호출 (ICoord의 인터페이스만 호출)
+    void print() const {
+        if (_pimpl) {
+            _pimpl->print();
+        } else {
+            std::cout << "Empty Coord" << std::endl;
+        }
+    }
 
 private:
-    class Impl {
-    public:
-        virtual ~Impl() = default;
-        virtual void print() const = 0;
-        virtual std::unique_ptr<Impl> clone() const = 0;
-    };
-
-    class Impl2D : public Impl {
-    public:
-        Impl2D(double x, double y) : x(x), y(y) {}
-        void print() const override {
-            std::cout << "2D Coord: (" << x << ", " << y << ")" << std::endl;
-        }
-        std::unique_ptr<Impl> clone() const override {
-            return std::make_unique<Impl2D>(*this);
-        }
-    private:
-        double x, y;
-    };
-
-    class Impl3D : public Impl {
-    public:
-        Impl3D(double x, double y, double z) : x(x), y(y), z(z) {}
-        void print() const override {
-            std::cout << "3D Coord: (" << x << ", " << y << ", " << z << ")" << std::endl;
-        }
-        std::unique_ptr<Impl> clone() const override {
-            return std::make_unique<Impl3D>(*this);
-        }
-    private:
-        double x, y, z;
-    };
+    // ICoord 인터페이스를 포인터로 관리
+    std::shared_ptr<ICoord> _pimpl;
 };
 
-Coord::Coord() : _pimpl(nullptr) {}
-
-Coord::Coord(const Coord& other) : _pimpl(other._pimpl ? other._pimpl->clone() : nullptr) {}
-
-Coord& Coord::operator=(const Coord& other) {
-    if (this != &other) {
-        _pimpl = other._pimpl ? other._pimpl->clone() : nullptr;
-    }
-    return *this;
-}
-
-void Coord::print() const {
-    if (_pimpl) {
-        _pimpl->print();
-    } else {
-        std::cout << "Empty Coord" << std::endl;
-    }
-}
-
-class Coord2D : public Coord {
+// 2D 좌표를 처리하는 Coord2D 클래스 (ICoord 인터페이스 구현)
+class Coord2D : public ICoord {
 public:
-    Coord2D(double x, double y) {
-        _pimpl = std::make_unique<Impl2D>(x, y);
+    Coord2D(double x, double y) : x(x), y(y) {}
+
+    void print() const override {
+        std::cout << "2D Coord: (" << x << ", " << y << ")" << std::endl;
     }
+
+private:
+    double x, y;
 };
 
-class Coord3D : public Coord {
+// 3D 좌표를 처리하는 Coord3D 클래스 (ICoord 인터페이스 구현)
+class Coord3D : public ICoord {
 public:
-    Coord3D(double x, double y, double z) {
-        _pimpl = std::make_unique<Impl3D>(x, y, z);
+    Coord3D(double x, double y, double z) : x(x), y(y), z(z) {}
+
+    void print() const override {
+        std::cout << "3D Coord: (" << x << ", " << y << ", " << z << ")" << std::endl;
     }
+
+private:
+    double x, y, z;
 };
 
 int main() {
+    // std::list<Coord> 객체에 다양한 타입의 Coord2D 및 Coord3D 삽입
     std::list<Coord> coordList;
 
-    coordList.push_back(Coord2D(1.0, 2.0));
-    coordList.push_back(Coord3D(3.0, 4.0, 5.0));
-    coordList.push_back(Coord2D(6.0, 7.0));
+    // 명시적인 Coord 캐스팅 없이 직접 객체를 넣을 수 있음
+    coordList.emplace_back(Coord2D(1.0, 2.0));
+    coordList.emplace_back(Coord3D(3.0, 4.0, 5.0));
+    coordList.emplace_back(Coord2D(6.0, 7.0));
 
+    // 출력
     for (const auto& coord : coordList) {
         coord.print();
     }
