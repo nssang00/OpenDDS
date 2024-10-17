@@ -1,6 +1,7 @@
 #include <memory>
 #include <list>
 #include <iostream>
+#include <type_traits>
 
 // ICoord 인터페이스 정의
 class ICoord {
@@ -13,7 +14,7 @@ public:
 class Coord {
 public:
     // 템플릿 생성자: 어떤 ICoord 타입이든 받아서 처리 가능
-    template<typename T, typename = std::enable_if_t<std::is_base_of_v<ICoord, T>>>
+    template<typename T, typename = typename std::enable_if<std::is_base_of<ICoord, T>::value>::type>
     Coord(T impl) : _pimpl(std::make_shared<T>(impl)) {}
 
     // 복사 생성자
