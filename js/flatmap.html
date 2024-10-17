@@ -95,6 +95,43 @@ const layers = layerObj.rules.flatMap(rule =>
 
 ///////
 
+class WebGLVectorTileLayerRenderer {
+  constructor(layer, options) {
+    this.layer = layer;    // 레이어 저장
+    this.style = options.style;    // 스타일 저장
+  }
+}
+
+class VectorTileLayer {
+  constructor(options) {
+    this.source = options.source;    // 소스 저장
+    this.style = options.style;      // 스타일 저장
+  }
+
+  createRenderer() {
+    // WebGLVectorTileLayerRenderer를 생성해 반환
+    return new WebGLVectorTileLayerRenderer(this, {
+      style: this.style
+    });
+  }
+}
+
+// 테스트용 함수
+function createStyledLayer({ style, source }) {
+  const layer = new VectorTileLayer({
+    source: source,
+    style: style
+  });
+
+  // createRenderer로 WebGLVectorTileLayerRenderer 생성
+  const renderer = layer.createRenderer();
+
+  return {
+    layer,
+    renderer
+  };
+}
+
 const styleObj = {
   "AL015A08": [
     {
