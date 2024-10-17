@@ -41,7 +41,25 @@ function createStyledOlLayers(styleObj, layersObj) {
         })
       )
     );
+/*
+const layers = layerObj.rules.flatMap(rule =>
+      rule.styleNames.flatMap(styleName => {
+        const styles = Array.isArray(styleObj[styleName]) 
+          ? styleObj[styleName] 
+          : [styleObj[styleName]];  // Wrap single object in array if necessary
 
+        return styles.map(style =>
+          createStyledLayer({
+            style: {
+              ...style,       // Original style
+              filter: rule.filter  // Add the filter directly
+            },
+            source: vectorTileSource
+          })
+        );
+      })
+    );
+*/
     return layers.length === 1 ? layers[0] : new LayerGroup({ layers });
   });
 }
