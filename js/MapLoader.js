@@ -32,7 +32,7 @@ function createStyledOlLayers(styleObj, layersObj) {
       url: `local://mbtiles/${layerObj.source}/{z}/{x}/{y}.pbf`
     });
 
-    const allStyles = [];  // 모든 스타일을 모을 배열
+    const filteredStyles = [];  // 모든 스타일을 모을 배열
 
     for (const rule of layerObj.rules) {
       for (const styleName of rule.styleNames) {
@@ -41,7 +41,7 @@ function createStyledOlLayers(styleObj, layersObj) {
           : [styleObj[styleName]];  // Ensure array of styles
 
         for (const style of styles) {  // for...of 방식으로 변경
-          allStyles.push({
+          filteredStyles.push({
             ...style,       // Original style
             filter: rule.filter  // Add the filter directly
           });
@@ -50,7 +50,7 @@ function createStyledOlLayers(styleObj, layersObj) {
     }
 
     const styledLayers = createStyledLayers({
-      styles: allStyles,  // 스타일 배열을 넘김
+      styles: filteredStyles,  // 스타일 배열을 넘김
       source: vectorTileSource
     });
 
