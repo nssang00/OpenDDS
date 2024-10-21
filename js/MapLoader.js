@@ -1,3 +1,65 @@
+function createStyledLayers({ styles, source }) {
+  return styles.map(style => {
+    if (typeof style === 'function') {
+      return new VectorTileLayer({
+        source: source,
+        style: style
+      });
+    } else {
+      return new (class extends VectorTileLayer {
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: style
+          });
+        }
+      })({
+        source: source
+      });
+    }
+  });
+}
+
+function createStyledOlLayers(styleObj, layersObj) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
+      return new LayerGroup({
+        layers: createStyledOlLayers(styleObj, layerObj.layers)
+      });
+    }
+
+    const vectorTileSource = new VectorTileSource({
+      format: new MVT(),
+      url: `local://mbtiles/${layerObj.source}/{z}/{x}/{y}.pbf`
+    });
+
+    const allStyles = [];  // 모든 스타일을 모을 배열
+
+    for (const rule of layerObj.rules) {
+      for (const styleName of rule.styleNames) {
+        const styles = Array.isArray(styleObj[styleName]) 
+          ? styleObj[styleName] 
+          : [styleObj[styleName]];  // Ensure array of styles
+
+        for (const style of styles) {  // for...of 방식으로 변경
+          allStyles.push({
+            ...style,       // Original style
+            filter: rule.filter  // Add the filter directly
+          });
+        }
+      }
+    }
+
+    const styledLayers = createStyledLayers({
+      styles: allStyles,  // 스타일 배열을 넘김
+      source: vectorTileSource
+    });
+
+    return styledLayers.length === 1 ? styledLayers[0] : new LayerGroup({ layers: styledLayers });
+  });
+}
+/////////////////////
+////////////////////////
+/////////
 
 function createStyledLayer({ style, source }) {
   if (typeof style === 'function') {
