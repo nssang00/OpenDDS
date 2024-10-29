@@ -1,4 +1,5 @@
-#include <iostream>
+#ifndef SPINLOCK_H
+#define SPINLOCK_H
 
 #ifdef _WIN32
 #include <windows.h>
@@ -8,44 +9,53 @@
 
 class SpinLock {
 public:
-    SpinLock() {
-#ifdef _WIN32
-        lockFlag = 0;
-#else
-        pthread_spin_init(&spinlock, 0);
-#endif
-    }
+    SpinLock();
+    ~SpinLock();
 
-    ~SpinLock() {
-#ifdef _WIN32
-        // Windows에서는 특별히 할 일이 없음
-#else
-        pthread_spin_destroy(&spinlock);
-#endif
-    }
-
-    void lock() {
-#ifdef _WIN32
-        while (InterlockedExchange(&lockFlag, 1) == 1) {
-            Sleep(0); // 다른 스레드에 CPU 양보
-        }
-#else
-        pthread_spin_lock(&spinlock);
-#endif
-    }
-
-    void unlock() {
-#ifdef _WIN32
-        InterlockedExchange(&lockFlag, 0);
-#else
-        pthread_spin_unlock(&spinlock);
-#endif
-    }
+    void lock(); 
+    void unlock(); 
 
 private:
 #ifdef _WIN32
-    volatile LONG lockFlag;  // Windows에서 Spin Lock 상태 (0: 잠금 해제, 1: 잠금)
+    LONG lockFlag; 
 #else
-    pthread_spinlock_t spinlock; // Linux에서 Spin Lock 상태
+    pthread_spinlock_t lock;
 #endif
 };
+
+#endif // SPINLOCK_H
+
+#include "SpinLock.h"
+
+SpinLock::SpinLock() {
+#ifdef _WIN32
+    lockFlag = 0; // 초기값 설정
+#else
+    pthread_spin_init(&lock, PTHREAD_PROCESS_PRIVATE);
+#endif
+}
+
+SpinLock::~SpinLock() {
+#ifdef _WIN32
+#else
+    pthread_spin_destroy(&lock);
+#endif
+}
+
+void SpinLock::lock() {
+#ifdef _WIN32
+    while (InterlockedExchange(&lockFlag, 1) == 1) {
+        Sleep(0); // 다른 스레드에 CPU 양보
+    }
+#else
+    pthread_spin_lock(&lock);
+#endif
+}
+
+void SpinLock::unlock() {
+#ifdef _WIN32
+    InterlockedExchange(&lockFlag, 0);
+#else
+    pthread_spin_unlock(&lock);
+#endif
+}
