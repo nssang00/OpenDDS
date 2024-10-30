@@ -19,11 +19,6 @@ public class BufferHandler
         _position += length;
     }
 
-    public void Put(char[] src, int offset, int length)
-    {
-        _position += System.Text.Encoding.ASCII.GetBytes(src, offset, length, _buffer, _position);
-    }
-
     // Get method for byte array
     public void Get(byte[] dst, int offset, int length)
     {
@@ -31,10 +26,16 @@ public class BufferHandler
         _position += length;
     }
 
+    public void Put(char[] src, int offset, int length)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(src);
+        Buffer.BlockCopy(bytes, 0, _buffer, _position, bytes.Length);
+        _position += length;
+    }    
+
     public void Get(char[] dst, int offset, int length)
     {
-        System.Text.Encoding.ASCII.GetChars(_buffer, _position, length, dst, offset); 
-
-        _position += length; 
+        Encoding.UTF8.GetChars(_buffer, _position, length, dst, offset);
+        _position += length;
     }
 }
