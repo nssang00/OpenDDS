@@ -19,15 +19,9 @@ public class BufferHandler
         _position += length;
     }
 
-    // Put method for char array, converting it to byte array
     public void Put(char[] src, int offset, int length)
     {
-        // Convert the specified range of char[] to byte[]
-        byte[] byteArray = Encoding.UTF8.GetBytes(src, offset, length);
-
-        // Copy the converted byte array to _buffer
-        Buffer.BlockCopy(byteArray, 0, _buffer, _position, byteArray.Length);
-        _position += byteArray.Length;
+        _position += System.Text.Encoding.ASCII.GetBytes(src, offset, length, _buffer, _position);
     }
 
     // Get method for byte array
@@ -37,14 +31,10 @@ public class BufferHandler
         _position += length;
     }
 
-    // Get method for char array, converting each byte to a char
     public void Get(char[] dst, int offset, int length)
     {
-        // Decode byte[] back to char[]
-        char[] charArray = Encoding.UTF8.GetChars(_buffer, _position, length);
-        
-        // Copy the decoded chars to dst
-        Array.Copy(charArray, 0, dst, offset, charArray.Length);
-        _position += length;
+        System.Text.Encoding.ASCII.GetChars(_buffer, _position, length, dst, offset); 
+
+        _position += length; 
     }
 }
