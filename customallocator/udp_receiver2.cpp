@@ -12,6 +12,8 @@ const int TOTAL_PACKETS = 10000; // Number of packets to receive per round
 
 std::queue<std::string> dataQueue;
 bool done = false;
+sockaddr_in clientAddr;
+int clientAddrLen = sizeof(clientAddr);
 
 class Mutex {
 public:
@@ -61,8 +63,7 @@ Mutex mutex;
 DWORD WINAPI producer(LPVOID lpParam) {
     WSADATA wsaData;
     SOCKET udpSocket;
-    sockaddr_in serverAddr, clientAddr;
-    int clientAddrLen = sizeof(clientAddr);
+    sockaddr_in serverAddr;
     char buffer[BUFFER_SIZE];
 
     // Initialize Winsock
@@ -134,8 +135,10 @@ DWORD WINAPI producer(LPVOID lpParam) {
     return 0;
 }
 
-// Consumer function: Processes packets from the queue
+// Consumer function: Processes packets from the queue and sends "PONG" messages back to the client
 DWORD WINAPI consumer(LPVOID lpParam) {
+    SOCKET udpSocket = *(SOCKET*)lpParam;
+
     while (true) {
         mutex.lock();
 
@@ -150,7 +153,11 @@ DWORD WINAPI consumer(LPVOID lpParam) {
             dataQueue.pop();
 
             if (packet == "PONG") {
-                std::cout << "Received PONG message" << std::endl;
+                // Send "PONG" message back to the client
+                const char* pongMessage = "PONG";
+                sendto(udpSocket, pongMessage, strlen(pongMessage), 0,
+                       (sockaddr*)&clientAddr, clientAddrLen);
+                std::cout << "Sent PONG message to client" << std::endl;
             } else {
                 std::cout << "Consumed packet of size " << packet.size() << " bytes" << std::endl;
             }
@@ -164,13 +171,31 @@ DWORD WINAPI consumer(LPVOID lpParam) {
             break;
         }
     }
+
     return 0;
 }
 
 int main() {
+    WSADATA wsaData;
+    SOCKET udpSocket;
+
+    // Initialize Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "WSAStartup failed" << std::endl;
+        return 1;
+    }
+
+    // Create socket
+    udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udpSocket == INVALID_SOCKET) {
+        std::cerr << "Socket creation failed" << std::endl;
+        WSACleanup();
+        return 1;
+    }
+
     // Create producer and consumer threads
     HANDLE producerThread = CreateThread(NULL, 0, producer, NULL, 0, NULL);
-    HANDLE consumerThread = CreateThread(NULL, 0, consumer, NULL, 0, NULL);
+    HANDLE consumerThread = CreateThread(NULL, 0, consumer, &udpSocket, 0, NULL);
 
     // Wait for threads to finish
     WaitForSingleObject(producerThread, INFINITE);
@@ -179,6 +204,8 @@ int main() {
     // Clean up
     CloseHandle(producerThread);
     CloseHandle(consumerThread);
+    closesocket(udpSocket);
+    WSACleanup();
 
     return 0;
 }
