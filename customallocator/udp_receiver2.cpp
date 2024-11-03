@@ -11,7 +11,6 @@ const int BUFFER_SIZE = 1024; // 1KB
 const int TOTAL_PACKETS = 10000; // Number of packets to receive per round
 
 std::queue<std::string> dataQueue;
-bool done = false;
 sockaddr_in clientAddr;
 int clientAddrLen = sizeof(clientAddr);
 
@@ -114,19 +113,7 @@ DWORD WINAPI producer(LPVOID lpParam) {
             cond.notify(); // Notify the consumer
             mutex.unlock();
         }
-
-        // Add "PONG" message to the queue for consumer to process
-        mutex.lock();
-        dataQueue.push("PONG");
-        cond.notify();
-        mutex.unlock();
     }
-
-    // Signal that receiving is done
-    mutex.lock();
-    done = true;
-    cond.notify();
-    mutex.unlock();
 
     // Clean up
     closesocket(udpSocket);
@@ -138,12 +125,13 @@ DWORD WINAPI producer(LPVOID lpParam) {
 // Consumer function: Processes packets from the queue and sends "PONG" messages back to the client
 DWORD WINAPI consumer(LPVOID lpParam) {
     SOCKET udpSocket = *(SOCKET*)lpParam;
+    int processedPackets = 0;
 
     while (true) {
         mutex.lock();
 
-        // Wait for data or until done
-        while (dataQueue.empty() && !done) {
+        // Wait for data
+        while (dataQueue.empty()) {
             cond.wait(mutex);
         }
 
@@ -151,25 +139,22 @@ DWORD WINAPI consumer(LPVOID lpParam) {
         while (!dataQueue.empty()) {
             std::string packet = dataQueue.front();
             dataQueue.pop();
+            processedPackets++;
 
-            if (packet == "PONG") {
+            std::cout << "Consumed packet of size " << packet.size() << " bytes" << std::endl;
+
+            // Check if TOTAL_PACKETS has been processed
+            if (processedPackets >= TOTAL_PACKETS) {
                 // Send "PONG" message back to the client
                 const char* pongMessage = "PONG";
                 sendto(udpSocket, pongMessage, strlen(pongMessage), 0,
                        (sockaddr*)&clientAddr, clientAddrLen);
                 std::cout << "Sent PONG message to client" << std::endl;
-            } else {
-                std::cout << "Consumed packet of size " << packet.size() << " bytes" << std::endl;
+                processedPackets = 0; // Reset for next round
             }
         }
 
-        // Check if we're done
-        bool finished = done && dataQueue.empty();
         mutex.unlock();
-
-        if (finished) {
-            break;
-        }
     }
 
     return 0;
