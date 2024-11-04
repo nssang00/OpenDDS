@@ -130,7 +130,7 @@ DWORD WINAPI consumer(LPVOID lpParam) {
     while (true) {
         mutex.lock();
 
-        // Wait for data
+        // Wait for data if the queue is empty
         while (dataQueue.empty()) {
             cond.wait(mutex);
         }
