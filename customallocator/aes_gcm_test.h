@@ -61,7 +61,7 @@ void benchmark(bool reuse_ctx) {
     std::vector<unsigned char> key(32);
     std::vector<unsigned char> iv(12);
     std::vector<unsigned char> aad = { 0x01, 0x02, 0x03, 0x04 };
-    std::vector<unsigned char> plaintext = { 'H', 'e', 'l', 'l', 'o', ' ', 'O', 'p', 'e', 'n', 'S', 'S', 'L' };
+    std::vector<unsigned char> plaintext(1000, 'A'); // 1000바이트 크기의 평문 데이터
     std::vector<unsigned char> ciphertext;
     std::vector<unsigned char> tag;
 
