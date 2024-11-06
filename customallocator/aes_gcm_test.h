@@ -13,11 +13,14 @@ bool aes_256_gcm_encrypt(EVP_CIPHER_CTX* ctx, const std::vector<unsigned char>& 
                          bool reuse_ctx = false) {
     int len = 0;
 
+    // 컨텍스트 재사용 시 초기화
+    if (reuse_ctx) {
+        EVP_CIPHER_CTX_reset(ctx);
+    }
+
     // 새로운 암호화 시작 (컨텍스트 초기화)
-    if (!reuse_ctx) {
-        if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
-            return false;
-        }
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+        return false;
     }
 
     if (EVP_EncryptInit_ex(ctx, nullptr, nullptr, key.data(), iv.data()) != 1) {
@@ -99,14 +102,14 @@ void benchmark(bool reuse_ctx) {
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end_time - start_time;
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
     if (reuse_ctx) {
         EVP_CIPHER_CTX_free(ctx);
     }
 
     std::cout << (reuse_ctx ? "Reusing EVP_CIPHER_CTX" : "Creating new EVP_CIPHER_CTX each time")
-              << " took " << elapsed.count() << " seconds for " << test_count << " encryptions." << std::endl;
+              << " took " << elapsed.count() << " ms for " << test_count << " encryptions." << std::endl;
 }
 
 int main() {
