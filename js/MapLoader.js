@@ -1,3 +1,15 @@
+const vectorTileSource = {};
+
+function getOrCreateVectorTileSource(sourceUrl) {
+  if (!vectorTileSource[sourceUrl]) {
+    vectorTileSource[sourceUrl] = new VectorTileSource({
+      format: new MVT(),
+      url: `local://mbtiles/${sourceUrl}/{z}/{x}/{y}.pbf`
+    });
+  }
+  return vectorTileSource[sourceUrl];
+}
+
 function createStyledLayers({ styles, source }) {
   return styles.map(style => {
     if (typeof style === 'function') {
@@ -26,12 +38,15 @@ function createStyledOlLayers(styleObj, layersObj) {
         layers: createStyledOlLayers(styleObj, layerObj.layers)
       });
     }
-
+/*
     const vectorTileSource = new VectorTileSource({
       format: new MVT(),
       url: `local://mbtiles/${layerObj.source}/{z}/{x}/{y}.pbf`
     });
-
+*/
+    // Retrieve or create the vectorTileSource with caching
+    const vectorTileSource = getOrCreateVectorTileSource(layerObj.source);
+    
     const filteredStyles = [];  // 모든 스타일을 모을 배열
 
     for (const rule of layerObj.rules) {
