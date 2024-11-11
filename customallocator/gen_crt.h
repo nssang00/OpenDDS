@@ -1,5 +1,5 @@
 @echo off
-:: 배치 파일에서 OpenSSL 경로 설정 (필요한 경우)
+:: OpenSSL 경로 설정 (필요한 경우)
 set OPENSSL_PATH=C:\OpenSSL-Win64\bin
 set PATH=%OPENSSL_PATH%;%PATH%
 
@@ -33,10 +33,15 @@ echo Creating private key for Permission...
 openssl genpkey -algorithm RSA -aes256 -pass pass:%PASSWORD% -out permission_private_key.key -pkeyopt rsa_keygen_bits:4096
 echo Private keys created: identity_private_key.key, permission_private_key.key
 
-:: 종료 메시지
-echo All certificates and private keys have been created with password protection.
-pause
+:: 5. governance.xml 및 permissions.xml에 서명 생성
+echo Signing governance.xml and permissions.xml with permissions CA...
+openssl smime -sign -in governance.xml -out governance.xml.p7s -signer permissionsCA.crt -inkey permissionsCA.key -outform DER -nodetach -passin pass:%PASSWORD%
+openssl smime -sign -in permissions.xml -out permissions.xml.p7s -signer permissionsCA.crt -inkey permissionsCA.key -outform DER -nodetach -passin pass:%PASSWORD%
+echo Signed files created: governance.xml.p7s, permissions.xml.p7s
 
+:: 종료 메시지
+echo All certificates, private keys, and signed XML files have been created.
+pause
 ////////////////////////
 <dds>
     <security>
