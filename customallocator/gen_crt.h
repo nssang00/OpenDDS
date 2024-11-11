@@ -1,4 +1,5 @@
 @echo off
+set PATH=C:\OpenSSL-Win64\bin;%PATH%
 echo Generating Root CA...
 
 :: Step 1: 루트 CA 생성
