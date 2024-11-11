@@ -1,36 +1,26 @@
 @echo off
-:: 배치 파일에서 OpenSSL 경로 설정 (필요한 경우)
-set OPENSSL_PATH=C:\OpenSSL-Win64\bin
-set PATH=%OPENSSL_PATH%;%PATH%
 
-:: 1. Root CA 생성
-echo Creating Root CA...
-openssl genpkey -algorithm RSA -out rootCA.key -pkeyopt rsa_keygen_bits:4096
-openssl req -x509 -new -nodes -key rootCA.key -sha256 -days 3650 -out rootCA.crt -subj "/CN=RootCA"
-echo Root CA created: rootCA.key, rootCA.crt
+set OPENSSL_CONF=C:\Program Files\OpenSSL-Win64\bin\openssl.cfg
 
-:: 2. Identity CA 생성
-echo Creating Identity CA...
-openssl genpkey -algorithm RSA -out identityCA.key -pkeyopt rsa_keygen_bits:4096
-openssl req -new -key identityCA.key -out identityCA.csr -subj "/CN=IdentityCA"
-openssl x509 -req -in identityCA.csr -CA rootCA.crt -CAkey rootCA.key -CAcreateserial -out identityCA.crt -days 3650 -sha256
-echo Identity CA created: identityCA.key, identityCA.crt
+:: 루트 CA 생성 (rootCA.key 및 rootCA.crt)
+echo Generating Root CA...
+openssl genpkey -algorithm RSA -out rootCA.key -aes256 -pass pass:core_1234
+openssl req -key rootCA.key -new -x509 -out rootCA.crt -passin pass:core_1234 -subj "/C=US/ST=California/L=San Francisco/O=MyCompany/CN=RootCA"
 
-:: 3. Permission CA 생성
-echo Creating Permission CA...
-openssl genpkey -algorithm RSA -out permissionCA.key -pkeyopt rsa_keygen_bits:4096
-openssl req -new -key permissionCA.key -out permissionCA.csr -subj "/CN=PermissionCA"
-openssl x509 -req -in permissionCA.csr -CA identityCA.crt -CAkey identityCA.key -CAcreateserial -out permissionCA.crt -days 3650 -sha256
-echo Permission CA created: permissionCA.key, permissionCA.crt
+:: Identity CA 인증서 생성 (identityCA.key 및 identityCA.crt)
+echo Generating Identity CA...
+openssl genpkey -algorithm RSA -out identityCA.key -aes256 -pass pass:core_1234
+openssl req -key identityCA.key -new -x509 -out identityCA.crt -passin pass:core_1234 -subj "/C=US/ST=California/L=San Francisco/O=MyCompany/CN=IdentityCA"
 
-:: 개인 키 생성
-echo Creating private key for Identity and Permission CA...
-openssl genpkey -algorithm RSA -out identity_private_key.key -pkeyopt rsa_keygen_bits:4096
-openssl genpkey -algorithm RSA -out permission_private_key.key -pkeyopt rsa_keygen_bits:4096
-echo Private keys created: identity_private_key.key, permission_private_key.key
+:: 개인 키 및 개인 인증서 생성 (identity_private_key.key 및 identity_certificate.crt)
+echo Generating Identity Certificate...
+openssl genpkey -algorithm RSA -out identity_private_key.key -aes256 -pass pass:core_1234
+openssl req -key identity_private_key.key -new -out identity_request.csr -passin pass:core_1234 -subj "/C=US/ST=California/L=San Francisco/O=MyCompany/CN=Identity"
+openssl x509 -req -in identity_request.csr -CA rootCA.crt -CAkey rootCA.key -CAcreateserial -out identity_certificate.crt -passin pass:core_1234
 
-:: 종료 메시지
-echo All certificates and private keys have been created.
+:: 완료 메시지
+echo All certificates and keys have been generated.
+
 pause
 
 ////////////////////////
