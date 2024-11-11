@@ -33,7 +33,37 @@ echo Private keys created: identity_private_key.key, permission_private_key.key
 echo All certificates and private keys have been created.
 pause
 
+////////////////////////
+<dds>
+    <security>
+        <security_plugins>
+            <plugin name="openssl">
+                <!-- Identity CA 인증서 -->
+                <identity_ca>path/to/rootCA.crt</identity_ca>
 
+                <!-- Permission CA 인증서 -->
+                <permissions_ca>path/to/identityCA.crt</permissions_ca>
+
+                <!-- Identity 인증서 -->
+                <identity_certificate>path/to/identity_certificate.crt</identity_certificate>
+
+                <!-- Identity 개인 키 -->
+                <private_key>path/to/identity_private_key.key</private_key>
+
+                <!-- 개인 키 비밀번호 (필요한 경우) -->
+                <password>core_1234</password>
+            </plugin>
+        </security_plugins>
+
+        <!-- 보안 QoS 설정 -->
+        <security_qos>
+            <encrypt_data>true</encrypt_data>
+            <auth_method>PLUGIN_AUTHENTICATION</auth_method>
+            <message_integrity>true</message_integrity>
+        </security_qos>
+    </security>
+</dds>
+    
 #include <dds/dds.hpp>
 
 int main() {
