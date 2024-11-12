@@ -3,25 +3,25 @@
 set OPENSSL_PATH=C:\OpenSSL-Win64\bin
 set PATH=%OPENSSL_PATH%;%PATH%
 
-:: 설정할 비밀번호
+:: Permissions CA에 사용할 비밀번호
 set PASSWORD=core_1234
 
 :: 1. Root CA 생성
 echo Creating Root CA...
-openssl genpkey -algorithm RSA -out rootCA.key -pkeyopt rsa_keygen_bits:4096
-openssl req -x509 -new -nodes -key rootCA.key -sha256 -days 3650 -out rootCA.crt -subj "/CN=RootCA"
+openssl genrsa -out rootCA.key 2048
+openssl req -x509 -new -key rootCA.key -sha256 -days 3650 -out rootCA.crt -subj "/CN=RootCA"
 echo Root CA created: rootCA.key, rootCA.crt
 
 :: 2. Identity CA 생성
 echo Creating Identity CA...
-openssl genpkey -algorithm RSA -aes256 -pass pass:%PASSWORD% -out identityCA.key -pkeyopt rsa_keygen_bits:4096
-openssl req -new -key identityCA.key -passin pass:%PASSWORD% -out identityCA.csr -subj "/CN=IdentityCA"
+openssl genrsa -out identityCA.key 2048
+openssl req -new -key identityCA.key -out identityCA.csr -subj "/CN=IdentityCA"
 openssl x509 -req -in identityCA.csr -CA rootCA.crt -CAkey rootCA.key -CAcreateserial -out identityCA.crt -days 3650 -sha256
 echo Identity CA created: identityCA.key, identityCA.crt
 
-:: 3. Permissions CA 생성
+:: 3. Permissions CA 생성 (암호 설정)
 echo Creating Permissions CA...
-openssl genpkey -algorithm RSA -aes256 -pass pass:%PASSWORD% -out permissionsCA.key -pkeyopt rsa_keygen_bits:4096
+openssl genrsa -aes256 -passout pass:%PASSWORD% -out permissionsCA.key 2048
 openssl req -new -key permissionsCA.key -passin pass:%PASSWORD% -out permissionsCA.csr -subj "/CN=PermissionsCA"
 openssl x509 -req -in permissionsCA.csr -CA rootCA.crt -CAkey rootCA.key -CAcreateserial -out permissionsCA.crt -days 3650 -sha256
 echo Permissions CA created: permissionsCA.key, permissionsCA.crt
