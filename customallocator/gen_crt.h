@@ -35,9 +35,9 @@ echo Private keys created: identity_private_key.key, permission_private_key.key
 
 :: 5. governance.xml 및 permissions.xml에 서명 생성
 echo Signing governance.xml and permissions.xml with permissions CA...
-openssl smime -sign -in governance.xml -out governance.xml.p7s -signer permissionsCA.crt -inkey permissionsCA.key -outform PEM -nodetach -passin pass:%PASSWORD%
-openssl smime -sign -in permissions.xml -out permissions.xml.p7s -signer permissionsCA.crt -inkey permissionsCA.key -outform PEM -nodetach -passin pass:%PASSWORD%
-echo Signed files created: governance.xml.p7s, permissions.xml.p7s
+openssl smime -sign -in governance.xml -out signed_governance.p7s -signer permissionsCA.crt -inkey permissionsCA.key -outform PEM -nodetach -passin pass:%PASSWORD%
+openssl smime -sign -in permissions.xml -out signed_permissions.p7s -signer permissionsCA.crt -inkey permissionsCA.key -outform PEM -nodetach -passin pass:%PASSWORD%
+echo Signed files created: signed_governance.p7s, signed_permissions.p7s
 
 :: 종료 메시지
 echo All certificates, private keys, and signed XML files have been created.
