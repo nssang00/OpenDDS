@@ -161,6 +161,39 @@ function createRulesToOlStyles(rules) {
 }
 
 /////////
+// EPSG:3857의 기본 설정
+const dpi = 96; // 화면 해상도 (dots per inch)
+const inchesPerMeter = 39.37; // 1 meter = 39.37 inches
+
+// 축척별 scale map
+const scaleMap = {
+    "25K": 25000,
+    "50K": 50000,
+    "100K": 100000,
+    "250K": 250000,
+    "500K": 500000,
+    "1M": 1000000
+};
+
+// EPSG:3857 해상도 계산
+const resolutionMap3857 = {};
+Object.keys(scaleMap).forEach((key) => {
+    const scale = scaleMap[key];
+    resolutionMap3857[key] = scale / (dpi * inchesPerMeter);
+});
+
+// EPSG:4326 해상도 계산 (경위도 좌표)
+const earthCircumference = 40075017; // 지구 둘레 (미터, EPSG:3857에서 사용)
+const resolutionMap4326 = {};
+Object.keys(scaleMap).forEach((key) => {
+    const scale = scaleMap[key];
+    // EPSG:4326은 경도 값에 따라 달라질 수 있음. 여기서는 적도 기준
+    resolutionMap4326[key] = scale / (dpi * inchesPerMeter) * (360 / earthCircumference);
+});
+
+console.log("EPSG:3857 Resolution Map:", resolutionMap3857);
+console.log("EPSG:4326 Resolution Map:", resolutionMap4326);
+/////////
 
 class LayerGroup {
   constructor(options = {}) {
