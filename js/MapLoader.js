@@ -161,6 +161,15 @@ function createRulesToOlStyles(rules) {
 }
 
 /////////
+function scaleToResolution(scale, map) {
+  const dpi = 96; // 화면 해상도 (일반적으로 96 dpi)
+  const projection = map.getView().getProjection();
+  const units = projection.getUnits(); // 'm' 또는 'degrees' 등
+  const resolution = (scale * dpi) / (96 * map.getView().getResolutionForZoom(map.getView().getZoom()));
+  
+  return resolution;
+}
+
 const scale = 25000; // 25k 축척
 const resolution = map.getView().getResolutionForScale(scale);
 console.log('Resolution for 25k scale:', resolution);
