@@ -161,6 +161,9 @@ function createRulesToOlStyles(rules) {
 }
 
 /////////
+const scale = 25000; // 25k 축척
+const resolution = map.getView().getResolutionForScale(scale);
+console.log('Resolution for 25k scale:', resolution);
 // EPSG:3857의 기본 설정
 const dpi = 96; // 화면 해상도 (dots per inch)
 const inchesPerMeter = 39.37; // 1 meter = 39.37 inches
