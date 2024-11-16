@@ -27,15 +27,11 @@ console.log(resolvedStyle);
 function updateFilterToResolution(filter, dpi = 96) {
   const scaleToResolution = (scale) => scale / (dpi * (1000 / 25.4));
 
-  return filter.map((item) =>
-    Array.isArray(item)
-      ? updateFilterToResolution(item, dpi) // 재귀 처리
-      : item === "scale"
-      ? "resolution" // "scale" 문자열 변환
-      : typeof item === "number"
-      ? scaleToResolution(item) // 숫자 변환
-      : item // 나머지 값 그대로 유지
-  );
+  return filter.map((item) => {
+    if (item === "scale") return "resolution"; // "scale"을 "resolution"으로 변경
+    if (typeof item === "number") return scaleToResolution(item); // 숫자 변환
+    return item; // 나머지 값 그대로 유지
+  });
 }
 
 // 원본 데이터
@@ -47,5 +43,10 @@ const filter = [
 ];
 
 // 변환 실행
-const updatedFilter = updateFilterToResolution(filter);
+const updatedFilter = filter.map(([op, key, value]) =>
+  key === "scale"
+    ? [op, "resolution", scaleToResolution(value)]
+    : [op, key, value]
+);
+
 console.log(updatedFilter);
