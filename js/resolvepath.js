@@ -52,45 +52,19 @@ const updatedFilter = filter.map(([op, key, value]) =>
 console.log(updatedFilter);
 
 /////////
-// OpenLayers 맵을 생성합니다.
-const map = new ol.Map({
-  target: 'map',  // HTML 요소 ID
-  view: new ol.View({
-    center: [0, 0],
-    zoom: 2
-  })
+const raster = new TileLayer({
+  name: '2차선 도로',
+  source: new OSM(),
 });
 
-// 외부에서 레이어를 생성하여 맵에 추가하는 예시
-
-// 타일 레이어를 생성하고 이름을 'baseLayer'로 설정
-const baseLayer = new ol.layer.Tile({
-  name: 'baseLayer',  // 레이어 이름 설정
-  source: new ol.source.OSM(),
-});
-
-// 벡터 레이어를 생성하고 이름을 'vectorLayer'로 설정
-const vectorLayer = new ol.layer.Vector({
-  name: 'vectorLayer',  // 레이어 이름 설정
-  source: new ol.source.Vector(),
-});
-
-// 레이어를 맵에 추가
-map.addLayer(baseLayer);
-map.addLayer(vectorLayer);
-
-// 레이어의 이름을 통해 가시성을 변경하는 함수
-function toggleLayerVisibility(layerName, visible) {
-  // 'find' 메서드를 사용하여 이름이 일치하는 레이어 찾기
+function setLayerVisibility(map, layerName, visible) {
   const layer = map.getLayers().getArray().find(layer => layer.get('name') === layerName);
   
   if (layer) {
-    layer.setVisible(visible);  // 해당 레이어의 가시성을 변경
+    layer.setVisible(visible);
+  } else {
+    console.error(`Layer with name "${layerName}" not found`);
   }
 }
 
-// 'vectorLayer' 레이어의 가시성을 false로 설정
-toggleLayerVisibility('vectorLayer', false);
-
-// 'baseLayer' 레이어의 가시성을 true로 설정
-toggleLayerVisibility('baseLayer', true);
+setLayerVisibility(map, '2차선 도로', true);
