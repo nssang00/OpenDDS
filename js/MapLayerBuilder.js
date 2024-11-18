@@ -7,7 +7,7 @@ class MapStyler {
 class MapLayerBuilder {
     constructor(options) {
         this.baseSymbolPath = options.baseSymbolPath || '';
-        this.dpi = options.dpi || 96;
+        this.dpi = options.dpi || (25.4 / 0.28);
         this.mapStyler = options.mapStyler;
 
         if (!this.mapStyler) {
