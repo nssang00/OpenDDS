@@ -456,7 +456,7 @@ class MapLayerBuilder {
         }
 
         return {
-            name: layerObj.Name,
+            name: featureObj.Name,
             styleNames: styleNames,
             filters: filters,
         };
