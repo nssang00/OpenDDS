@@ -399,19 +399,20 @@ class MapLayerBuilder {
             };
         });
     }	
-
+  
     // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
     buildLayer(layerObj) {
         const scaleMap = {
-            "25K": 9.554628535647032,
-            "50K": 19.109257071294063,
-            "100K": 38.21851414258813,
-            "250K": 152.8740565703525,
-            "500K": 305.748113140705,
-            "1M": 611.49622628141
-        };
+            "25K": 25000,
+            "50K": 50000,
+            "100K": 100000,
+            "250K": 250000,
+            "500K": 500000,
+            "1M": 1000000
+        };      
 
-        const resolutions = layerObj.Map.split(',').map(v => scaleMap[v.trim()]);
+        const scaleToResolution = (scale) => scale / (this.dpi * (1000 / 25.4));
+        const resolutions = layerObj.Map.split(',').map(v => scaleToResolution(scaleMap[v.trim()]));
 
         const baseFilters = [
             'all',
