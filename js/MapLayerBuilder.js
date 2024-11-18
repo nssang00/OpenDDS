@@ -417,8 +417,9 @@ class MapLayerBuilder {
             name: layerObj.Name,
             source: layerObj.SHPSource,
             rules: layerObj.features.map(featureObj => {
-                const { styleNames, filters } = this.buildFeature(featureObj);
+                const { name, styleNames, filters } = this.buildFeature(featureObj);
                 return {
+                    name,
                     styleNames,
                     filter: [...baseFilters, ...filters]
                 };
@@ -448,6 +449,7 @@ class MapLayerBuilder {
         }
 
         return {
+            name: layerObj.Name,
             styleNames: styleNames,
             filters: filters,
         };
