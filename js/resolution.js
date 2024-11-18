@@ -1,3 +1,29 @@
+const dpi = 90.7;
+const inchPerMeter = 39.37;
+const metersPerDegree = 111319.9;
+
+// EPSG:3857 계산
+const scaleToResolution3857 = (scale) => scale / (dpi * inchPerMeter);
+
+// EPSG:4326 계산 (적도 기준)
+const scaleToResolution4326 = (scale) => scale / (dpi * inchPerMeter * metersPerDegree);
+
+// 주어진 스케일들
+const scales = [25000, 50000, 100000, 250000, 500000, 1000000];
+
+console.log("EPSG:3857 (meters/pixel):");
+scales.forEach((scale) => {
+  console.log(`Scale ${scale}: ${scaleToResolution3857(scale)} meters/pixel`);
+});
+
+console.log("\nEPSG:4326 (degrees/pixel):");
+scales.forEach((scale) => {
+  console.log(`Scale ${scale}: ${scaleToResolution4326(scale)} degrees/pixel`);
+});
+
+
+
+
 25K, 13-14
 50K, 12-13
 100K, 11-12
