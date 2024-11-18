@@ -403,12 +403,12 @@ class MapLayerBuilder {
     // 레이어 객체를 OpenLayers 레이어로 변환하는 함수
     buildLayer(layerObj) {
         const scaleMap = {
-            "25K": 25000,
-            "50K": 50000,
-            "100K": 100000,
-            "250K": 250000,
-            "500K": 500000,
-            "1M": 1000000
+            "25K"  :   25000,
+            "50K"  :   50000,
+            "100K" :  100000,
+            "250K" :  250000,
+            "500K" :  500000,
+            "1M"   : 1000000
         };      
 
         const scaleToResolution = (scale) => scale / (this.dpi * (1000 / 25.4));
