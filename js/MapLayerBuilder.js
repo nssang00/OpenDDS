@@ -257,7 +257,7 @@ class MapLayerBuilder {
                     },
                     style: {
                         'stroke-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
-                        //'icon-src': symbolizer.Picture,//Picture	
+                        //'icon-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
                         'stroke-width': Number(symbolizer.Width),
                         'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//Width
                         'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//DashCap, 0:butt, 1:round
