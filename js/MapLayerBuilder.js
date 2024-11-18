@@ -190,7 +190,7 @@ class MapLayerBuilder {
                 case "PICTURE":
                     return {
                         style: {
-                            'icon-src': symbolizer.Picture,
+                            'icon-src': `${this.baseSymbolPath}${symbolizer.Picture}`,
                             'icon-displacement': offset,
                         }
                     };
@@ -243,7 +243,7 @@ class MapLayerBuilder {
                         'picture-texture-line': false,//TextureLine
                     },
                     style: {
-                        'stroke-pattern-src': symbolizer.Picture,//Picture
+                        'stroke-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
                         'stroke-width': Number(symbolizer.Width),//Width
                         'stroke-pattern-start-offset': Number(symbolizer.StartPos),//StartPos
                         'stroke-pattern-spacing': Number(symbolizer.Interval),//Interval
@@ -256,7 +256,7 @@ class MapLayerBuilder {
                         'picture-texture-line': true,//TextureLine
                     },
                     style: {
-                        'stroke-pattern-src': symbolizer.Picture,//Picture
+                        'stroke-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
                         //'icon-src': symbolizer.Picture,//Picture	
                         'stroke-width': Number(symbolizer.Width),
                         'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//Width
@@ -315,7 +315,7 @@ class MapLayerBuilder {
                     'picture-texture-fill': Boolean(symbolizer.TextureFill), // TextureFill
                 };
                 olPolygonStyleObj.style = {
-                    'fill-pattern-src': symbolizer.Picture, // Picture
+                    'fill-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`, // Picture
                 };
             }
 
@@ -379,7 +379,7 @@ class MapLayerBuilder {
 
         const picture = labelStyleObj?.Picture;
         if (picture) {
-            olLabelStyleObj.style['icon-src'] = picture;
+            olLabelStyleObj.style['icon-src'] = `${this.baseSymbolPath}${picture}`;
             olLabelStyleObj.style['icon-displacement'] = [Number(labelStyleObj.ImageOffsetX), Number(labelStyleObj.ImageOffsetY)];
             olLabelStyleObj.style['icon-anchor'] = anchors[Number(labelStyleObj.ImageAlign)];
         }
