@@ -5,8 +5,14 @@ class MapStyler {
 }
 
 class MapLayerBuilder {
-    constructor(mapStyler) {
-        this.mapStyler = mapStyler;
+    constructor(options) {
+        this.baseSymbolPath = options.baseSymbolPath || '';
+        this.dpi = options.dpi || 96;
+        this.mapStyler = options.mapStyler;
+
+        if (!this.mapStyler) {
+            throw new Error("mapStyler is required.");
+        }
     }
 
     async loadMap(styleUrl, layerUrl) {
