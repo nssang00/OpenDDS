@@ -1,11 +1,11 @@
 
 const layerSourceCache = {};
 
-function getOrCreateLayerSource(sourceId, urlTemplate) {
-  if (!layerSourceCache[sourceId]) {
-    layerSourceCache[sourceId] = new VectorTileSource({
+function getOrCreateLayerSource(layerSource, urlTemplate) {
+  if (!layerSourceCache[layerSource]) {
+    layerSourceCache[layerSource] = new VectorTileSource({
       format: new MVT(),
-      url: urlTemplate.replace('{sourceId}', sourceId)
+      url: urlTemplate.replace('{layerSource}', layerSource)
     });
   }
   return layerSourceCache[sourceId];
@@ -32,11 +32,11 @@ function createStyledLayers({ styles, source }) {
   });
 }
 
-function createStyledOlLayers(styleObj, layersObj, urlTemplate) {
+function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
   return layersObj.map(layerObj => {
     if (layerObj.layers) {
       return new LayerGroup({
-        layers: createStyledOlLayers(styleObj, layerObj.layers, urlTemplate)
+        layers: buildStyledOlLayers(styleObj, layerObj.layers, urlTemplate)
       });
     }
 
