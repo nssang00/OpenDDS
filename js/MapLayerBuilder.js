@@ -9,7 +9,7 @@ class MapLayerBuilder {
         this.baseSymbolPath = options.baseSymbolPath || '';
         this.dpi = options.dpi || (25.4 / 0.28);
         this.mapStyler = options.mapStyler;
-        this.urlTemplate = options.urlTemplate || 'local://mbtiles/{layerSource}/{z}/{x}/{y}.pbf';
+        this.urlTemplate = options.urlTemplate || 'local://mbtiles/{layerSource}/{z}/{x}/{-y}.pbf';
 
         if (!this.mapStyler) {
             throw new Error("mapStyler is required.");
