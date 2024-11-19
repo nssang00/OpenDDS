@@ -9,6 +9,7 @@ class MapLayerBuilder {
         this.baseSymbolPath = options.baseSymbolPath || '';
         this.dpi = options.dpi || (25.4 / 0.28);
         this.mapStyler = options.mapStyler;
+        this.urlTemplate = options.urlTemplate || 'local://mbtiles/{layerSource}/{z}/{x}/{y}.pbf';
 
         if (!this.mapStyler) {
             throw new Error("mapStyler is required.");
@@ -42,7 +43,8 @@ class MapLayerBuilder {
             // 2. mapStyler를 통해 맵에 스타일과 레이어 적용
             this.mapStyler.applyMap(map, { 
                 styles: this.buildMapStyle(styles), 
-                layers: this.buildMapLayer(layers) 
+                layers: this.buildMapLayer(layers),
+                urlTemplate: this.urlTemplate,
             });
         } catch (error) {
             console.error('Error applying map:', error);
