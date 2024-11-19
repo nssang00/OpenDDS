@@ -238,33 +238,24 @@ class MapLayerBuilder {
             };
             break;
         case "PICTURE":
+            olSymbolizer = {
+                symbol: {
+                    'type': 'picture',
+                    'picture-texture-line': symbolizer.TextureLine === "true" // TextureLine 설정
+                },
+                style: {
+                    'stroke-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`, // Picture
+                    //'icon-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
+                    'stroke-width': Number(symbolizer.Width) || 20, // Width
+                }
+            };
+        
             if (symbolizer.TextureLine === "false") {
-                olSymbolizer = {
-                    symbol: {
-                        'type': 'picture',
-                        'picture-texture-line': false,//TextureLine
-                    },
-                    style: {
-                        'stroke-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
-                        'stroke-width': Number(symbolizer.Width) || 20,//Width
-                        'stroke-pattern-start-offset': Number(symbolizer.StartPos),//StartPos
-                        'stroke-pattern-spacing': Number(symbolizer.Interval),//Interval
-                    }
-                };
+                olSymbolizer.style['stroke-pattern-start-offset'] = Number(symbolizer.StartPos); // StartPos
+                olSymbolizer.style['stroke-pattern-spacing'] = Number(symbolizer.Interval); // Interval
             } else if (symbolizer.TextureLine === "true") {//StrokePattern, stylefunction, canvas
-                olSymbolizer = {
-                    symbol: {
-                        'type': 'picture',
-                        'picture-texture-line': true,//TextureLine
-                    },
-                    style: {
-                        'stroke-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
-                        //'icon-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
-                        'stroke-width': Number(symbolizer.Width) || 20,//Width
-                        'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//Width
-                        'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//DashCap, 0:butt, 1:round
-                    }
-                };
+                olSymbolizer.style['stroke-line-join'] = lineJoins[Number(symbolizer.JoinType)];// JoinType
+                olSymbolizer.style['stroke-line-cap'] = lineCaps[Number(symbolizer.StartCap)];//StartCap, 0:butt, 1:round
             }
             break;
         case "VERTICAL":
@@ -282,20 +273,20 @@ class MapLayerBuilder {
                 },                        
             };
             break;
-            case "DOUBLELINE":
-                olSymbolizer = {
-                    symbol: {
-                        'type': 'double-line',
-                        'double-line-color': this.toRGBAArray(symbolizer.Color),//Color
-                        'double-line-width': Number(symbolizer.Width),//Width
-                        'double-line-type': Number(symbolizer.Type),//Type
-                        'double-line-space': Number(symbolizer.Space),//Space
-                        'double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//JoinType, 0:miter, 1:bevel, 2:round
-                    },  
-                };
-                break;
-            default:
-                break;
+        case "DOUBLELINE":
+            olSymbolizer = {
+                symbol: {
+                    'type': 'double-line',
+                    'double-line-color': this.toRGBAArray(symbolizer.Color),//Color
+                    'double-line-width': Number(symbolizer.Width),//Width
+                    'double-line-type': Number(symbolizer.Type),//Type
+                    'double-line-space': Number(symbolizer.Space),//Space
+                    'double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//JoinType, 0:miter, 1:bevel, 2:round
+                },  
+            };
+            break;
+        default:
+            break;
         }
         return olSymbolizer;
     }
