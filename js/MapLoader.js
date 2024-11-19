@@ -1,3 +1,76 @@
+
+const layerSourceCache = {};
+
+function getOrCreateLayerSource(sourceId, urlTemplate) {
+  if (!layerSourceCache[sourceId]) {
+    layerSourceCache[sourceId] = new VectorTileSource({
+      format: new MVT(),
+      url: urlTemplate.replace('{sourceId}', sourceId)
+    });
+  }
+  return layerSourceCache[sourceId];
+}
+
+function createStyledLayers({ styles, source }) {
+  return styles.map(style => {
+    if (typeof style === 'function') {
+      return new VectorTileLayer({
+        source: source,
+        style: style
+      });
+    } else {
+      return new (class extends VectorTileLayer {
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: style
+          });
+        }
+      })({
+        source: source
+      });
+    }
+  });
+}
+
+function createStyledOlLayers(styleObj, layersObj, urlTemplate) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
+      return new LayerGroup({
+        layers: createStyledOlLayers(styleObj, layerObj.layers, urlTemplate)
+      });
+    }
+
+    const sourceId = layerObj.SHPSource;  // SHPSource -> sourceId로 변경
+    
+    // Retrieve or create the layerSource with caching
+    const layerSource = getOrCreateLayerSource(sourceId, urlTemplate);
+    
+    const filteredStyles = [];  // 모든 스타일을 모을 배열
+
+    for (const rule of layerObj.rules) {
+      for (const styleName of rule.styleNames) {
+        const styles = Array.isArray(styleObj[styleName]) 
+          ? styleObj[styleName] 
+          : [styleObj[styleName]];  // Ensure array of styles
+
+        for (const style of styles) {  // for...of 방식으로 변경
+          filteredStyles.push({
+            ...style,       // Original style
+            filter: rule.filter  // Add the filter directly
+          });
+        }
+      }
+    }
+
+    const styledLayers = createStyledLayers({
+      styles: filteredStyles,  // 스타일 배열을 넘김
+      source: layerSource
+    });
+
+    return styledLayers.length === 1 ? styledLayers[0] : new LayerGroup({ layers: styledLayers });
+  });
+}
+////////
 const vectorTileSource = {};
 
 function getOrCreateVectorTileSource(sourceUrl) {
