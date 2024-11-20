@@ -1,4 +1,20 @@
+const aaa = [
+  "operator1",
+  "operator3",
+  "getsingle testfsdf rer",
+  "samplestroke fefsafsdf",
+  "operator4"
+];
 
+// 특정 문자열("getsingle", "samplestroke")을 포함한 항목만 제외
+const result = aaa.filter(item => {
+  return !["getsingle", "samplestroke"].some(str => item.includes(str));
+});
+
+console.log(result);
+// 출력:
+// ["operator1", "operator3", "operator4"]
+////////////////
 const layerSourceCache = {};
 
 function getOrCreateLayerSource(layerSource, urlTemplate) {
