@@ -28,3 +28,40 @@ vec4 sampleStrokePattern(
     // 텍스처 샘플링 및 반환
     return texture2D(texture, texCoord);
 }
+
+vec4 sampleStrokePattern(
+    sampler2D texture, 
+    vec2 textureSize, 
+    vec2 textureOffset, 
+    vec2 sampleSize, 
+    float spacingPx, 
+    float startOffsetPx,  // 시작점 오프셋
+    float currentLengthPx, 
+    float currentRadiusRatio, 
+    float lineWidth
+) {
+    // 간격과 시작 오프셋을 스케일링
+    float spacingScaled = round(spacingPx * sampleSize.y / lineWidth);
+    float repeatLength = sampleSize.x + spacingScaled;
+
+    // 시작점을 간격의 배수로 조정
+    float adjustedStartOffset = floor(startOffsetPx / repeatLength) * repeatLength;
+
+    // 시작점 반영한 현재 위치 계산
+    float currentLengthScaled = (currentLengthPx - adjustedStartOffset) * sampleSize.y / lineWidth;
+
+    // u 좌표를 명시적으로 반복 계산
+    float uCoordPx = currentLengthScaled - floor(currentLengthScaled / repeatLength) * repeatLength;
+
+    // 텍스처 경계 내로 제한
+    uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+
+    // v 좌표 계산 (반경 비율 기반)
+    float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
+
+    // 텍스처 좌표 계산
+    vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+
+    // 텍스처 샘플링 및 반환
+    return texture2D(texture, texCoord);
+}
