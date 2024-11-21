@@ -1,19 +1,48 @@
-const aaa = [
-  "operator1",
-  "operator3",
-  "getsingle testfsdf rer",
-  "samplestroke fefsafsdf",
-  "operator4"
-];
+function buildStyledOlLayer(styleObj, layersObj, urlTemplate, targetLayerName) {
+  // Find the specific layer by name in top-level layers or nested layers
+  const targetLayer = layersObj.find(layer => 
+    layer.name === targetLayerName || 
+    (layer.layers && layer.layers.some(subLayer => subLayer.name === targetLayerName))
+  );
 
-// 특정 문자열("getsingle", "samplestroke")을 포함한 항목만 제외
-const result = aaa.filter(item => {
-  return !["getsingle", "samplestroke"].some(str => item.includes(str));
-});
+  // If no matching layer found, return null
+  if (!targetLayer) return null;
 
-console.log(result);
-// 출력:
-// ["operator1", "operator3", "operator4"]
+  // If nested layer, find the exact layer
+  const actualLayer = targetLayer.layers 
+    ? targetLayer.layers.find(layer => layer.name === targetLayerName) 
+    : targetLayer;
+
+  const sourceId = actualLayer.source;
+  
+  // Retrieve or create the layerSource with caching
+  const layerSource = getOrCreateLayerSource(sourceId, urlTemplate);
+  
+  const filteredStyles = [];
+
+  for (const rule of actualLayer.rules) {
+    for (const styleName of rule.styleNames) {
+      const styles = Array.isArray(styleObj[styleName]) 
+        ? styleObj[styleName] 
+        : [styleObj[styleName]];
+
+      for (const style of styles) {
+        filteredStyles.push({
+          ...style,
+          filter: rule.filter
+        });
+      }
+    }
+  }
+
+  const styledLayers = createStyledLayers({
+    styles: filteredStyles,
+    source: layerSource
+  });
+
+  return styledLayers.length === 1 ? styledLayers[0] : new LayerGroup({ layers: styledLayers });
+}
+
 ////////////////
 const layerSourceCache = {};
 
