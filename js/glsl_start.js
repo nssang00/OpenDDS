@@ -1,4 +1,3 @@
-111
 vec4 sampleStrokePattern(
   sampler2D texture, 
   vec2 textureSize, 
@@ -13,33 +12,12 @@ vec4 sampleStrokePattern(
   float currentLengthScaled = currentLengthPx * sampleSize.y / lineWidth;
   float spacingScaled = spacingPx * sampleSize.y / lineWidth;
   float uCoordPx = mod(currentLengthScaled + startOffsetPx, (sampleSize.x + spacingScaled));
-  uCoordPx = uCoordPx - (sampleSize.x / 2.0);  // 중간을 기준으로 이동
+  uCoordPx -= sampleSize.x / 2.0;
   uCoordPx = clamp(uCoordPx, -sampleSize.x / 2.0, sampleSize.x / 2.0);
   float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
   vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
   return samplePremultiplied(texture, texCoord);
 }
-2222
-vec4 sampleStrokePattern(
-  sampler2D texture, 
-  vec2 textureSize, 
-  vec2 textureOffset, 
-  vec2 sampleSize, 
-  float spacingPx, 
-  float startOffsetPx, 
-  float currentLengthPx, 
-  float currentRadiusRatio, 
-  float lineWidth
-) {
-  float currentLengthScaled = currentLengthPx * sampleSize.y / lineWidth;
-  float spacingScaled = spacingPx * sampleSize.y / lineWidth;
-  float uCoordPx = mod(currentLengthScaled + startOffsetPx, (sampleSize.x + spacingScaled));
-  uCoordPx = mod(uCoordPx + sampleSize.x / 2.0, sampleSize.x) - sampleSize.x / 2.0;
-  float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
-  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
-  return samplePremultiplied(texture, texCoord);
-}
-
 
 
 
