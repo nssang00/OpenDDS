@@ -9,6 +9,29 @@ vec4 sampleStrokePattern(
   float currentRadiusRatio, 
   float lineWidth
 ) {
+  float correctionFactor = sampleSize.x / spacingPx; 
+  float spacingCorrected = spacingPx - (correctionFactor * sampleSize.x / 2.0);
+  float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
+  float spacingScaled = spacingCorrected * (sampleSize.y / lineWidth);
+  float uCoordPx = mod(currentLengthScaled + startOffsetPx, (sampleSize.x + spacingScaled));
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+  float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
+  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+  return samplePremultiplied(texture, texCoord);
+}
+
+
+vec4 sampleStrokePattern(
+  sampler2D texture, 
+  vec2 textureSize, 
+  vec2 textureOffset, 
+  vec2 sampleSize, 
+  float spacingPx, 
+  float startOffsetPx, 
+  float currentLengthPx, 
+  float currentRadiusRatio, 
+  float lineWidth
+) {
   float correctionFactor = sampleSize.x / 2.0; // 보정 상수 k = 2.0 (필요 시 조정 가능)
   float spacingCorrected = spacingPx - correctionFactor;
   float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
