@@ -1,3 +1,15 @@
+vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float startOffsetPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
+  float aspectRatio = sampleSize.x / sampleSize.y; // 이미지 가로/세로 비율 계산
+  float currentLengthScaled = currentLengthPx * sampleSize.y / lineWidth;
+  float spacingScaled = spacingPx * sampleSize.y / (lineWidth * aspectRatio); // 간격에 비율 반영
+  float uCoordPx = mod(currentLengthScaled + startOffsetPx, (sampleSize.x + spacingScaled));
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+  float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
+  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+  return samplePremultiplied(texture, texCoord);
+}
+
+
 vec4 sampleStrokePattern(
     sampler2D texture, 
     vec2 textureSize, 
