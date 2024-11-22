@@ -1,3 +1,8 @@
+float calculateCorrectionWeight(float sampleSizeX) {
+    float correctionWeight = 1.0 + (sampleSizeX - 5.0) / 15.0;
+    return correctionWeight;
+}
+
 vec4 sampleStrokePattern(
   sampler2D texture, 
   vec2 textureSize, 
