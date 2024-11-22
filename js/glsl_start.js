@@ -17,13 +17,8 @@ vec4 sampleStrokePattern(
   // 이미지 크기와 독립적인 좌표 계산
   float uCoordPx = mod(currentLengthScaled + startOffsetPx, (spacingScaled));
   uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
-
-  // y 좌표 계산 (이미지 높이 기반)
   float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
-  
-  // 텍스처 좌표 계산
   vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
-  
   return samplePremultiplied(texture, texCoord);
 }
 
