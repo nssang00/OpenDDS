@@ -9,8 +9,10 @@ vec4 sampleStrokePattern(
   float currentRadiusRatio, 
   float lineWidth
 ) {
-  float correctionFactor = sampleSize.x / spacingPx; 
-  float spacingCorrected = spacingPx - (correctionFactor * sampleSize.x / 2.0);
+
+  float correctionFactor = sampleSize.x / spacingPx;
+  float correctionWeight = 0.8; // 조정 가능한 가중치
+  float spacingCorrected = spacingPx - (correctionFactor * spacingPx * correctionWeight);
   float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
   float spacingScaled = spacingCorrected * (sampleSize.y / lineWidth);
   float uCoordPx = mod(currentLengthScaled + startOffsetPx, (sampleSize.x + spacingScaled));
