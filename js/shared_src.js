@@ -15,15 +15,15 @@ buildLayer(layerObj) {
         'all',
         ['<=', ['resolution'], Math.max(...resolutions)],
         ['>', ['resolution'], Math.min(...resolutions)],
-        ...(this.sharedSource ? [['==', ['get', 'layer'], layerObj.SHPSource]] : []), // 공용 소스 필터 조건
-        ...(layerObj.GeometryType ? [['==', ['geometry-type'], layerObj.GeometryType]] : []) // GeometryType 필터 조건
+        ...(this.sharedSource ? [['==', ['get', 'layer'], layerObj.SHPSource]] : []),
+        //...(layerObj.GeometryType ? [['==', ['geometry-type'], layerObj.GeometryType]] : [])
     ];
 
-    const layerSource = this.sharedSource || layerObj.SHPSource; // 공용 소스 또는 개별 소스
+    const layerSource = this.sharedSource || layerObj.SHPSource;
 
     return {
         name: layerObj.Name,
-        source: layerSource, // source 키에 layerSource 값 할당
+        source: layerSource, 
         rules: layerObj.features.map(featureObj => {
             const { name, styleNames, filters } = this.buildFeature(featureObj);
             return {
