@@ -9,9 +9,8 @@ vec4 sampleStrokePattern(
   float currentRadiusRatio, 
   float lineWidth
 ) {
-  float spacingCorrected = spacingPx;
   float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
-  float spacingScaled = spacingCorrected * (sampleSize.y / lineWidth);
+  float spacingScaled = spacingPx * (sampleSize.y / lineWidth);
   float uCoordPx = mod(currentLengthScaled + startOffsetPx, (spacingScaled));
   uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
   float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
