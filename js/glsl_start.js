@@ -9,6 +9,38 @@ vec4 sampleStrokePattern(
   float currentRadiusRatio, 
   float lineWidth
 ) {
+  // 텍스처 크기 및 비율 계산
+  float textureWidth = sampleSize.x / textureSize.x;  // 텍스처의 상대적 너비 비율
+  float textureHeight = sampleSize.y / textureSize.y; // 텍스처의 상대적 높이 비율
+
+  // 간격과 오프셋을 비율로 변환
+  float normalizedSpacing = spacingPx / textureSize.x;  // 간격을 정규화
+  float normalizedStartOffset = startOffsetPx / textureSize.x;  // 시작 오프셋 정규화
+  float normalizedLength = currentLengthPx / textureSize.x;  // 길이 정규화
+
+  // 샘플링 간격 보정
+  float spacingScaled = normalizedSpacing * (textureHeight / lineWidth);
+  float startOffsetScaled = normalizedStartOffset * (textureHeight / lineWidth);
+  float currentLengthScaled = normalizedLength * (textureHeight / lineWidth);
+  float uCoord = mod(currentLengthScaled + startOffsetScaled, textureWidth + spacingScaled);
+  uCoord = clamp(uCoord, 0.5 / textureSize.x, textureWidth - 0.5 / textureSize.x);  // 텍스처 범위 내로 제한
+  float vCoord = (0.5 - currentRadiusRatio * 0.5) * textureHeight;  // 반지름에 따른 상대적 위치
+  vec2 texCoord = (vec2(uCoord, vCoord) + textureOffset) / textureSize;
+  return texture(texture, texCoord);
+}
+
+
+vec4 sampleStrokePattern(
+  sampler2D texture, 
+  vec2 textureSize, 
+  vec2 textureOffset, 
+  vec2 sampleSize, 
+  float spacingPx, 
+  float startOffsetPx, 
+  float currentLengthPx, 
+  float currentRadiusRatio, 
+  float lineWidth
+) {
   // spacing을 textureSize.x를 기준으로 정규화
   float normalizedSpacing = spacingPx / textureSize.x;
   float normalizedStartOffset = startOffsetPx / textureSize.x;
