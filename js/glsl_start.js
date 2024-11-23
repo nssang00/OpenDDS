@@ -44,8 +44,6 @@ vec4 sampleStrokePattern(
   // spacing을 textureSize.x를 기준으로 정규화
   float normalizedSpacing = spacingPx / textureSize.x;
   float normalizedStartOffset = startOffsetPx / textureSize.x;
-  
-  // currentLength를 정규화된 좌표계로 변환
   float normalizedCurrentLength = currentLengthPx / textureSize.x;
 
   // 간격 보정 계산 (width와 무관한 spacing 계산)
