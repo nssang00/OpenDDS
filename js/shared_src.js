@@ -1,3 +1,7 @@
+['==', ['get', 'layer'], 'transportation'],
+['==', ['geometry-type'], 'Polygon'],
+      
+
 buildLayer(layerObj) {
     const scaleMap = {
         "25K"  :   25000,
