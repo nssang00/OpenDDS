@@ -1,3 +1,6 @@
+    ['==', ['get', 'layer'], 'transportation'],
+    ['==', ['geometry-type'], 'Polygon'],
+      
 vec4 sampleStrokePattern(
   sampler2D texture, 
   vec2 textureSize, 
