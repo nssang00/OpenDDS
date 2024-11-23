@@ -10,7 +10,8 @@ class MapLayerBuilder {
         this.dpi = options.dpi || (25.4 / 0.28);
         this.mapStyler = options.mapStyler;
         this.urlTemplate = options.urlTemplate || 'local://mbtiles/{layerSource}/{z}/{x}/{-y}.pbf';
-
+        this.sharedSource = null;
+        
         if (!this.mapStyler) {
             throw new Error("mapStyler is required.");
         }
@@ -402,7 +403,7 @@ class MapLayerBuilder {
             "250K" :  250000,  //11.12691676832503,   70
             "500K" :  500000,  //10.126916768325028, 140
             "1M"   : 1000000   // 9.12691676832503,  280
-        };            
+        }; 
 
         const scaleToResolution = (scale) => scale / (this.dpi * (1000 / 25.4));
         const resolutions = layerObj.Map.split(',').map(v => scaleToResolution(scaleMap[v.trim()]));
@@ -411,17 +412,19 @@ class MapLayerBuilder {
             'all',
             ['<=', ['resolution'], Math.max(...resolutions)],
             ['>', ['resolution'], Math.min(...resolutions)],
+            ...(this.sharedSource ? [['==', ['get', 'layer'], layerObj.SHPSource]] : []),
+            //...(layerObj.GeometryType ? [['==', ['geometry-type'], layerObj.GeometryType]] : [])
         ];
 
         return {
             name: layerObj.Name,
-            source: layerObj.SHPSource,
+            source: this.sharedSource || layerObj.SHPSource, 
             rules: layerObj.features.map(featureObj => {
                 const { name, styleNames, filters } = this.buildFeature(featureObj);
                 return {
                     name,
                     styleNames,
-                    filter: [...baseFilters, ...filters]
+                    filter: [...baseFilters, ...filters] // 최종 필터 병합
                 };
             })
         };
