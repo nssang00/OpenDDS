@@ -2,7 +2,7 @@
           (style),
         );
 
-const result = parseLiteralStyle({
+const parseResult = parseLiteralStyle({
   'fill-color': ['get', 'fillColor'],
   'stroke-color': ['get', 'strokeColor'],
   'stroke-width': ['get', 'strokeWidth'],
@@ -18,10 +18,10 @@ class WebGLVectorTileLayer extends VectorTile {
 
 ////
   createRenderer() {
-    const attributes = Object.keys(this.parseResult_.attributes).map(
+    const attributes = Object.keys(parseResult.attributes).map(
       (name) => ({
         name,
-        ...this.parseResult_.attributes[name],
+        ...parseResult.attributes[name],
       }),
     );
     return new WebGLPointsLayerRenderer(this, {
