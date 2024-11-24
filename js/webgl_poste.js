@@ -12,8 +12,8 @@ class WebGLVectorTileLayer extends VectorTile {
     return new WebGLVectorTileLayerRenderer(this, {
       style: {
         builder: {
-          // 기본 vertex shader와 fragment shader 유지
-          getSymbolVertexShader: () => `
+          // 기본 stroke vertex shader
+          getStrokeVertexShader: () => `
             attribute vec2 a_position;
             uniform mat4 u_projectionMatrix;
             varying vec2 v_texCoord;
@@ -22,12 +22,13 @@ class WebGLVectorTileLayer extends VectorTile {
               v_texCoord = a_position.xy;
             }
           `,
-          getSymbolFragmentShader: () => `
+          // 기본 stroke fragment shader
+          getStrokeFragmentShader: () => `
             precision mediump float;
             varying vec2 v_texCoord;
             uniform vec4 u_color;
             void main() {
-              gl_FragColor = u_color; // 기본 선 렌더링
+              gl_FragColor = u_color; // 기본 stroke 색상 적용
             }
           `,
         },
@@ -41,12 +42,11 @@ class WebGLVectorTileLayer extends VectorTile {
             uniform sampler2D u_image;
             uniform sampler2D u_iconStart;
             uniform sampler2D u_iconEnd;
-            uniform float u_rotationStart; // 시작점 회전 각도
-            uniform float u_rotationEnd;   // 끝점 회전 각도
+            uniform float u_rotationStart;
+            uniform float u_rotationEnd;
 
             varying vec2 v_texCoord;
 
-            // 회전 행렬 적용
             mat2 rotate(float angle) {
               return mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
             }
@@ -69,8 +69,8 @@ class WebGLVectorTileLayer extends VectorTile {
           uniforms: {
             u_iconStart: () => document.getElementById('icon-start'),
             u_iconEnd: () => document.getElementById('icon-end'),
-            u_rotationStart: (feature) => calculateRotationAngle(feature, true), // 시작점 회전
-            u_rotationEnd: (feature) => calculateRotationAngle(feature, false),  // 끝점 회전
+            u_rotationStart: (feature) => calculateRotationAngle(feature, true),
+            u_rotationEnd: (feature) => calculateRotationAngle(feature, false),
           },
         },
       ],
@@ -84,7 +84,6 @@ function calculateRotationAngle(feature, isStart) {
   const [x1, y1] = coordinates[isStart ? 0 : coordinates.length - 1]; // 시작점 또는 끝점
   const [x2, y2] = coordinates[isStart ? 1 : coordinates.length - 2]; // 두 번째 점 (연결된 점)
 
-  // 두 점 간의 기울기 계산
   const dx = x2 - x1;
   const dy = y2 - y1;
   const angle = Math.atan2(dy, dx); // 기울기에서 회전 각도 계산 (라디안 단위)
