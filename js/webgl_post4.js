@@ -1,3 +1,41 @@
+        const parseResult = parseLiteralStyle(
+          (style),
+        );
+
+const result = parseLiteralStyle({
+  'fill-color': ['get', 'fillColor'],
+  'stroke-color': ['get', 'strokeColor'],
+  'stroke-width': ['get', 'strokeWidth'],
+  'circle-radius': 4,
+  'circle-fill-color': '#777',
+});
+
+class WebGLVectorTileLayer extends VectorTile {
+  createRenderer() {
+    return new WebGLVectorTileLayerRenderer(this, {
+      style: {
+        builder: parseResult.builder,
+
+////
+  createRenderer() {
+    const attributes = Object.keys(this.parseResult_.attributes).map(
+      (name) => ({
+        name,
+        ...this.parseResult_.attributes[name],
+      }),
+    );
+    return new WebGLPointsLayerRenderer(this, {
+      vertexShader: this.parseResult_.builder.getSymbolVertexShader(),
+      fragmentShader: this.parseResult_.builder.getSymbolFragmentShader(),
+      hitDetectionEnabled: !this.hitDetectionDisabled_,
+      uniforms: this.parseResult_.uniforms,
+      attributes:
+        /** @type {Array<import('../renderer/webgl/PointsLayer.js').CustomAttribute>} */ (
+          attributes
+        ),
+    });
+  }
+
 createRenderer() {
   const builder = new ShaderBuilder()
     .addAttribute('vec2 a_position') // 각 점의 좌표
