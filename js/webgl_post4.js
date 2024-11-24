@@ -1,6 +1,3 @@
-        const parseResult = parseLiteralStyle(
-          (style),
-        );
 
 const parseResult = parseLiteralStyle({
   'fill-color': ['get', 'fillColor'],
