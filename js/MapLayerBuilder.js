@@ -266,8 +266,8 @@ class MapLayerBuilder {
                     'vertical-color': `rgba(${this.toRGBAArray(symbolizer.Color).join(', ')})`,//Color
                     'vertical-width': Number(symbolizer.Width),//Width
                     'vertical-vertical-type': Number(symbolizer.VerticalType),//VerticalType
-                    'vertical-left-length': Number(symbolizer.leftLength),//LeftLength
-                    'vertical-right-length': Number(symbolizer.rightLength),//RightLength
+                    'vertical-left-length': Number(symbolizer.LeftLength),//LeftLength
+                    'vertical-right-length': Number(symbolizer.RightLength),//RightLength
                     'vertical-line-cap': Number(symbolizer?.StartCap),//StartCap, EndCap
                     'vertical-start-pos': Number(symbolizer?.StartPos),//StartPos
                     'vertical-interval': Number(symbolizer?.Interval),//Interval        
