@@ -10,7 +10,7 @@ class MapLayerBuilder {
         this.dpi = options.dpi || (25.4 / 0.28);
         this.mapStyler = options.mapStyler;
         this.urlTemplate = options.urlTemplate || 'local://mbtiles/{layerSource}/{z}/{x}/{-y}.pbf';
-        this.sharedSource = null;
+        this.sharedSource = options.sharedSource || null;
         
         if (!this.mapStyler) {
             throw new Error("mapStyler is required.");
