@@ -1,4 +1,51 @@
 function buildStyledOlLayer(styleObj, layersObj, urlTemplate, targetLayerName) {
+  for (const layerObj of layersObj) {
+    if (layerObj.layers) {
+      // 그룹 레이어의 경우 재귀적으로 탐색
+      const result = buildStyledOlLayer(styleObj, layerObj.layers, urlTemplate, targetLayerName);
+      if (result) {
+        return result; // 찾은 레이어 반환
+      }
+    } else if (layerObj.name === targetLayerName) { 
+      // 대상 레이어를 찾은 경우
+      const sourceId = layerObj.SHPSource;
+
+      // Retrieve or create the layerSource with caching
+      const layerSource = getOrCreateLayerSource(sourceId, urlTemplate);
+
+      const filteredStyles = []; // 스타일 배열 초기화
+
+      for (const rule of layerObj.rules) {
+        for (const styleName of rule.styleNames) {
+          const styles = Array.isArray(styleObj[styleName])
+            ? styleObj[styleName]
+            : [styleObj[styleName]]; // 배열로 변환
+
+          for (const style of styles) {
+            filteredStyles.push({
+              ...style, // 원본 스타일
+              filter: rule.filter // 필터 추가
+            });
+          }
+        }
+      }
+
+      const styledLayers = createStyledLayers({
+        styles: filteredStyles,
+        source: layerSource
+      });
+
+      // 단일 레이어 반환 또는 그룹으로 반환
+      return styledLayers.length === 1 ? styledLayers[0] : new LayerGroup({ layers: styledLayers });
+    }
+  }
+
+  // 대상 레이어를 찾지 못한 경우 null 반환
+  return null;
+}
+//
+
+function buildStyledOlLayer(styleObj, layersObj, urlTemplate, targetLayerName) {
   // Find the specific layer by name in top-level layers or nested layers
   const targetLayer = layersObj.find(layer => 
     layer.name === targetLayerName || 
