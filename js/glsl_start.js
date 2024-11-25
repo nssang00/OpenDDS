@@ -1,5 +1,9 @@
-    ['==', ['get', 'layer'], 'transportation'],
-    ['==', ['geometry-type'], 'Polygon'],
+Title: WebGL Renderer: Misalignment When 'stroke-pattern-spacing' Values are Multiples
+
+Description:
+There is an issue with the WebGL renderer in OpenLayers when using stroke-pattern-spacing in a LiteralStyle. 
+Specifically, when two different spacing values (e.g., 40 and 80) are applied in the same style, the alignment between the patterns becomes inconsistent. 
+This results in rendering errors for the stroke pattern.
       
 vec4 sampleStrokePattern(
   sampler2D texture, 
