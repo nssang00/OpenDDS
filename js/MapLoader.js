@@ -1,4 +1,23 @@
 function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer = null) {
+  for (const { layers, rules } of layersObj) {
+    // 그룹 레이어인 경우 재귀 호출 후 결과 반환
+    if (layers) {
+      return findLayerWithParentByRuleName(layers, targetLayerName, { layers, rules }) || null;
+    }
+
+    // rules 배열에서 대상 이름 검색
+    if (rules && rules.some(rule => rule.name === targetLayerName)) {
+      return { parentLayer, targetLayer: { layers, rules } };
+    }
+  }
+
+  // 대상 레이어를 찾지 못한 경우 null 반환
+  return null;
+}
+
+
+
+function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer = null) {
   for (const layerObj of layersObj) {
     if (layerObj.layers) {
       // 그룹 레이어인 경우 재귀적으로 탐색
