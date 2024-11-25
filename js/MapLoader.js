@@ -20,8 +20,57 @@ function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer =
   // 대상 레이어를 찾지 못한 경우 null 반환
   return null;
 }
-//
+//////////////////
+function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
+  return layersObj.map(layerObj => processLayer(styleObj, layerObj, urlTemplate));
+}
 
+function processLayer(styleObj, layerObj, urlTemplate) {
+  // Handle grouped layers
+  if (layerObj.layers) {
+    return new LayerGroup({
+      layers: buildStyledOlLayers(styleObj, layerObj.layers, urlTemplate),
+    });
+  }
+
+  const sourceId = layerObj.SHPSource; // Source ID for the layer
+  const layerSource = getOrCreateLayerSource(sourceId, urlTemplate);
+
+  const filteredStyles = processRules(styleObj, layerObj.rules);
+
+  const styledLayers = createStyledLayers({
+    styles: filteredStyles,
+    source: layerSource,
+  });
+
+  // Return single layer or LayerGroup based on styledLayers length
+  return styledLayers.length === 1
+    ? styledLayers[0]
+    : new LayerGroup({ layers: styledLayers });
+}
+
+function processRules(styleObj, rules) {
+  const filteredStyles = [];
+
+  for (const rule of rules) {
+    for (const styleName of rule.styleNames) {
+      const styles = Array.isArray(styleObj[styleName])
+        ? styleObj[styleName]
+        : [styleObj[styleName]];
+
+      for (const style of styles) {
+        filteredStyles.push({
+          ...style,
+          filter: rule.filter, // Add the filter directly from the rule
+        });
+      }
+    }
+  }
+
+  return filteredStyles;
+}
+
+//////////////////
 function buildStyledOlLayer(styleObj, layersObj, urlTemplate, targetLayerName) {
   // Find the specific layer by name in top-level layers or nested layers
   const targetLayer = layersObj.find(layer => 
