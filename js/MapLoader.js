@@ -37,123 +37,10 @@ function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer =
   return null;
 }
 
-
-
-function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer = null) {
-  for (const layerObj of layersObj) {
-    if (layerObj.layers) {
-      // 그룹 레이어인 경우 재귀적으로 탐색
-      const result = findLayerWithParentByRuleName(layerObj.layers, targetLayerName, layerObj);
-      if (result) {
-        return result; // 결과가 존재하면 반환
-      }
-    } else if (layerObj.rules) {
-      // rules 배열을 순회하며 대상 이름과 비교
-      for (const rule of layerObj.rules) {
-        if (rule.name === targetLayerName) {
-          // 대상 rule을 찾으면 현재 레이어와 상위 레이어 반환
-          return { parentLayer, targetLayer: layerObj };
-        }
-      }
-    }
-  }
-
-  // 대상 레이어를 찾지 못한 경우 null 반환
-  return null;
-}
 //////////////////
-function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
-  return layersObj.map(layerObj => processLayer(styleObj, layerObj, urlTemplate));
-}
-
-function processLayer(styleObj, layerObj, urlTemplate) {
-  // Handle grouped layers
-  if (layerObj.layers) {
-    return new LayerGroup({
-      layers: buildStyledOlLayers(styleObj, layerObj.layers, urlTemplate),
-    });
-  }
-
-  const sourceId = layerObj.SHPSource; // Source ID for the layer
-  const layerSource = getOrCreateLayerSource(sourceId, urlTemplate);
-
-  const filteredStyles = processRules(styleObj, layerObj.rules);
-
-  const styledLayers = createStyledLayers({
-    styles: filteredStyles,
-    source: layerSource,
-  });
-
-  // Return single layer or LayerGroup based on styledLayers length
-  return styledLayers.length === 1
-    ? styledLayers[0]
-    : new LayerGroup({ layers: styledLayers });
-}
-
-function processRules(styleObj, rules) {
-  const filteredStyles = [];
-
-  for (const rule of rules) {
-    for (const styleName of rule.styleNames) {
-	const styles = [].concat(styleObj[styleName]);
-
-      for (const style of styles) {
-        filteredStyles.push({
-          ...style,
-          filter: rule.filter, // Add the filter directly from the rule
-        });
-      }
-    }
-  }
-
-  return filteredStyles;
-}
 
 //////////////////
-function buildStyledOlLayer(styleObj, layersObj, urlTemplate, targetLayerName) {
-  // Find the specific layer by name in top-level layers or nested layers
-  const targetLayer = layersObj.find(layer => 
-    layer.name === targetLayerName || 
-    (layer.layers && layer.layers.some(subLayer => subLayer.name === targetLayerName))
-  );
 
-  // If no matching layer found, return null
-  if (!targetLayer) return null;
-
-  // If nested layer, find the exact layer
-  const actualLayer = targetLayer.layers 
-    ? targetLayer.layers.find(layer => layer.name === targetLayerName) 
-    : targetLayer;
-
-  const sourceId = actualLayer.source;
-  
-  // Retrieve or create the layerSource with caching
-  const layerSource = getOrCreateLayerSource(sourceId, urlTemplate);
-  
-  const filteredStyles = [];
-
-  for (const rule of actualLayer.rules) {
-    for (const styleName of rule.styleNames) {
-      const styles = [].concat(styleObj[styleName]);
-
-      for (const style of styles) {
-        filteredStyles.push({
-          ...style,
-          filter: rule.filter
-        });
-      }
-    }
-  }
-
-  const styledLayers = createStyledLayers({
-    styles: filteredStyles,
-    source: layerSource
-  });
-
-  return styledLayers.length === 1 ? styledLayers[0] : new LayerGroup({ layers: styledLayers });
-}
-
-////////////////
 const layerSourceCache = {};
 
 function getOrCreateLayerSource(layerSource, urlTemplate) {
@@ -204,6 +91,12 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
 
     for (const rule of layerObj.rules) {
       for (const styleName of rule.styleNames) {
+
+	[].concat(styleObj[styleName]).map(style => ({
+  		...style,
+  		filter: rule.filter
+	}));
+	/*      
         const styles = [].concat(styleObj[styleName]);
 
         for (const style of styles) {  // for...of 방식으로 변경
@@ -212,6 +105,7 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
             filter: rule.filter  // Add the filter directly
           });
         }
+	*/
       }
     }
 
