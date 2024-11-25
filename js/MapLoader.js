@@ -92,10 +92,7 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
     for (const rule of layerObj.rules) {
       for (const styleName of rule.styleNames) {
 
-	[].concat(styleObj[styleName]).map(style => ({
-  		...style,
-  		filter: rule.filter
-	}));
+	[].concat(styleObj[styleName]).map(style => ({...style,filter: rule.filter}));
 	/*      
         const styles = [].concat(styleObj[styleName]);
 
