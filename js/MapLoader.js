@@ -88,12 +88,21 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
     const layerSource = getOrCreateLayerSource(sourceId, urlTemplate);
     
     const filteredStyles = [];  // 모든 스타일을 모을 배열
-
+/*
+	for (const rule of layerObj.rules) {
+	  for (const styleName of rule.styleNames) {
+	    filteredStyles.push(
+	      ...[].concat(styleObj[styleName]).map(style => ({
+	        ...style,
+	        filter: rule.filter
+	      }))
+	    );
+	  }
+	}	  
+*/
     for (const rule of layerObj.rules) {
       for (const styleName of rule.styleNames) {
-
-	[].concat(styleObj[styleName]).map(style => ({...style,filter: rule.filter}));
-	/*      
+	      
         const styles = [].concat(styleObj[styleName]);
 
         for (const style of styles) {  // for...of 방식으로 변경
@@ -102,7 +111,6 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
             filter: rule.filter  // Add the filter directly
           });
         }
-	*/
       }
     }
 
