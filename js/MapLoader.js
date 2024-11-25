@@ -1,42 +1,19 @@
-function buildStyledOlLayer(styleObj, layersObj, urlTemplate, targetLayerName) {
+function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer = null) {
   for (const layerObj of layersObj) {
     if (layerObj.layers) {
-      // 그룹 레이어의 경우 재귀적으로 탐색
-      const result = buildStyledOlLayer(styleObj, layerObj.layers, urlTemplate, targetLayerName);
+      // 그룹 레이어인 경우 재귀적으로 탐색
+      const result = findLayerWithParentByRuleName(layerObj.layers, targetLayerName, layerObj);
       if (result) {
-        return result; // 찾은 레이어 반환
+        return result; // 결과가 존재하면 반환
       }
-    } else if (layerObj.name === targetLayerName) { 
-      // 대상 레이어를 찾은 경우
-      const sourceId = layerObj.SHPSource;
-
-      // Retrieve or create the layerSource with caching
-      const layerSource = getOrCreateLayerSource(sourceId, urlTemplate);
-
-      const filteredStyles = []; // 스타일 배열 초기화
-
+    } else if (layerObj.rules) {
+      // rules 배열을 순회하며 대상 이름과 비교
       for (const rule of layerObj.rules) {
-        for (const styleName of rule.styleNames) {
-          const styles = Array.isArray(styleObj[styleName])
-            ? styleObj[styleName]
-            : [styleObj[styleName]]; // 배열로 변환
-
-          for (const style of styles) {
-            filteredStyles.push({
-              ...style, // 원본 스타일
-              filter: rule.filter // 필터 추가
-            });
-          }
+        if (rule.name === targetLayerName) {
+          // 대상 rule을 찾으면 현재 레이어와 상위 레이어 반환
+          return { parentLayer, targetLayer: layerObj };
         }
       }
-
-      const styledLayers = createStyledLayers({
-        styles: filteredStyles,
-        source: layerSource
-      });
-
-      // 단일 레이어 반환 또는 그룹으로 반환
-      return styledLayers.length === 1 ? styledLayers[0] : new LayerGroup({ layers: styledLayers });
     }
   }
 
