@@ -95,9 +95,7 @@ function processRules(styleObj, rules) {
 
   for (const rule of rules) {
     for (const styleName of rule.styleNames) {
-      const styles = Array.isArray(styleObj[styleName])
-        ? styleObj[styleName]
-        : [styleObj[styleName]];
+	const styles = [].concat(styleObj[styleName]);
 
       for (const style of styles) {
         filteredStyles.push({
@@ -136,9 +134,7 @@ function buildStyledOlLayer(styleObj, layersObj, urlTemplate, targetLayerName) {
 
   for (const rule of actualLayer.rules) {
     for (const styleName of rule.styleNames) {
-      const styles = Array.isArray(styleObj[styleName]) 
-        ? styleObj[styleName] 
-        : [styleObj[styleName]];
+      const styles = [].concat(styleObj[styleName]);
 
       for (const style of styles) {
         filteredStyles.push({
@@ -208,9 +204,7 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
 
     for (const rule of layerObj.rules) {
       for (const styleName of rule.styleNames) {
-        const styles = Array.isArray(styleObj[styleName]) 
-          ? styleObj[styleName] 
-          : [styleObj[styleName]];  // Ensure array of styles
+        const styles = [].concat(styleObj[styleName]);
 
         for (const style of styles) {  // for...of 방식으로 변경
           filteredStyles.push({
