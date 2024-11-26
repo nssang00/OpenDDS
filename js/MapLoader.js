@@ -158,7 +158,7 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
 
     const styledLayers = createStyledLayers({
 	name: styleObj.name,
-      styles: filteredStyles,  // 스타일 배열을 넘김
+      styles: processRulesToOlStyles(filteredStyles),  // 스타일 배열을 넘김
       source: layerSource
     });
 
