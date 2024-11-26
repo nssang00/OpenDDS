@@ -19,25 +19,6 @@ function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer =
   // 대상 레이어를 찾지 못한 경우 null 반환
   return null;
 }
-/////
-function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer = null) {
-  for (const { layers, rules } of layersObj) {
-    // 그룹 레이어인 경우 재귀 호출 후 결과 반환
-    if (layers) {
-      return findLayerWithParentByRuleName(layers, targetLayerName, { layers, rules }) || null;
-    }
-
-    // rules 배열에서 대상 이름 검색
-    if (rules && rules.some(rule => rule.name === targetLayerName)) {
-      return { parentLayer, targetLayer: { layers, rules } };
-    }
-  }
-
-  // 대상 레이어를 찾지 못한 경우 null 반환
-  return null;
-}
-
-//////////////////
 
 //////////////////
 
@@ -53,10 +34,11 @@ function getOrCreateLayerSource(layerSource, urlTemplate) {
   return layerSourceCache[sourceId];
 }
 
-function createStyledLayers({ styles, source }) {
+function createStyledLayers({ name, styles, source }) {
   return styles.map(style => {
     if (typeof style === 'function') {
       return new VectorTileLayer({
+	name: name,
         source: source,
         style: style
       });
@@ -68,6 +50,7 @@ function createStyledLayers({ styles, source }) {
           });
         }
       })({
+	name: name,
         source: source
       });
     }
@@ -113,6 +96,7 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
     }
 
     const styledLayers = createStyledLayers({
+	name: styleObj.name,
       styles: filteredStyles,  // 스타일 배열을 넘김
       source: layerSource
     });
