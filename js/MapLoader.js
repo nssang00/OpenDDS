@@ -7,8 +7,7 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
       });
     }
 
-    const sourceId = layerObj.SHPSource; // SHPSource -> sourceId로 변경
-    const layerSource = getOrCreateLayerSource(sourceId, urlTemplate); // 소스 생성 또는 캐싱된 소스 가져오기
+    const layerSource = getOrCreateLayerSource(layerObj.source, urlTemplate); // 소스 생성 또는 캐싱된 소스 가져오기
 
     const layerOptions = []; // name, style, source를 포함하는 데이터 구조
 
