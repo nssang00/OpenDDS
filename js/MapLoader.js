@@ -1,4 +1,3 @@
-
 function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
   return layersObj.map(layerObj => {
     if (layerObj.layers) {
@@ -11,26 +10,24 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
     const sourceId = layerObj.SHPSource; // SHPSource -> sourceId로 변경
     const layerSource = getOrCreateLayerSource(sourceId, urlTemplate); // 소스 생성 또는 캐싱된 소스 가져오기
 
-    const styledLayerData = []; // name, style, source를 포함하는 데이터 구조
+    const layerOptions = []; // name, style, source를 포함하는 데이터 구조
 
     for (const rule of layerObj.rules) {
       for (const styleName of rule.styleNames) {
         const styles = [].concat(styleObj[styleName]); // 항상 배열로 변환
 
         for (const style of styles) {
-          styledLayerData.push({
+          layerOptions.push({
             name: rule.name, // 개별 rule의 이름
-            style: {
-              ...style,
-              filter: rule.filter // 스타일에 필터 추가
-            },
+            style: {...style, filter: rule.filter},
             source: layerSource // 소스 포함
           });
         }
       }
     }
 
-    const styledLayers = createStyledLayers(styledLayerData);
+    // layerOptions를 createStyledLayers로 전달
+    const styledLayers = createStyledLayers(layerOptions);
 
     return styledLayers.length === 1
       ? styledLayers[0]
@@ -38,8 +35,8 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
   });
 }
 
-function createStyledLayers(styledLayerData) {
-  return styledLayerData.map(({ name, style, source }) => {
+function createStyledLayers(layerOptions) {
+  return layerOptions.map(({ name, style, source }) => {
     if (typeof style === 'function') {
       // 함수형 스타일 처리
       return new VectorTileLayer({
