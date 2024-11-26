@@ -1,3 +1,68 @@
+
+function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
+  return layersObj.map(layerObj => {
+    if (layerObj.layers) {
+      // 그룹 레이어 처리
+      return new LayerGroup({
+        layers: buildStyledOlLayers(styleObj, layerObj.layers, urlTemplate)
+      });
+    }
+
+    const sourceId = layerObj.SHPSource; // SHPSource -> sourceId로 변경
+    const layerSource = getOrCreateLayerSource(sourceId, urlTemplate); // 소스 생성 또는 캐싱된 소스 가져오기
+
+    const styledLayerData = []; // name, style, source를 포함하는 데이터 구조
+
+    for (const rule of layerObj.rules) {
+      for (const styleName of rule.styleNames) {
+        const styles = [].concat(styleObj[styleName]); // 항상 배열로 변환
+
+        for (const style of styles) {
+          styledLayerData.push({
+            name: rule.name, // 개별 rule의 이름
+            style: {
+              ...style,
+              filter: rule.filter // 스타일에 필터 추가
+            },
+            source: layerSource // 소스 포함
+          });
+        }
+      }
+    }
+
+    const styledLayers = createStyledLayers(styledLayerData);
+
+    return styledLayers.length === 1
+      ? styledLayers[0]
+      : new LayerGroup({ layers: styledLayers });
+  });
+}
+
+function createStyledLayers(styledLayerData) {
+  return styledLayerData.map(({ name, style, source }) => {
+    if (typeof style === 'function') {
+      // 함수형 스타일 처리
+      return new VectorTileLayer({
+        name: name, // 레이어 이름
+        source: source,
+        style: style
+      });
+    } else {
+      // WebGL 스타일 처리
+      return new (class extends VectorTileLayer {
+        createRenderer() {
+          return new WebGLVectorTileLayerRenderer(this, {
+            style: style
+          });
+        }
+      })({
+        name: name, // 레이어 이름
+        source: source
+      });
+    }
+  });
+}
+
 function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer = null) {
   for (const layerObj of layersObj) {
     if (layerObj.layers) {
