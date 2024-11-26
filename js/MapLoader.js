@@ -98,13 +98,11 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
 	      }))
 	    );
 	  }
-	}	  
+	}
 */
     for (const rule of layerObj.rules) {
       for (const styleName of rule.styleNames) {
-	      
         const styles = [].concat(styleObj[styleName]);
-
         for (const style of styles) {  // for...of 방식으로 변경
           filteredStyles.push({
             ...style,       // Original style
