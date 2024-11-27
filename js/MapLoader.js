@@ -1,3 +1,85 @@
+// 스타일에 맞는 레이어를 생성하는 함수
+function createStyledLayers_(styles, name, source) {
+    // 스타일 배열을 처리하여 레이어 생성
+    const layers = styles.map(style => {
+        if (typeof style === 'function') {
+            return new VectorTileLayer({
+                name: name,  // 레이어 이름 지정
+                source: source,
+                style: style
+            });
+        } else {
+            return new WebGLVectorTileLayer({
+                name: name,  // 레이어 이름 지정
+                source: source,
+                style: style
+            });
+        }
+    });
+
+    // 여러 레이어가 생성되면 LayerGroup으로 묶어서 반환
+    return layers.length > 1
+        ? new LayerGroup({
+            name: name,  // LayerGroup에 이름 지정
+            layers: layers
+        })
+        : layers[0];  // 레이어가 하나라면 단일 레이어 반환
+}
+
+// 스타일 객체와 레이어 객체를 기반으로 OpenLayers 레이어를 빌드하는 함수
+function buildStyledOlLayers_(styleObj, layersObj, urlTemplate) {
+    return layersObj.map(layerObj => {
+        if (layerObj.layers) {
+            // 내부에 하위 레이어가 있는 경우 재귀적으로 처리
+            return new LayerGroup({
+                name: layerObj.name,
+                layers: buildStyledOlLayers_(styleObj, layerObj.layers, urlTemplate)
+            });
+        }
+
+        // 레이어 소스 생성 또는 캐싱된 소스 가져오기
+        const layerSource = getOrCreateLayerSource(layerObj.source, urlTemplate);
+
+        // 스타일을 포함한 레이어 옵션을 저장할 배열
+        const styledLayers = [];
+
+        for (const rule of layerObj.rules) {
+            const filteredStyles = [];
+
+            // 각 규칙에 맞는 스타일을 필터링
+            for (const styleName of rule.styleNames) {
+                if (!styleObj[styleName]) {
+                    throw new Error(`Style '${styleName}' not found in styleObj`);
+                }
+
+                const styles = [].concat(styleObj[styleName]);  // 스타일을 배열로 변환
+                for (const style of styles) {
+                    filteredStyles.push({...style, filter: rule.filter});
+                }
+            }
+
+            // 각 규칙에 대해 스타일을 기반으로 레이어 생성
+            const layersForRule = createStyledLayers_(filteredStyles, rule.name, layerSource);
+
+            // 생성된 레이어가 LayerGroup이라면 그 안의 레이어를 모두 추가
+            if (layersForRule instanceof LayerGroup) {
+                styledLayers.push(...layersForRule.getLayers().getArray());
+            } else {
+                // 단일 레이어라면 그 자체를 추가
+                styledLayers.push(layersForRule);
+            }
+        }
+
+        // 여러 레이어가 생성되었으면 LayerGroup으로 묶어서 반환
+        return styledLayers.length > 1
+            ? new LayerGroup({
+                name: layerObj.name,  // LayerGroup에 이름 지정
+                layers: styledLayers
+            })
+            : styledLayers[0];  // 하나의 레이어만 생성되었으면 그 레이어 반환
+    });
+}
+/////////////////
 function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
   return layersObj.map(layerObj => {
     if (layerObj.layers) {
