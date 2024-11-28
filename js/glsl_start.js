@@ -13,16 +13,27 @@ vec4 sampleStrokePattern(
   float currentLengthScaled = currentLengthPx * scaleFactor;
   float spacingScaled = spacingPx * scaleFactor;
 
-  // Adjusted mod calculation to ensure correct spacing alignment
-  float uCoordPx = mod(currentLengthScaled + startOffsetPx + 0.5, spacingScaled);
-  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 1.5); // Prevent sampling outer edge
+  // Calculate horizontal texture coordinate in pixels
+  float uCoordPx = mod(currentLengthScaled + startOffsetPx, spacingScaled);
+  
+  // Check if the current position is within the valid drawing range
+  bool isInPattern = uCoordPx >= 0.5 && uCoordPx <= sampleSize.x - 0.5;
 
+  // Clamp to ensure the texture sampling stays within bounds
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+
+  // Calculate vertical texture coordinate
   float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
-
-  // Correct texture coordinate computation
+  
+  // Compute final texture coordinate
   vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
 
-  // Return sampled texture value
+  // If outside the pattern, return transparent color
+  if (!isInPattern) {
+    return vec4(0.0); // Fully transparent
+  }
+
+  // Sample the texture and return the color
   return samplePremultiplied(texture, texCoord);
 }
 
