@@ -1,4 +1,30 @@
-   
+vec4 sampleStrokePattern(
+    sampler2D texture, 
+    vec2 textureSize, 
+    vec2 textureOffset, 
+    vec2 sampleSize, 
+    float spacingPx, 
+    float startOffsetPx, 
+    float currentLengthPx, 
+    float currentRadiusRatio, 
+    float lineWidth
+) {
+    float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
+    float spacingScaled = spacingPx * (sampleSize.y / lineWidth);
+
+    float uCoordPx = mod(currentLengthScaled + startOffsetPx, spacingScaled);
+    
+    // 이미지가 spacing 내에서만 출력되도록 조건 추가
+    if (uCoordPx > sampleSize.x || uCoordPx < 0.0) {
+        return vec4(0.0, 0.0, 0.0, 0.0);
+    }
+    uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+    float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
+    vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+    return samplePremultiplied(texture, texCoord);
+}
+
+
 vec4 sampleStrokePattern(
   sampler2D texture, 
   vec2 textureSize, 
