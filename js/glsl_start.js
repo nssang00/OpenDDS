@@ -9,21 +9,27 @@ vec4 sampleStrokePattern(
     float currentRadiusRatio, 
     float lineWidth
 ) {
+    // 선 길이를 선 두께 비율로 스케일링
     float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
     float spacingScaled = spacingPx * (sampleSize.y / lineWidth);
 
-    float uCoordPx = mod(currentLengthScaled + startOffsetPx, spacingScaled);
-    
-    // 이미지가 spacing 내에서만 출력되도록 조건 추가
-    if (uCoordPx > sampleSize.x || uCoordPx < 0.0) {
+    // 현재 위치가 spacing 위치에만 해당하도록 체크
+    float relativePosition = mod(currentLengthScaled + startOffsetPx, spacingScaled);
+    bool isInPatternRange = relativePosition < sampleSize.x;
+
+    // 간격 외는 투명
+    if (!isInPatternRange) {
         return vec4(0.0, 0.0, 0.0, 0.0);
     }
-    uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+
+    // 텍스처 좌표 계산 (spacing 내부일 때만 실행)
+    float uCoordPx = clamp(relativePosition, 0.5, sampleSize.x - 0.5);
     float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
     vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+
+    // 텍스처 샘플링
     return samplePremultiplied(texture, texCoord);
 }
-
 
 vec4 sampleStrokePattern(
   sampler2D texture, 
