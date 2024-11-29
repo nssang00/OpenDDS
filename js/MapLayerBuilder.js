@@ -47,11 +47,6 @@ class MapLayerBuilder {
                 await this.loadMap(styleUrl, layerUrl);  // Load map data asynchronously
             }
 
-            // Ensure that map data is loaded
-            if (!this.styles || !this.layers) {
-                throw new Error('Failed to load map data');
-            }
-
             // Use stored styles and layers
             this.mapStyler.applyMap(map, { 
                 styles: this.buildMapStyle(this.styles), 
