@@ -4,14 +4,6 @@ class MapStyler {
   }
 }
 
-///////////
-class MapLayerBuilder {
-
-
-
-
-//////////////
-
 class MapLayerBuilder {
     constructor(options) {
         this.baseSymbolPath = options.baseSymbolPath || '';
@@ -39,9 +31,7 @@ class MapLayerBuilder {
 
             const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
 
-            const mapData = this.parseMap(styleXmlString, layerXmlString);
-            this.styles = mapData.styles;
-            this.layers = mapData.layers;
+            [this.styles, this.layers] = this.parseMap(styleXmlString, layerXmlString);
 
         } catch (error) {
             console.error('Error loading map:', error);
