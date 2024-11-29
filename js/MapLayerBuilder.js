@@ -59,7 +59,20 @@ class MapLayerBuilder {
         } catch (error) {
             console.error('Error applying map:', error);
         }
-    }  
+    }
+
+    async createLayerByName(layerName) {
+      if (!this.styles || !this.layers) {
+        throw new Error('Styles and/or layers are not loaded yet.');
+      }
+  
+      return await this.mapStyler.createLayerByName(layerName, { 
+        styles: this.styles, 
+        layers: this.layers, 
+        urlTemplate: this.urlTemplate 
+      });
+    }
+
 
     parseMap(styleXmlString, layerXmlString) {
         return {
