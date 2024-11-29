@@ -4,6 +4,14 @@ class MapStyler {
   }
 }
 
+///////////
+class MapLayerBuilder {
+
+
+
+
+//////////////
+
 class MapLayerBuilder {
     constructor(options) {
         this.baseSymbolPath = options.baseSymbolPath || '';
@@ -11,6 +19,9 @@ class MapLayerBuilder {
         this.mapStyler = options.mapStyler;
         this.urlTemplate = options.urlTemplate || 'local://mbtiles/{layerSource}/{z}/{x}/{-y}.pbf';
         this.sharedSource = options.sharedSource || null;
+
+        this.styles = null;
+        this.layers = null;
         
         if (!this.mapStyler) {
             throw new Error("mapStyler is required.");
@@ -28,7 +39,9 @@ class MapLayerBuilder {
 
             const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
 
-            return this.parseMap(styleXmlString, layerXmlString);
+            const mapData = this.parseMap(styleXmlString, layerXmlString);
+            this.styles = mapData.styles;
+            this.layers = mapData.layers;
 
         } catch (error) {
             console.error('Error loading map:', error);
@@ -38,19 +51,27 @@ class MapLayerBuilder {
 
     async applyMap(map, { styleUrl, layerUrl }) {
         try {
-            // 1. 스타일과 레이어 데이터를 비동기적으로 로드하고 파싱
-            const { styles, layers } = await this.loadMap(styleUrl, layerUrl);
-    
-            // 2. mapStyler를 통해 맵에 스타일과 레이어 적용
+            // Check if styles and layers are loaded, if not, load them
+            if (!this.styles || !this.layers) {
+                console.log('Styles and/or layers not loaded, loading...');
+                await this.loadMap(styleUrl, layerUrl);  // Load map data asynchronously
+            }
+
+            // Ensure that map data is loaded
+            if (!this.styles || !this.layers) {
+                throw new Error('Failed to load map data');
+            }
+
+            // Use stored styles and layers
             this.mapStyler.applyMap(map, { 
-                styles: this.buildMapStyle(styles), 
-                layers: this.buildMapLayer(layers),
+                styles: this.buildMapStyle(this.styles), 
+                layers: this.buildMapLayer(this.layers),
                 urlTemplate: this.urlTemplate,
             });
         } catch (error) {
             console.error('Error applying map:', error);
         }
-    }
+    }  
 
     parseMap(styleXmlString, layerXmlString) {
         return {
