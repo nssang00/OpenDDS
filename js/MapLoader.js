@@ -9,19 +9,10 @@ class OlMapStyler extends MapStyler {
         map.addLayer(olLayer);
       }
     });
-
-    console.log("Map applied with styles and layers");
   }
 
   createLayerByName(layerName, options) {
     const { styles, layers, urlTemplate } = options;
-
-    // 레이어 데이터를 찾아 OpenLayers Layer로 변환
-    
-
-  getStyleForLayer(layerName, styles) {
-    // 레이어 이름에 해당하는 스타일을 반환 (기본적으로 null 반환)
-    return styles[layerName] || null;
   }
 }
 //////////
