@@ -1,8 +1,8 @@
 class MapStyler {
-  applyMap(map, { styles, layers, urlTemplate }) {
+  applyMap(map, options) {
     throw new Error("applyMap() must be implemented");
   }
-  createLayerByName(layerName, { styles, layers, urlTemplate }) {
+  createLayerByName(layerName, options) {
     throw new Error("createLayerByName() must be implemented");
   }  
 }
