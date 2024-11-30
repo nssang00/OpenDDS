@@ -1,3 +1,30 @@
+class OlMapStyler extends MapStyler {
+  applyMap(map, options) {
+    const { styles, layers, urlTemplate } = options;
+
+    // OpenLayers map에 스타일과 레이어를 적용
+    layers.forEach((layer) => {
+      const olLayer = this.createLayerByName(layer.name, { styles, layers, urlTemplate });
+      if (olLayer) {
+        map.addLayer(olLayer);
+      }
+    });
+
+    console.log("Map applied with styles and layers");
+  }
+
+  createLayerByName(layerName, options) {
+    const { styles, layers, urlTemplate } = options;
+
+    // 레이어 데이터를 찾아 OpenLayers Layer로 변환
+    
+
+  getStyleForLayer(layerName, styles) {
+    // 레이어 이름에 해당하는 스타일을 반환 (기본적으로 null 반환)
+    return styles[layerName] || null;
+  }
+}
+//////////
 // 스타일에 맞는 레이어를 생성하는 함수
 function createStyledLayers_(styles, name, source) {
     // 스타일 배열을 처리하여 레이어 생성
