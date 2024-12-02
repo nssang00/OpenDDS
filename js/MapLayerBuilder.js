@@ -1,10 +1,10 @@
 class MapStyler {
-  applyMap(map, options) {
-    throw new Error("applyMap() must be implemented");
-  }
-  createLayerByName(layerName, options) {
-    throw new Error("createLayerByName() must be implemented");
-  }  
+    applyMap(map, options) {
+        throw new Error("applyMap() must be implemented");
+    }
+    createLayerByName(layerName, options) {
+        throw new Error("createLayerByName() must be implemented");
+    }  
 }
 
 class MapLayerBuilder {
