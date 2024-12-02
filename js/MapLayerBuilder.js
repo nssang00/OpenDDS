@@ -34,7 +34,8 @@ class MapLayerBuilder {
 
             const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
 
-            [this.styles, this.layers] = this.parseMap(styleXmlString, layerXmlString);
+            const parsedMap = this.parseMap(styleXmlString, layerXmlString);
+            [this.styles, this.layers] = this.buildMap(parsedMap.styles, parsedMap.layers);
 
         } catch (error) {
             console.error('Error loading map:', error);
@@ -52,8 +53,8 @@ class MapLayerBuilder {
 
             // Use stored styles and layers
             this.mapStyler.applyMap(map, { 
-                styles: this.buildMapStyle(this.styles), 
-                layers: this.buildMapLayer(this.layers),
+                styles: this.styles, 
+                layers: this.layers,
                 urlTemplate: this.urlTemplate,
             });
         } catch (error) {
@@ -68,8 +69,8 @@ class MapLayerBuilder {
             }
         
             return await this.mapStyler.createLayerByName(layerName, { 
-                styles: this.buildMapStyle(this.styles), 
-                layers: this.buildMapLayer(this.layers),
+                styles: this.styles, 
+                layers: this.layers,
                 urlTemplate: this.urlTemplate,
             });
         } catch (error) {
