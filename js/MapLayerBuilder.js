@@ -2,6 +2,7 @@ class MapStyler {
     applyMap(map, options) {
         throw new Error("applyMap() must be implemented");
     }
+
     createLayerByName(layerName, options) {
         throw new Error("createLayerByName() must be implemented");
     }  
@@ -11,13 +12,11 @@ class MapLayerBuilder {
     constructor(options) {
         this.baseSymbolPath = options.baseSymbolPath || '';
         this.dpi = options.dpi || (25.4 / 0.28);
-        this.mapStyler = options.mapStyler;
         this.urlTemplate = options.urlTemplate || 'local://mbtiles/{layerSource}/{z}/{x}/{-y}.pbf';
         this.sharedSource = options.sharedSource || null;
-
-        this.styles = null;
-        this.layers = null;
+        this.mapData = null;
         
+        this.mapStyler = options.mapStyler;
         if (!this.mapStyler) {
             throw new Error("mapStyler is required.");
         }
@@ -35,7 +34,7 @@ class MapLayerBuilder {
             const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
 
             const parsedMap = this.parseMap(styleXmlString, layerXmlString);
-            [this.styles, this.layers] = this.buildMap(parsedMap.styles, parsedMap.layers);
+            this.mapData = this.buildMap(parsedMap.styles, parsedMap.layers);
 
         } catch (error) {
             console.error('Error loading map:', error);
@@ -46,15 +45,15 @@ class MapLayerBuilder {
     async applyMap(map, { styleUrl, layerUrl }) {
         try {
             // Check if styles and layers are loaded, if not, load them
-            if (!this.styles || !this.layers) {
+            if (!this.mapData) {
                 console.log('Styles and/or layers not loaded, loading...');
                 await this.loadMap(styleUrl, layerUrl); 
             }
 
             // Use stored styles and layers
             this.mapStyler.applyMap(map, { 
-                styles: this.styles, 
-                layers: this.layers,
+                styles: this.mapData.styles, 
+                layers: this.mapData.layers,
                 urlTemplate: this.urlTemplate,
             });
         } catch (error) {
@@ -64,13 +63,13 @@ class MapLayerBuilder {
 
     async createLayerByName(layerName) {
         try {
-            if (!this.styles || !this.layers) {
+            if (!this.mapData) {
                 throw new Error('Styles and/or layers are not loaded yet.');
             }
         
             return await this.mapStyler.createLayerByName(layerName, { 
-                styles: this.styles, 
-                layers: this.layers,
+                styles: this.mapData.styles, 
+                layers: this.mapData.layers,
                 urlTemplate: this.urlTemplate,
             });
         } catch (error) {
