@@ -47,7 +47,7 @@ class MapLayerBuilder {
             // Check if styles and layers are loaded, if not, load them
             if (!this.styles || !this.layers) {
                 console.log('Styles and/or layers not loaded, loading...');
-                await this.loadMap(styleUrl, layerUrl);  // Load map data asynchronously
+                await this.loadMap(styleUrl, layerUrl); 
             }
 
             // Use stored styles and layers
@@ -62,19 +62,19 @@ class MapLayerBuilder {
     }
 
     async createLayerByName(layerName) {
-      try {
-        if (!this.styles || !this.layers) {
-          throw new Error('Styles and/or layers are not loaded yet.');
+        try {
+            if (!this.styles || !this.layers) {
+                throw new Error('Styles and/or layers are not loaded yet.');
+            }
+        
+            return await this.mapStyler.createLayerByName(layerName, { 
+                styles: this.buildMapStyle(this.styles), 
+                layers: this.buildMapLayer(this.layers),
+                urlTemplate: this.urlTemplate,
+            });
+        } catch (error) {
+            console.error(`Error creating layer for "${layerName}":`, error);
         }
-    
-        return await this.mapStyler.createLayerByName(layerName, { 
-          styles: this.styles, 
-          layers: this.layers, 
-          urlTemplate: this.urlTemplate 
-        });
-      } catch (error) {
-        console.error(`Error creating layer for "${layerName}":`, error);
-      }
     }
 
     parseMap(styleXmlString, layerXmlString) {
