@@ -84,6 +84,13 @@ class MapLayerBuilder {
         };
     }
 
+    buildMap(stylesObj, layersObj) {
+        return {
+            styles: this.buildMapStyle(stylesObj),
+            layers: this.buildMapLayer(layersObj)
+        };
+    }
+
     // RGBA 문자열을 배열로 변환하는 함수
     toRGBAArray(rgbaString) {
         const [a, r, g, b] = rgbaString.split(',').map(Number);
