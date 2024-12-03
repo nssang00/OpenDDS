@@ -1,3 +1,103 @@
+function createStyledLayers({ name, styles, source }) {
+    const layers = styles.map(style => {
+        if (typeof style === 'function') {
+            return new VectorTileLayer({
+                name: name,  // 레이어 이름 지정
+                source: source,
+                style: style
+            });
+        } else {
+            return new WebGLVectorTileLayer({
+                name: name,  // 레이어 이름 지정
+                source: source,
+                style: style
+            });
+            /*
+            return new (class extends VectorTileLayer {
+                createRenderer() {
+                    return new WebGLVectorTileLayerRenderer(this, {
+                        style: style
+                    });
+                }
+            })({
+                source: source
+            });
+            */            
+        }
+    });
+
+    return layers.length > 1
+        ? new LayerGroup({name: name, layers: layers})
+        : layers[0]; 
+}
+
+
+function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
+    return layersObj.map(layerObj => {
+        if (layerObj.layers) {
+            return new LayerGroup({
+                name: layerObj.name,
+                layers: buildStyledOlLayers(styleObj, layerObj.layers, urlTemplate)
+            });
+        }
+
+        const layerSource = getOrCreateLayerSource(layerObj.source, urlTemplate);
+
+        const styledLayers = [];
+        for (const rule of layerObj.rules) {
+            const filteredStyles = [];
+            for (const styleName of rule.styleNames) {
+                if (!styleObj[styleName]) {
+                    throw new Error(`Style '${styleName}' not found in styleObj`);
+                }
+
+                const styles = [].concat(styleObj[styleName]);
+                for (const style of styles) {
+                    filteredStyles.push({...style, filter: rule.filter});
+                }
+            }
+            styledLayers.push(createStyledLayers({
+                name: rule.name,
+                styles: processRulesToOlStyles(filteredStyles),  
+                source: layerSource,
+            }));
+        }
+
+        return styledLayers.length > 1
+            ? new LayerGroup({name: layerObj.name, layers: styledLayers})
+            : styledLayers[0];
+    });
+}
+
+
+function createStyledOlLayerByName(layerName, styleObj, layersObj, urlTemplate) {
+    for (const layerObj of layersObj) {
+        if (layerObj.layers) {
+            return createStyledOlLayerByName(layerName, styleObj, layerObj.layers, urlTemplate);
+        }
+        for (const rule of layerObj.rules) {
+            if (rule.name === layerName) {
+                const filteredStyles = [];
+                for (const styleName of rule.styleNames) {
+                    const styles = [].concat(styleObj[styleName]);
+                    for (const style of styles) { 
+                        filteredStyles.push({...style, filter: rule.filter});
+                    }
+                }
+
+                return createStyledLayers({
+                    name: rule.name,
+                    styles: processRulesToOlStyles(filteredStyles),  
+                    source: getOrCreateLayerSource(layerObj.source, urlTemplate),
+                });
+            }
+        }
+    }
+
+    return null;
+}
+///
+
 class OlMapStyler extends MapStyler {
   applyMap(map, options) {
     const { styles, layers, urlTemplate } = options;
