@@ -8,7 +8,6 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate) {
         else {
           const layerSource = getOrCreateLayerSource(layerObj.source, urlTemplate);
   
-  
           for (const rule of layerObj.rules) {
               const filteredStyles = [];
               for (const styleName of rule.styleNames) {
