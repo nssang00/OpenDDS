@@ -13,6 +13,8 @@ class MapLayerBuilder {
         this.baseSymbolPath = options.baseSymbolPath || '';
         this.dpi = options.dpi || (25.4 / 0.28);
         this.urlTemplate = options.urlTemplate || 'local://mbtiles/{layerSource}/{z}/{x}/{-y}.pbf';
+        this.projection = options.projection || 'EPSG:3857';
+        this.visible = options.visible || true;
         this.sharedSource = options.sharedSource || null;
         this.mapData = null;
         
@@ -61,7 +63,7 @@ class MapLayerBuilder {
         }
     }
 
-    async createLayerByName(layerName) {
+    async createLayerByName(layerName, options) {
         try {
             if (!this.mapData) {
                 throw new Error('Styles and/or layers are not loaded yet.');
@@ -71,6 +73,8 @@ class MapLayerBuilder {
                 styles: this.mapData.styles, 
                 layers: this.mapData.layers,
                 urlTemplate: this.urlTemplate,
+                projection: options.projection || 'EPSG:3857',
+                visible: options.visible || true,
             });
         } catch (error) {
             console.error(`Error creating layer for "${layerName}":`, error);
