@@ -57,6 +57,8 @@ class MapLayerBuilder {
                 styles: this.mapData.styles, 
                 layers: this.mapData.layers,
                 urlTemplate: this.urlTemplate,
+                projection: this.projection,
+                visible: this.visible,                
             });
         } catch (error) {
             console.error('Error applying map:', error);
@@ -73,8 +75,8 @@ class MapLayerBuilder {
                 styles: this.mapData.styles, 
                 layers: this.mapData.layers,
                 urlTemplate: this.urlTemplate,
-                projection: options.projection || 'EPSG:3857',
-                visible: options.visible || true,
+                projection: options.projection,
+                visible: options.visible,
             });
         } catch (error) {
             console.error(`Error creating layer for "${layerName}":`, error);
