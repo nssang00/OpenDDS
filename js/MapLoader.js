@@ -1,3 +1,123 @@
+function createStyledLayers({ name, styles, source, visible }) {
+    const layers = styles.map(style => {
+        if (typeof style === 'function') {
+            return new VectorTileLayer({
+                name: name, 
+                source: source,
+                style: style,
+                visible: visible
+            });
+        } else {
+            return new WebGLVectorTileLayer({
+                name: name,
+                source: source,
+                style: style,
+                visible: visible
+            });
+            /*
+            return new (class extends VectorTileLayer {
+                createRenderer() {
+                    return new WebGLVectorTileLayerRenderer(this, {
+                        style: style
+                    });
+                }
+            })({
+                name: name, 
+                source: source,
+                visible: visible
+            });
+            */            
+        }
+    });
+
+    return layers.length > 1
+        ? new LayerGroup({name: name, layers: layers, visible: visible })
+        : layers[0]; 
+}
+
+
+function buildStyledOlLayers(styleObj, layersObj, urlTemplate, options) {
+    const { projection, visible } = options;
+    return layersObj.map(layerObj => {
+        if (layerObj.layers) {
+            return new LayerGroup({
+                name: layerObj.name,
+                layers: buildStyledOlLayers(styleObj, layerObj.layers, urlTemplate, options)
+            });
+        }
+
+        const layerSource = getOrCreateLayerSource(layerObj.source, urlTemplate, projection);
+
+        const styledLayers = [];
+        for (const rule of layerObj.rules) {
+            const filteredStyles = [];
+            for (const styleName of rule.styleNames) {
+                if (!styleObj[styleName]) {
+                    throw new Error(`Style '${styleName}' not found in styleObj`);
+                }
+
+                const styles = [].concat(styleObj[styleName]);
+                for (const style of styles) {
+                    filteredStyles.push({...style, filter: rule.filter});
+                }
+            }
+            styledLayers.push(createStyledLayers({
+                name: rule.name,
+                styles: processRulesToOlStyles(filteredStyles),  
+                source: layerSource,
+                visible: visible
+            }));
+        }
+
+        return styledLayers.length > 1
+            ? new LayerGroup({name: layerObj.name, layers: styledLayers})
+            : styledLayers[0];
+    });
+}
+
+
+function createStyledOlLayerByName(layerName, styleObj, layersObj, urlTemplate, options) {
+    const { projection, visible } = options;
+    for (const layerObj of layersObj) {
+        if (layerObj.layers) {
+            return createStyledOlLayerByName(layerName, styleObj, layerObj.layers, urlTemplate);
+        }
+        for (const rule of layerObj.rules) {
+            if (rule.name === layerName) {
+                const filteredStyles = [];
+                for (const styleName of rule.styleNames) {
+                    const styles = [].concat(styleObj[styleName]);
+                    for (const style of styles) { 
+                        filteredStyles.push({...style, filter: rule.filter});
+                    }
+                }
+
+                return createStyledLayers({
+                    name: rule.name,
+                    styles: processRulesToOlStyles(filteredStyles),  
+                    source: getOrCreateLayerSource(layerObj.source, urlTemplate, projection),
+                    visible: visible
+                });
+            }
+        }
+    }
+
+    return null;
+}
+
+const layerSourceCache = {};
+
+function getOrCreateLayerSource(layerSource, urlTemplate, projection) {
+  if (!layerSourceCache[layerSource]) {
+    layerSourceCache[layerSource] = new VectorTileSource({
+      format: new MVT(),
+      url: urlTemplate.replace('{layerSource}', layerSource),
+      projection: projection
+    });
+  }
+  return layerSourceCache[sourceId];
+}
+//////////////////////
 function createStyledLayers({ name, styles, source }) {
     const layers = styles.map(style => {
         if (typeof style === 'function') {
