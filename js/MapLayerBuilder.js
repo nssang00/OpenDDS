@@ -65,7 +65,7 @@ class MapLayerBuilder {
         }
     }
 
-    async createLayerByName(layerName, options) {
+    async createLayerByName(layerName, options = {}) {
         try {
             if (!this.mapData) {
                 throw new Error('Styles and/or layers are not loaded yet.');
