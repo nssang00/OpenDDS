@@ -96,6 +96,18 @@ function createStyledOlLayerByName(layerName, styleObj, layersObj, urlTemplate) 
 
     return null;
 }
+
+const layerSourceCache = {};
+
+function getOrCreateLayerSource(layerSource, urlTemplate) {
+  if (!layerSourceCache[layerSource]) {
+    layerSourceCache[layerSource] = new VectorTileSource({
+      format: new MVT(),
+      url: urlTemplate.replace('{layerSource}', layerSource)
+    });
+  }
+  return layerSourceCache[sourceId];
+}
 ///
 
 class OlMapStyler extends MapStyler {
@@ -282,18 +294,6 @@ function findLayerWithParentByRuleName(layersObj, targetLayerName, parentLayer =
 }
 
 //////////////////
-
-const layerSourceCache = {};
-
-function getOrCreateLayerSource(layerSource, urlTemplate) {
-  if (!layerSourceCache[layerSource]) {
-    layerSourceCache[layerSource] = new VectorTileSource({
-      format: new MVT(),
-      url: urlTemplate.replace('{layerSource}', layerSource)
-    });
-  }
-  return layerSourceCache[sourceId];
-}
 
 function createStyledLayers({ name, styles, source }) {
   return styles.map(style => {
