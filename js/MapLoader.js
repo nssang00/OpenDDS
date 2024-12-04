@@ -36,16 +36,16 @@ function createStyledLayers({ name, styles, source, visible }) {
 }
 
 
-function buildStyledOlLayers(styleObj, layersObj, urlTemplate, options = {}) {
+function buildStyledOlLayers(styleObj, layersObj, options = {}) {
     return layersObj.map(layerObj => {
         if (layerObj.layers) {
             return new LayerGroup({
                 name: layerObj.name,
-                layers: buildStyledOlLayers(styleObj, layerObj.layers, urlTemplate, options)
+                layers: buildStyledOlLayers(styleObj, layerObj.layers, options)
             });
         }
 
-        const layerSource = getOrCreateLayerSource(layerObj.source, urlTemplate, options.projection);
+        const layerSource = getOrCreateLayerSource(layerObj.source, options.urlTemplate, options.projection);
 
         const styledLayers = [];
         for (const rule of layerObj.rules) {
@@ -75,10 +75,10 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate, options = {}) {
 }
 
 
-function createStyledOlLayerByName(layerName, styleObj, layersObj, urlTemplate, options = {}) {
+function createStyledOlLayerByName(layerName, styleObj, layersObj, options = {}) {
     for (const layerObj of layersObj) {
         if (layerObj.layers) {
-            return createStyledOlLayerByName(layerName, styleObj, layerObj.layers, urlTemplate, options);
+            return createStyledOlLayerByName(layerName, styleObj, layerObj.layers, options);
         }
         for (const rule of layerObj.rules) {
             if (rule.name === layerName) {
@@ -93,7 +93,7 @@ function createStyledOlLayerByName(layerName, styleObj, layersObj, urlTemplate, 
                 return createStyledLayers({
                     name: rule.name,
                     styles: processRulesToOlStyles(filteredStyles),  
-                    source: getOrCreateLayerSource(layerObj.source, urlTemplate, options.projection),
+                    source: getOrCreateLayerSource(layerObj.source, options.urlTemplate, options.projection),
                     visible: options.visible
                 });
             }
