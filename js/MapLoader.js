@@ -36,8 +36,7 @@ function createStyledLayers({ name, styles, source, visible }) {
 }
 
 
-function buildStyledOlLayers(styleObj, layersObj, urlTemplate, options) {
-    const { projection, visible } = options;
+function buildStyledOlLayers(styleObj, layersObj, urlTemplate, options = {}) {
     return layersObj.map(layerObj => {
         if (layerObj.layers) {
             return new LayerGroup({
@@ -46,7 +45,7 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate, options) {
             });
         }
 
-        const layerSource = getOrCreateLayerSource(layerObj.source, urlTemplate, projection);
+        const layerSource = getOrCreateLayerSource(layerObj.source, urlTemplate, options.projection);
 
         const styledLayers = [];
         for (const rule of layerObj.rules) {
@@ -65,7 +64,7 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate, options) {
                 name: rule.name,
                 styles: processRulesToOlStyles(filteredStyles),  
                 source: layerSource,
-                visible: visible
+                visible: options.visible
             }));
         }
 
@@ -76,11 +75,10 @@ function buildStyledOlLayers(styleObj, layersObj, urlTemplate, options) {
 }
 
 
-function createStyledOlLayerByName(layerName, styleObj, layersObj, urlTemplate, options) {
-    const { projection, visible } = options;
+function createStyledOlLayerByName(layerName, styleObj, layersObj, urlTemplate, options = {}) {
     for (const layerObj of layersObj) {
         if (layerObj.layers) {
-            return createStyledOlLayerByName(layerName, styleObj, layerObj.layers, urlTemplate);
+            return createStyledOlLayerByName(layerName, styleObj, layerObj.layers, urlTemplate, options);
         }
         for (const rule of layerObj.rules) {
             if (rule.name === layerName) {
@@ -95,8 +93,8 @@ function createStyledOlLayerByName(layerName, styleObj, layersObj, urlTemplate, 
                 return createStyledLayers({
                     name: rule.name,
                     styles: processRulesToOlStyles(filteredStyles),  
-                    source: getOrCreateLayerSource(layerObj.source, urlTemplate, projection),
-                    visible: visible
+                    source: getOrCreateLayerSource(layerObj.source, urlTemplate, options.projection),
+                    visible: options.visible
                 });
             }
         }
@@ -115,7 +113,7 @@ function getOrCreateLayerSource(layerSource, urlTemplate, projection) {
       projection: projection
     });
   }
-  return layerSourceCache[sourceId];
+  return layerSourceCache[layerSource];
 }
 //////////////////////
 function createStyledLayers({ name, styles, source }) {
