@@ -1,45 +1,145 @@
-// 총 필요한 크기 계산
-const numCircles = 10000; // 원 개수
-const segments = 30; // 각 원의 세그먼트 개수
-const vertices = new Float32Array(numCircles * segments * 2); // 각 점당 x, y 좌표 2개
-const colors = new Float32Array(numCircles * 4); // 각 원당 RGBA 색상 4개
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Random Circles Animation</title>
+</head>
+<body>
+<canvas id="glCanvas" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl');
 
-// 애니메이션 함수
+// WebGL 초기화
+gl.clearColor(0, 0, 0, 1);
+gl.clear(gl.COLOR_BUFFER_BIT);
+
+// 셰이더 작성
+const vertexShaderSource = `
+  attribute vec2 a_position;
+  void main() {
+    gl_Position = vec4(a_position, 0, 1);
+  }
+`;
+
+const fragmentShaderSource = `
+  precision mediump float;
+  uniform vec4 u_color;
+  void main() {
+    gl_FragColor = u_color;
+  }
+`;
+
+// 셰이더 컴파일
+function compileShader(type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  return shader;
+}
+
+const vertexShader = compileShader(gl.VERTEX_SHADER, vertexShaderSource);
+const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+// 프로그램 링크
+const program = gl.createProgram();
+gl.attachShader(program, vertexShader);
+gl.attachShader(program, fragmentShader);
+gl.linkProgram(program);
+if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+  console.error(gl.getProgramInfoLog(program));
+}
+
+// WebGL 활성화
+gl.useProgram(program);
+
+// attribute 및 uniform 위치
+const positionLocation = gl.getAttribLocation(program, 'a_position');
+const colorLocation = gl.getUniformLocation(program, 'u_color');
+
+// 버퍼 생성
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+// VAO 설정
+gl.enableVertexAttribArray(positionLocation);
+gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+// 원 데이터 생성 함수
+function generateCircleVertices(x, y, radius, segments) {
+  const vertices = new Float32Array((segments + 2) * 2); // TRIANGLE_FAN 사용
+  const angleStep = (Math.PI * 2) / segments;
+
+  // 중심점
+  vertices[0] = x;
+  vertices[1] = y;
+
+  for (let i = 0; i <= segments; i++) {
+    const angle = i * angleStep;
+    vertices[(i + 1) * 2] = x + radius * Math.cos(angle);
+    vertices[(i + 1) * 2 + 1] = y + radius * Math.sin(angle);
+  }
+  return vertices;
+}
+
+// 애니메이션용 데이터
+const numCircles = 10000; // 원 개수
+const segments = 30; // 세그먼트 수
+const totalVertices = numCircles * (segments + 2) * 2; // 총 정점 수
+const vertices = new Float32Array(totalVertices);
+
+// 애니메이션 루프
 function animate() {
   gl.clear(gl.COLOR_BUFFER_BIT);
 
-  // 모든 원의 랜덤 위치 및 색상 업데이트
+  let vertexOffset = 0; // `vertices` 배열에서의 오프셋
   for (let i = 0; i < numCircles; i++) {
     const x = Math.random() * 2 - 1; // -1 ~ 1 범위
     const y = Math.random() * 2 - 1; // -1 ~ 1 범위
-    const radius = Math.random() * 0.1 + 0.05; // 0.05 ~ 0.15
+    const radius = Math.random() * 0.05 + 0.01; // 반지름
 
-    // 각 원의 좌표 생성
+    // 원 데이터 생성
     const circleVertices = generateCircleVertices(x, y, radius, segments);
 
-    // `vertices` 배열에 좌표 설정
-    const offset = i * segments * 2; // 각 원의 시작 오프셋
-    vertices.set(circleVertices, offset); // 원의 좌표 저장
-
-    // 색상 업데이트
-    const color = getRandomColor();
-    colors.set(color, i * 4); // 각 원의 RGBA 색상 저장
+    // 배열에 데이터 복사 (범위 초과 시 에러 발생 방지)
+    if (vertexOffset + circleVertices.length > vertices.length) {
+      console.error('Buffer overflow detected');
+      break;
+    }
+    vertices.set(circleVertices, vertexOffset);
+    vertexOffset += circleVertices.length;
   }
 
   // GPU로 데이터 전송
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices); // 모든 원의 좌표를 한 번에 전송
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, colors); // 모든 원의 색상을 한 번에 전송
-
-  // 각 원 그리기
+  // 원 그리기
+  let drawOffset = 0; // 그리기 오프셋
   for (let i = 0; i < numCircles; i++) {
-    const colorOffset = i * 4;
-    gl.uniform4fv(colorLocation, colors.subarray(colorOffset, colorOffset + 4)); // 색상 업데이트
-    gl.drawArrays(gl.TRIANGLE_FAN, i * segments, segments); // 각 원을 TRIANGLE_FAN으로 그리기
+    // 랜덤 색상 설정
+    gl.uniform4f(colorLocation, Math.random(), Math.random(), Math.random(), 1);
+
+    // 원 그리기
+    gl.drawArrays(gl.TRIANGLE_FAN, drawOffset, segments + 2);
+    drawOffset += segments + 2;
   }
 
   // 다음 프레임 요청
   requestAnimationFrame(animate);
 }
+
+// 초기 버퍼 크기 설정
+gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
+
+// 애니메이션 시작
+animate();
+</script>
+</body>
+</html>
