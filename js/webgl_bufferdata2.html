@@ -3,113 +3,106 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebGL Line Animation</title>
+  <title>WebGL Animation Example</title>
   <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
+    body, html { margin: 0; height: 100%; }
+    canvas { display: block; width: 100%; height: 100%; }
   </style>
 </head>
 <body>
-  <canvas id="webgl-canvas"></canvas>
+  <canvas id="webglCanvas"></canvas>
   <script>
-    const canvas = document.getElementById('webgl-canvas');
+    const canvas = document.getElementById('webglCanvas');
+    const gl = canvas.getContext('webgl');
+
+    // 캔버스 크기 설정
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const gl = canvas.getContext('webgl');
+    // 정점 데이터 (예시로 사각형)
+    let vertices = new Float32Array([
+      -0.5,  0.5, 0.0, // 왼쪽 위
+       0.5,  0.5, 0.0, // 오른쪽 위
+      -0.5, -0.5, 0.0, // 왼쪽 아래
+       0.5, -0.5, 0.0  // 오른쪽 아래
+    ]);
 
-    if (!gl) {
-      alert('WebGL is not supported by your browser.');
-    }
-
-    // 쉐이더 소스 코드 (버텍스 및 프래그먼트 쉐이더)
+    // 셰이더 코드 (정점 셰이더와 프래그먼트 셰이더)
     const vertexShaderSource = `
-      attribute vec2 a_position;
+      attribute vec3 a_position;
       void main() {
-        gl_Position = vec4(a_position, 0.0, 1.0);
+        gl_Position = vec4(a_position, 1.0);
       }
     `;
 
     const fragmentShaderSource = `
-      precision mediump float;
       void main() {
-        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);  // 빨간색
+        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // 빨간색
       }
     `;
 
-    // 쉐이더 컴파일 함수
+    // 셰이더 컴파일 함수
     function compileShader(source, type) {
       const shader = gl.createShader(type);
       gl.shaderSource(shader, source);
       gl.compileShader(shader);
-
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error('ERROR compiling shader:', gl.getShaderInfoLog(shader));
+        console.error('Shader compile failed:', gl.getShaderInfoLog(shader));
         gl.deleteShader(shader);
         return null;
       }
       return shader;
     }
 
-    // 프로그램 생성 및 링크
-    function createProgram(vertexShader, fragmentShader) {
-      const program = gl.createProgram();
-      gl.attachShader(program, vertexShader);
-      gl.attachShader(program, fragmentShader);
-      gl.linkProgram(program);
-
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error('ERROR linking program:', gl.getProgramInfoLog(program));
-        return null;
-      }
-      return program;
-    }
-
-    // 쉐이더 컴파일 및 프로그램 생성
+    // 프로그램 생성
     const vertexShader = compileShader(vertexShaderSource, gl.VERTEX_SHADER);
     const fragmentShader = compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER);
-    const program = createProgram(vertexShader, fragmentShader);
+
+    const program = gl.createProgram();
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error('Program linking failed:', gl.getProgramInfoLog(program));
+    }
     gl.useProgram(program);
 
-    // 버퍼 생성
+    // 버퍼 생성 및 데이터 설정
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
-    // 애니메이션에 사용할 변수
-    let angle = 0;
-    let vertices = new Float32Array([Math.sin(angle) * 0.5, Math.cos(angle) * 0.5]);
+    // 초기 데이터 설정: gl.bufferData로 한 번만 호출하여 데이터를 GPU에 업로드
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 
-    // 데이터 업데이트 함수
-    function updateVertices() {
-      angle += 0.01;  // 각도 증가
-      vertices = new Float32Array([Math.sin(angle) * 0.5, Math.cos(angle) * 0.5]);
-
-      // 데이터 버퍼에 업데이트
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
-    }
-
-    // 그리기 함수
-    function draw() {
-      gl.clear(gl.COLOR_BUFFER_BIT);  // 화면 지우기
-
-      // 버퍼에서 데이터 읽기
-      const positionLocation = gl.getAttribLocation(program, 'a_position');
-      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-      gl.enableVertexAttribArray(positionLocation);
-
-      // 선 그리기
-      gl.drawArrays(gl.LINES, 0, vertices.length / 2);
-    }
+    // 셰이더에 속성 전달
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(positionLocation);
 
     // 애니메이션 함수
     function animate() {
-      updateVertices();
-      draw();
-      requestAnimationFrame(animate);  // 다음 프레임 요청
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      
+      // 데이터 업데이트 (예시: 간단히 좌표를 변경)
+      vertices = new Float32Array([
+        -0.5 + Math.sin(Date.now() * 0.001) * 0.5,  0.5, 0.0, // 좌표가 애니메이션으로 변함
+         0.5 + Math.sin(Date.now() * 0.001) * 0.5,  0.5, 0.0,
+        -0.5 + Math.sin(Date.now() * 0.001) * 0.5, -0.5, 0.0,
+         0.5 + Math.sin(Date.now() * 0.001) * 0.5, -0.5, 0.0
+      ]);
+
+      // 버퍼 업데이트 (gl.bufferSubData로 일부 데이터만 업데이트)
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
+
+      // 사각형 그리기
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // 다음 프레임 요청
+      requestAnimationFrame(animate);
     }
 
-    // 초기화 및 애니메이션 시작
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);  // 배경색 검정
+    // 애니메이션 시작
     animate();
 
   </script>
