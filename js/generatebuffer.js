@@ -1,4 +1,41 @@
+uploadTile() {
+    this.generateMaskBuffer_();
 
+    this.batch_.clear();
+    const sourceTiles = this.tile.getSourceTiles();
+    const features = sourceTiles.reduce(
+      (accumulator, sourceTile) => accumulator.concat(sourceTile.getFeatures()),
+      [],
+    );
+    this.batch_.addFeatures(features);
+
+    const tileOriginX = sourceTiles[0].extent[0];
+    const tileOriginY = sourceTiles[0].extent[1];
+    const transform = translateTransform(
+      createTransform(),
+      -tileOriginX,
+      -tileOriginY,
+    );
+
+    // generateRenderInstructions_ 결과를 Promise로 래핑하여 비동기 처리
+    const renderInstructionsPromise = new Promise((resolve) => {
+        const instructions = this.generateRenderInstructions_(this.batch_, transform);
+        resolve(instructions);
+    });
+
+    // renderInstructionsPromise 완료 후 처리
+    renderInstructionsPromise.then((renderInstructions) => {
+        const generatePromises = this.styleRenderers_.map((renderer, i) =>
+          renderer.generateBuffers(renderInstructions, transform).then((buffers) => {
+            this.buffers[i] = buffers;
+          }),
+        );
+
+        Promise.all(generatePromises).then(() => {
+            this.setReady();
+        });
+    });
+}
 async generateBuffers(renderInstructions, transform) {
     const [polygonBuffers, lineStringBuffers, pointBuffers] = await Promise.all([
         this.generateBuffersForType_(
