@@ -16,12 +16,13 @@ class MapLayerBuilder {
         this.projection = options.projection || 'EPSG:3857';
         this.visible = options.visible || true;
         this.sharedSource = options.sharedSource || null;
-        this.mapData = null;
         
         this.mapStyler = options.mapStyler;
         if (!this.mapStyler) {
             throw new Error("mapStyler is required.");
         }
+        
+        this.mapData_ = null;        
     }
 
     async loadMap(styleUrl, layerUrl) {
@@ -36,7 +37,7 @@ class MapLayerBuilder {
             const [styleXmlString, layerXmlString] = await Promise.all(responses.map(response => response.text()));
 
             const parsedMap = this.parseMap(styleXmlString, layerXmlString);
-            this.mapData = this.buildMap(parsedMap.styles, parsedMap.layers);
+            this.mapData_ = this.buildMap(parsedMap.styles, parsedMap.layers);
 
         } catch (error) {
             console.error('Error loading map:', error);
@@ -47,7 +48,7 @@ class MapLayerBuilder {
     async applyMap(map, { styleUrl, layerUrl }) {
         try {
             // Check if styles and layers are loaded, if not, load them
-            if (!this.mapData) {
+            if (!this.mapData_) {
                 console.log('Styles and/or layers not loaded, loading...');
                 await this.loadMap(styleUrl, layerUrl); 
             }
@@ -67,13 +68,13 @@ class MapLayerBuilder {
 
     async createLayerByName(layerName, options = {}) {
         try {
-            if (!this.mapData) {
+            if (!this.mapData_) {
                 throw new Error('Styles and/or layers are not loaded yet.');
             }
         
             return await this.mapStyler.createLayerByName(layerName, { 
-                styles: this.mapData.styles, 
-                layers: this.mapData.layers,
+                styles: this.mapData_.styles, 
+                layers: this.mapData_.layers,
                 urlTemplate: this.urlTemplate,
                 projection: options.projection || 'EPSG:3857',
                 visible: options.visible || true,
