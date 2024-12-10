@@ -55,8 +55,8 @@ class MapLayerBuilder {
 
             // Use stored styles and layers
             this.mapStyler.applyMap(map, { 
-                styles: this.mapData.styles, 
-                layers: this.mapData.layers,
+                styles: this.mapData_.styles, 
+                layers: this.mapData_.layers,
                 urlTemplate: this.urlTemplate,
                 projection: this.projection,
                 visible: this.visible,                
