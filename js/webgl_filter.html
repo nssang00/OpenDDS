@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebGL GeoJSON Rendering</title>
+  <title>WebGL GeoJSON Rendering with Layers</title>
 </head>
 <body>
   <canvas id="webglCanvas" width="800" height="600"></canvas>
   <script>
-    // Sample GeoJSON data
+    // Sample GeoJSON data with layer names added to properties
     const geojson = {
       type: "FeatureCollection",
       features: [
@@ -20,7 +20,8 @@
           },
           properties: {
             color: [1.0, 0.0, 0.0], // Red
-            width: 0.05
+            width: 0.05,
+            layer: "Layer 1" // Added layer name
           }
         },
         {
@@ -31,21 +32,23 @@
           },
           properties: {
             color: [0.0, 1.0, 0.0], // Green
-            width: 0.1
+            width: 0.1,
+            layer: "Layer 2" // Added layer name
           }
         }
       ]
     };
 
-    // Parse GeoJSON to generate buffers for WebGL
-    function parseGeoJSONWithThickness(geojson) {
+    // Function to parse GeoJSON and create buffers with thickness applied, using layer names
+    function parseGeoJSONWithThicknessAndLayers(geojson) {
       const vertices = [];
       const indices = [];
       const colors = [];
+      const layers = [];
 
       geojson.features.forEach((feature, featureID) => {
         const { coordinates } = feature.geometry;
-        const { color, width } = feature.properties;
+        const { color, width, layer } = feature.properties;
 
         for (let i = 0; i < coordinates.length - 1; i++) {
           const start = coordinates[i];
@@ -61,10 +64,10 @@
           const py = dx / length * width;
 
           // Create 4 vertices for the quad (two triangles)
-          const v1 = [start[0] - px, start[1] - py, 0.0];
-          const v2 = [start[0] + px, start[1] + py, 0.0];
-          const v3 = [end[0] - px, end[1] - py, 0.0];
-          const v4 = [end[0] + px, end[1] + py, 0.0];
+          const v1 = [start[0] - px, start[1] - py, 0.0]; // Left start
+          const v2 = [start[0] + px, start[1] + py, 0.0]; // Right start
+          const v3 = [end[0] - px, end[1] - py, 0.0];   // Left end
+          const v4 = [end[0] + px, end[1] + py, 0.0];    // Right end
 
           // Push vertices
           vertices.push(...v1, ...v2, ...v3, ...v4);
@@ -72,7 +75,10 @@
           // Add color for each vertex
           colors.push(...color, ...color, ...color, ...color);
 
-          // Add indices for two triangles
+          // Add the layer information to the layers array (one value per vertex)
+          layers.push(...Array(4).fill(layer)); // Same layer for all 4 vertices
+
+          // Add indices for two triangles (creating a quad for each line segment)
           const baseIndex = vertices.length / 3 - 4;
           indices.push(
             baseIndex, baseIndex + 1, baseIndex + 2,
@@ -81,10 +87,10 @@
         }
       });
 
-      return { vertices, indices, colors };
+      return { vertices, indices, colors, layers };
     }
 
-    // Upload data to WebGL buffers
+    // Function to upload data to WebGL buffers
     function uploadToWebGL(gl, data) {
       // Vertex Buffer
       const vertexBuffer = gl.createBuffer();
@@ -96,15 +102,20 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.colors), gl.STATIC_DRAW);
 
+      // Layer Buffer (additional buffer for layer names)
+      const layerBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, layerBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.layers), gl.STATIC_DRAW);
+
       // Index Buffer
       const indexBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(data.indices), gl.STATIC_DRAW);
 
-      return { vertexBuffer, colorBuffer, indexBuffer };
+      return { vertexBuffer, colorBuffer, layerBuffer, indexBuffer };
     }
 
-    // Create shader
+    // Function to create a shader
     function createShader(gl, type, source) {
       const shader = gl.createShader(type);
       gl.shaderSource(shader, source);
@@ -117,7 +128,7 @@
       return shader;
     }
 
-    // Create WebGL program
+    // Function to create WebGL program
     function createProgram(gl, vertexShader, fragmentShader) {
       const program = gl.createProgram();
       gl.attachShader(program, vertexShader);
@@ -131,7 +142,7 @@
       return program;
     }
 
-    // Render WebGL
+    // Function to render WebGL
     function renderWebGL(gl, buffers, program, data) {
       gl.bindBuffer(gl.ARRAY_BUFFER, buffers.vertexBuffer);
       const positionLocation = gl.getAttribLocation(program, 'position');
@@ -142,6 +153,11 @@
       const colorLocation = gl.getAttribLocation(program, 'color');
       gl.enableVertexAttribArray(colorLocation);
       gl.vertexAttribPointer(colorLocation, 3, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffers.layerBuffer);
+      const layerLocation = gl.getAttribLocation(program, 'layer');
+      gl.enableVertexAttribArray(layerLocation);
+      gl.vertexAttribPointer(layerLocation, 1, gl.FLOAT, false, 0, 0);
 
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.indexBuffer);
 
@@ -158,9 +174,12 @@
       const vertexShaderSource = `
         attribute vec3 position;
         attribute vec3 color;
+        attribute float layer;
         varying vec3 vColor;
+        varying float vLayer;
         void main() {
           vColor = color;
+          vLayer = layer;
           gl_Position = vec4(position, 1.0);
         }
       `;
@@ -168,6 +187,7 @@
       const fragmentShaderSource = `
         precision mediump float;
         varying vec3 vColor;
+        varying float vLayer;
         void main() {
           gl_FragColor = vec4(vColor, 1.0);
         }
@@ -177,7 +197,7 @@
       const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
       const program = createProgram(gl, vertexShader, fragmentShader);
 
-      const data = parseGeoJSONWithThickness(geojson);
+      const data = parseGeoJSONWithThicknessAndLayers(geojson);
       const buffers = uploadToWebGL(gl, data);
 
       gl.useProgram(program);
