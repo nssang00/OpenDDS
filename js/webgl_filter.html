@@ -3,37 +3,55 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebGL GeoJSON Rendering with Layers</title>
+  <title>WebGL GeoJSON Batch Processing Example</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.4.0/gl-matrix.js"></script>
+  <style>
+    body, html { margin: 0; height: 100%; }
+    canvas { width: 100%; height: 100%; display: block; }
+  </style>
 </head>
 <body>
-  <canvas id="webglCanvas" width="800" height="600"></canvas>
+  <canvas id="webgl-canvas"></canvas>
   <script>
-    // Sample GeoJSON data with layer names added to properties
+    // Set up WebGL context
+    const canvas = document.getElementById('webgl-canvas');
+    const gl = canvas.getContext('webgl2');
+    if (!gl) {
+      console.error("WebGL2 not supported");
+      alert("WebGL2 not supported");
+    }
+
+    // GeoJSON example data
     const geojson = {
-      type: "FeatureCollection",
-      features: [
+      "type": "FeatureCollection",
+      "features": [
         {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: [[-0.5, -0.5], [0.0, 0.5], [0.5, -0.5]]
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [-0.5, 0.5], [0, 1], [0.5, 0.5],
+              [1, 0], [0.5, -0.5], [0, -1], [-0.5, -0.5]
+            ]
           },
-          properties: {
-            color: [1.0, 0.0, 0.0], // Red
-            width: 0.05,
-            layer: "Layer 1" // Added layer name
+          "properties": {
+            "color": [1.0, 0.0, 0.0],  // Red
+            "width": 0.05,
+            "layer": "Layer1"
           }
         },
         {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: [[-0.8, 0.2], [-0.4, 0.6], [0.0, 0.2]],
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [-1.0, 1.0], [-0.5, 1.5], [0, 1.0]
+            ]
           },
-          properties: {
-            color: [0.0, 1.0, 0.0], // Green
-            width: 0.1,
-            layer: "Layer 2" // Added layer name
+          "properties": {
+            "color": [0.0, 1.0, 0.0],  // Green
+            "width": 0.1,
+            "layer": "Layer2"
           }
         }
       ]
@@ -44,7 +62,7 @@
       const vertices = [];
       const indices = [];
       const colors = [];
-      const layers = [];
+      const layers = [];  // Layer information is now only added once per feature
       const featureIDToColor = [];
       const featureIDToLayer = [];
       const featureIDToWidth = [];
@@ -53,7 +71,7 @@
         const { coordinates } = feature.geometry;
         const { color, width, layer } = feature.properties;
 
-        // Save the feature's color, layer, and width information
+        // Save the feature's color, layer, and width information once
         featureIDToColor.push(color);
         featureIDToLayer.push(layer);
         featureIDToWidth.push(width);
@@ -84,7 +102,8 @@
           // Add color for each vertex (using featureID's color)
           colors.push(...featureIDToColor[featureID], ...featureIDToColor[featureID], ...featureIDToColor[featureID], ...featureIDToColor[featureID]);
 
-          // Add the layer information to the layers array (using featureID's layer)
+          // Add the layer information to the layers array for this feature
+          // (No need to add the layer for each vertex; just once for the entire feature)
           layers.push(...Array(4).fill(featureIDToLayer[featureID])); // Same layer for all 4 vertices
 
           // Add indices for two triangles (creating a quad for each line segment)
@@ -99,95 +118,103 @@
       return { vertices, indices, colors, layers };
     }
 
-    // Function to upload data to WebGL buffers
-    function uploadToWebGL(gl, data) {
-      // Vertex Buffer
-      const vertexBuffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.vertices), gl.STATIC_DRAW);
+    // Convert GeoJSON to buffers
+    const { vertices, indices, colors, layers } = parseGeoJSONWithThicknessAndLayers(geojson);
 
-      // Color Buffer
-      const colorBuffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.colors), gl.STATIC_DRAW);
+    // Create WebGL buffers
+    const vertexBuffer = gl.createBuffer();
+    const indexBuffer = gl.createBuffer();
+    const colorBuffer = gl.createBuffer();
+    const layerBuffer = gl.createBuffer();
 
-      // Layer Buffer (additional buffer for layer names)
-      const layerBuffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, layerBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data.layers), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices.flat()), gl.STATIC_DRAW);
 
-      // Index Buffer
-      const indexBuffer = gl.createBuffer();
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(data.indices), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors.flat()), gl.STATIC_DRAW);
 
-      return { vertexBuffer, colorBuffer, layerBuffer, indexBuffer };
-    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, layerBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(layers.flat()), gl.STATIC_DRAW);
 
-    // Function to create a shader
-    function createShader(gl, type, source) {
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+    // Vertex shader
+    const vsSource = `
+      #version 300 es
+      in vec3 a_position;
+      in vec3 a_color;
+      in float a_layer;
+      out vec3 v_color;
+      flat out float v_layer;
+      void main() {
+        gl_Position = vec4(a_position, 1.0);
+        v_color = a_color;
+        v_layer = a_layer;
+      }
+    `;
+
+    // Fragment shader
+    const fsSource = `
+      #version 300 es
+      precision highp float;
+      in vec3 v_color;
+      flat in float v_layer;
+      out vec4 outColor;
+      void main() {
+        outColor = vec4(v_color, 1.0);
+      }
+    `;
+
+    // Compile shaders
+    function compileShader(type, source) {
       const shader = gl.createShader(type);
       gl.shaderSource(shader, source);
       gl.compileShader(shader);
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
+        console.error("Shader compile error:", gl.getShaderInfoLog(shader));
         return null;
       }
       return shader;
     }
 
-    // Function to create WebGL program
-    function createProgram(gl, vertexShader, fragmentShader) {
-      const program = gl.createProgram();
-      gl.attachShader(program, vertexShader);
-      gl.attachShader(program, fragmentShader);
-      gl.linkProgram(program);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error('Program link error:', gl.getProgramInfoLog(program));
-        gl.deleteProgram(program);
-        return null;
-      }
-      return program;
+    const vertexShader = compileShader(gl.VERTEX_SHADER, vsSource);
+    const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fsSource);
+
+    // Create shader program
+    const shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+      console.error("Program link error:", gl.getProgramInfoLog(shaderProgram));
     }
 
-    // Function to render WebGL
-    function renderWebGL(gl, buffers, program, data) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffers.vertexBuffer);
-      const positionLocation = gl.getAttribLocation(program, 'position');
-      gl.enableVertexAttribArray(positionLocation);
-      gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+    gl.useProgram(shaderProgram);
 
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffers.colorBuffer);
-      const colorLocation = gl.getAttribLocation(program, 'color');
-      gl.enableVertexAttribArray(colorLocation);
-      gl.vertexAttribPointer(colorLocation, 3, gl.FLOAT, false, 0, 0);
+    // Get attribute and uniform locations
+    const a_position = gl.getAttribLocation(shaderProgram, "a_position");
+    const a_color = gl.getAttribLocation(shaderProgram, "a_color");
+    const a_layer = gl.getAttribLocation(shaderProgram, "a_layer");
 
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffers.layerBuffer);
-      const layerLocation = gl.getAttribLocation(program, 'layer');
-      gl.enableVertexAttribArray(layerLocation);
-      gl.vertexAttribPointer(layerLocation, 1, gl.FLOAT, false, 0, 0);
+    // Set up attribute pointers
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.vertexAttribPointer(a_position, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(a_position);
 
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.indexBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.vertexAttribPointer(a_color, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(a_color);
 
-      gl.clearColor(0.0, 0.0, 0.0, 1.0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawElements(gl.TRIANGLES, data.indices.length, gl.UNSIGNED_SHORT, 0);
-    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, layerBuffer);
+    gl.vertexAttribPointer(a_layer, 1, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(a_layer);
 
-    // Main function
-    function main() {
-      const canvas = document.getElementById('webglCanvas');
-      const gl = canvas.getContext('webgl');
-
-      const vertexShaderSource = `
-        attribute vec3 position;
-        attribute vec3 color;
-        attribute float layer;
-        varying vec3 vColor;
-        varying float vLayer;
-        void main() {
-          vColor = color;
-          vLayer = layer;
-          gl_Position = vec4(position, 1.0);
-        }
+    // Draw scene
+    gl.clearColor(0.8, 0.8, 0.8, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+  </script>
+</body>
+</html>
