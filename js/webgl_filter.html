@@ -45,10 +45,16 @@
       const indices = [];
       const colors = [];
       const layers = [];
+      const featureIDToColor = [];
+      const featureIDToLayer = [];
 
       geojson.features.forEach((feature, featureID) => {
         const { coordinates } = feature.geometry;
         const { color, width, layer } = feature.properties;
+
+        // Save the feature's color and layer information
+        featureIDToColor.push(color);
+        featureIDToLayer.push(layer);
 
         for (let i = 0; i < coordinates.length - 1; i++) {
           const start = coordinates[i];
@@ -72,11 +78,11 @@
           // Push vertices
           vertices.push(...v1, ...v2, ...v3, ...v4);
 
-          // Add color for each vertex
-          colors.push(...color, ...color, ...color, ...color);
+          // Add color for each vertex (using featureID's color)
+          colors.push(...featureIDToColor[featureID], ...featureIDToColor[featureID], ...featureIDToColor[featureID], ...featureIDToColor[featureID]);
 
-          // Add the layer information to the layers array (one value per vertex)
-          layers.push(...Array(4).fill(layer)); // Same layer for all 4 vertices
+          // Add the layer information to the layers array (using featureID's layer)
+          layers.push(...Array(4).fill(featureIDToLayer[featureID])); // Same layer for all 4 vertices
 
           // Add indices for two triangles (creating a quad for each line segment)
           const baseIndex = vertices.length / 3 - 4;
