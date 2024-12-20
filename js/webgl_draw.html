@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Level Filtering with Index Buffer</title>
+    <style>
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="glCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById("glCanvas");
+        const gl = canvas.getContext("webgl");
+
+        if (!gl) {
+            alert("WebGL is not supported!");
+            throw new Error("WebGL is not supported!");
+        }
+
+        // Vertex Shader
+        const vertexShaderSource = `
+            attribute vec3 position;
+            attribute float featureID;
+            varying float vFeatureID;
+
+            void main() {
+                vFeatureID = featureID; // Pass feature ID to Fragment Shader
+                gl_Position = vec4(position, 1.0);
+            }
+        `;
+
+        // Fragment Shader
+        const fragmentShaderSource = `
+            precision mediump float;
+            varying float vFeatureID;
+
+            uniform float filterFeatureID;
+            uniform vec4 featureColors[10]; // Support up to 10 features
+
+            void main() {
+                // Compare featureID with filter
+                if (vFeatureID != filterFeatureID) {
+                    discard; // Skip rendering this pixel
+                }
+                gl_FragColor = featureColors[int(vFeatureID)];
+            }
+        `;
+
+        // Shader compilation utility
+        function compileShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error("Shader compile error:", gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
+        const fragmentShader = compileShader(gl, fragmentShaderSource, gl.FRAGMENT_SHADER);
+
+        // Link Program
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error("Program link error:", gl.getProgramInfoLog(program));
+        }
+        gl.useProgram(program);
+
+        // GeoJSON-like data
+        const features = [
+            {
+                id: 0,
+                color: [1.0, 0.0, 0.0, 1.0], // Red
+                vertices: [
+                    -0.8, -0.2, 0.0, // Point 1
+                    -0.6, -0.2, 0.0, // Point 2
+                    -0.7,  0.0, 0.0  // Point 3
+                ]
+            },
+            {
+                id: 1,
+                color: [0.0, 0.0, 1.0, 1.0], // Blue
+                vertices: [
+                     0.4,  0.4, 0.0, // Point 1
+                     0.6,  0.4, 0.0, // Point 2
+                     0.5,  0.6, 0.0  // Point 3
+                ]
+            },
+            {
+                id: 2,
+                color: [0.0, 1.0, 0.0, 1.0], // Green
+                vertices: [
+                    -0.2, -0.5, 0.0, // Point 1
+                     0.0, -0.5, 0.0, // Point 2
+                    -0.1, -0.3, 0.0  // Point 3
+                ]
+            }
+        ];
+
+        // Prepare vertex and index buffers
+        const vertices = [];
+        const featureIDs = [];
+        const indices = [];
+        let offset = 0;
+
+        features.forEach((feature, featureIndex) => {
+            const { vertices: featureVertices } = feature;
+            const numVertices = featureVertices.length / 3;
+
+            vertices.push(...featureVertices);
+            featureIDs.push(...Array(numVertices).fill(featureIndex));
+            indices.push(...[0, 1, 2].map(i => i + offset));
+            offset += numVertices;
+        });
+
+        // Upload vertex data
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+        const featureIDBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, featureIDBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(featureIDs), gl.STATIC_DRAW);
+
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+        // Attribute locations
+        const positionLocation = gl.getAttribLocation(program, "position");
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(positionLocation);
+
+        const featureIDLocation = gl.getAttribLocation(program, "featureID");
+        gl.bindBuffer(gl.ARRAY_BUFFER, featureIDBuffer);
+        gl.vertexAttribPointer(featureIDLocation, 1, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(featureIDLocation);
+
+        // Set feature colors
+        const colors = features.map(feature => feature.color).flat();
+        const colorsLocation = gl.getUniformLocation(program, "featureColors");
+        gl.uniform4fv(colorsLocation, new Float32Array(colors));
+
+        // Render with filter
+        function render(featureID) {
+            gl.clearColor(1.0, 1.0, 1.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            const filterFeatureIDLocation = gl.getUniformLocation(program, "filterFeatureID");
+            gl.uniform1f(filterFeatureIDLocation, featureID);
+
+            gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+        }
+
+        // Test render: Filter featureID = 1 (Blue)
+        render(1);
+    </script>
+</body>
+</html>
