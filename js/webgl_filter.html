@@ -47,15 +47,18 @@
       const layers = [];
       const featureIDToColor = [];
       const featureIDToLayer = [];
+      const featureIDToWidth = [];
 
       geojson.features.forEach((feature, featureID) => {
         const { coordinates } = feature.geometry;
         const { color, width, layer } = feature.properties;
 
-        // Save the feature's color and layer information
+        // Save the feature's color, layer, and width information
         featureIDToColor.push(color);
         featureIDToLayer.push(layer);
+        featureIDToWidth.push(width);
 
+        // Loop through each segment of the geometry
         for (let i = 0; i < coordinates.length - 1; i++) {
           const start = coordinates[i];
           const end = coordinates[i + 1];
@@ -188,29 +191,3 @@
           vLayer = layer;
           gl_Position = vec4(position, 1.0);
         }
-      `;
-
-      const fragmentShaderSource = `
-        precision mediump float;
-        varying vec3 vColor;
-        varying float vLayer;
-        void main() {
-          gl_FragColor = vec4(vColor, 1.0);
-        }
-      `;
-
-      const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-      const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-      const program = createProgram(gl, vertexShader, fragmentShader);
-
-      const data = parseGeoJSONWithThicknessAndLayers(geojson);
-      const buffers = uploadToWebGL(gl, data);
-
-      gl.useProgram(program);
-      renderWebGL(gl, buffers, program, data);
-    }
-
-    main();
-  </script>
-</body>
-</html>
