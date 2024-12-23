@@ -1,6 +1,6 @@
-uploadTile() {
+  uploadTile() {
     this.generateMaskBuffer_();
-/*
+    /*
     this.batch_.clear();
     const sourceTiles = this.tile.getSourceTiles();
     const features = sourceTiles.reduce(
@@ -11,27 +11,24 @@ uploadTile() {
     */
     ////////////kmg
     const sourceTiles = this.tile.getSourceTiles();
-    if (!this.tile.geometryBatch) {    
-      this.tile.geometryBatch = (() => {
+    if (!this.tile.getGeometryBatch) {    
+      this.tile.getGeometryBatch = (() => {
         let batch = null;
 
         return (action, data) => {
             if(!batch) {
                 batch = new MixedGeometryBatch();
-                const sourceTiles = this.tile.getSourceTiles();
                 const features = sourceTiles.reduce(
                     (accumulator, sourceTile) => accumulator.concat(sourceTile.getFeatures()),
                     [],
                 );
-                console.log('addfeatures ' + this.tile.tileCoord)
                 batch.addFeatures(features);                
             }
             return batch;
         };
       })();
     }
-    const batch = this.tile.geometryBatch();
-    ////////////
+    this.batch_ = this.tile.getGeometryBatch();
 
     const tileOriginX = sourceTiles[0].extent[0];
     const tileOriginY = sourceTiles[0].extent[1];
@@ -40,15 +37,9 @@ uploadTile() {
       -tileOriginX,
       -tileOriginY,
     );
-/*
+
     const generatePromises = this.styleRenderers_.map((renderer, i) =>
       renderer.generateBuffers(this.batch_, transform).then((buffers) => {
-        this.buffers[i] = buffers;
-      }),
-    );
-    */
-    const generatePromises = this.styleRenderers_.map((renderer, i) =>
-      renderer.generateBuffers(batch, transform).then((buffers) => {
         this.buffers[i] = buffers;
       }),
     );
