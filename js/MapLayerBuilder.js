@@ -458,6 +458,7 @@ class MapLayerBuilder {
         return {
             name: layerObj.Name,
             source: this.sharedSource || layerObj.SHPSource, 
+            ...(layerObj.LabelColumn ? {labelProperty: layerObj.LabelColumn} : {}),
             rules: layerObj.features.map(featureObj => {
                 const { name, styleNames, filters } = this.buildFeature(featureObj);
                 return {
