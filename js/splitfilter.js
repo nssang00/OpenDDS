@@ -1,3 +1,19 @@
+
+
+{
+  static: [
+    'all',
+    ['==', ['get', 'type'], 'road'],
+    ['>=', ['get', 'importance'], 3]
+  ],
+  dynamic: [
+    'all',
+    ['any', ['<', ['zoom'], 5], ['>', ['zoom'], 10]],
+    ['>', ['resolution'], 10]
+  ]
+}
+///////
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
