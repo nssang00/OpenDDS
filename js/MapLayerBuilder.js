@@ -345,7 +345,7 @@ class MapLayerBuilder {
             } else if (symbolizer.type === "PICTURE") {
                 olPolygonStyleObj.symbol = {
                     'type': 'picture',
-                    'picture-texture-fill': Boolean(symbolizer.TextureFill), // TextureFill
+                    'picture-texture-fill': symbolizer.TextureFill === "true", // TextureFill
                 };
                 olPolygonStyleObj.style = {
                     'fill-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`, // Picture
