@@ -20,11 +20,21 @@
           const [logic, ...conditions] = filter;
 
           if (logic === 'all' || logic === 'any') {
+            const localFeatureFilters = [];
+            const localContextFilters = [];
+
             conditions.forEach((condition) => {
               const [ff, cf] = splitRecursive(condition);
-              featureFilters.push(...ff);
-              contextFilters.push(...cf);
+              localFeatureFilters.push(...ff);
+              localContextFilters.push(...cf);
             });
+
+            if (localFeatureFilters.length > 0) {
+              featureFilters.push([logic, ...localFeatureFilters]);
+            }
+            if (localContextFilters.length > 0) {
+              contextFilters.push([logic, ...localContextFilters]);
+            }
           } else {
             if (isFeatureFilter(filter)) {
               featureFilters.push(filter);
@@ -40,16 +50,9 @@
       // Recurse to split the filters
       const [featureFilters, contextFilters] = splitRecursive(filterString);
 
-      // Helper to optimize filters by removing unnecessary 'all' or 'any'
-      const optimizeFilters = (filters, logic) => {
-        if (filters.length === 1) return filters[0];
-        if (filters.length > 1) return [logic, ...filters];
-        return null;
-      };
-
       return {
-        featureFilters: optimizeFilters(featureFilters, 'all'),
-        contextFilters: optimizeFilters(contextFilters, 'all'),
+        featureFilters: featureFilters.length === 1 ? featureFilters[0] : featureFilters,
+        contextFilters: contextFilters.length === 1 ? contextFilters[0] : contextFilters,
       };
     }
 
