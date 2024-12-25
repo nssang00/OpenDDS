@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Filter Splitter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    textarea, pre {
+      width: 100%;
+      height: 150px;
+    }
+    button {
+      padding: 10px 20px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Filter Splitter Test</h1>
+  <p>Enter your filter string as a JSON array:</p>
+  <textarea id="filterInput">[
+  "all",
+  ["<", ["resolution"], 600],
+  ["in", ["get", "class"], ["literal", ["lake", "river"]]],
+  ["==", ["get", "layer"], "waterway"],
+  ["==", ["geometry-type"], "Polygon"]
+]</textarea>
+  <button onclick="splitFiltersTest()">Split Filters</button>
+  <h2>Static Filters:</h2>
+  <pre id="staticFilters"></pre>
+  <h2>Dynamic Filters:</h2>
+  <pre id="dynamicFilters"></pre>
+
+  <script>
+ function splitFilters(filterString) {
+  const dynamicKeys = ['resolution', 'zoom']; // 동적으로 판단할 키를 추가
+
+  function classifyFilters(condition) {
+    if (!Array.isArray(condition)) {
+      // 배열이 아닌 조건은 무시
+      return { static: null, dynamic: null };
+    }
+
+    const [operator, ...args] = condition;
+
+    // 'all', 'any' 연산자 처리
+    if (operator === 'all' || operator === 'any') {
+      let staticFilters = [];
+      let dynamicFilters = [];
+
+      args.forEach((arg) => {
+        const { static: staticFilter, dynamic: dynamicFilter } = classifyFilters(arg);
+        if (staticFilter) staticFilters.push(staticFilter);
+        if (dynamicFilter) dynamicFilters.push(dynamicFilter);
+      });
+
+      return {
+        static: createFilter(operator, staticFilters),
+        dynamic: createFilter(operator, dynamicFilters),
+      };
+    }
+
+    // 동적 키 확인
+    const isDynamic = args.some((arg) => Array.isArray(arg) && dynamicKeys.includes(arg[0]));
+    return {
+      static: isDynamic ? null : condition,
+      dynamic: isDynamic ? condition : null,
+    };
+  }
+
+  // 필터 생성 함수
+  function createFilter(operator, filters) {
+    if (filters.length === 0) return null;
+    return filters.length === 1 ? filters[0] : [operator, ...filters];
+  }
+
+  return classifyFilters(filterString);
+}
+
+
+    function splitFiltersTest() {
+      const input = document.getElementById('filterInput').value;
+      try {
+        const filterArray = JSON.parse(input);
+        const { static, dynamic } = splitFilters(filterArray);
+        console.log('Static Filters:', JSON.stringify(static, null, 2));
+        console.log('Dynamic Filters:', JSON.stringify(dynamic, null, 2));
+
+      } catch (error) {
+        alert('Invalid JSON input! Please check your filter string.');
+      }
+    }
+  </script>
+</body>
+</html>

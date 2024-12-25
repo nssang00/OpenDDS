@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Filter Splitter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    textarea, pre {
+      width: 100%;
+      height: 150px;
+    }
+    button {
+      padding: 10px 20px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Filter Splitter Test</h1>
+  <p>Enter your filter string as a JSON array:</p>
+  <textarea id="filterInput">[
+  "all",
+  ["<", ["resolution"], 600],
+  ["in", ["get", "class"], ["literal", ["lake", "river"]]],
+  ["==", ["get", "layer"], "waterway"],
+  ["==", ["geometry-type"], "Polygon"]
+]</textarea>
+  <button onclick="splitFiltersTest()">Split Filters</button>
+  <h2>Static Filters:</h2>
+  <pre id="staticFilters"></pre>
+  <h2>Dynamic Filters:</h2>
+  <pre id="dynamicFilters"></pre>
+
+  <script>
+    function splitFilters(filterString) {
+      const staticFilters = [];
+      const dynamicFilters = [];
+      const dynamicKeys = ['resolution', 'zoom']; // 동적으로 판단할 키를 추가
+
+      function classifyFilters(condition) {
+        if (Array.isArray(condition)) {
+          const [operator, ...args] = condition;
+
+          if (operator === 'all' || operator === 'any') {
+            const staticSubFilters = [];
+            const dynamicSubFilters = [];
+
+            args.forEach((arg) => {
+              const { static, dynamic } = classifyFilters(arg); // 재귀 호출
+              if (static) staticSubFilters.push(static);
+              if (dynamic) dynamicSubFilters.push(dynamic);
+            });
+
+            const staticResult = staticSubFilters.length > 1 
+              ? [operator, ...staticSubFilters]
+              : staticSubFilters[0] || null;
+            const dynamicResult = dynamicSubFilters.length > 1 
+              ? [operator, ...dynamicSubFilters]
+              : dynamicSubFilters[0] || null;
+
+            return { static: staticResult, dynamic: dynamicResult };
+          } else {
+            const containsDynamic = args.some((arg) =>
+              Array.isArray(arg) && dynamicKeys.includes(arg[0])
+            );
+            if (containsDynamic) {
+              return { static: null, dynamic: condition };
+            } else {
+              return { static: condition, dynamic: null };
+            }
+          }
+        }
+        return { static: null, dynamic: null };
+      }
+
+      const { static: staticResult, dynamic: dynamicResult } = classifyFilters(filterString);
+
+      if (staticResult) staticFilters.push(staticResult);
+      if (dynamicResult) dynamicFilters.push(dynamicResult);
+
+      return {
+        static: staticFilters.length === 1 ? staticFilters[0] : staticFilters,
+        dynamic: dynamicFilters.length === 1 ? dynamicFilters[0] : dynamicFilters,
+      };
+    }
+
+    function splitFiltersTest() {
+      const input = document.getElementById('filterInput').value;
+      try {
+        const filterArray = JSON.parse(input);
+        const { static, dynamic } = splitFilters(filterArray);
+        console.log('Static Filters:', JSON.stringify(static, null, 2));
+        console.log('Dynamic Filters:', JSON.stringify(dynamic, null, 2));
+      } catch (error) {
+        alert('Invalid JSON input! Please check your filter string.');
+      }
+    }
+  </script>
+</body>
+</html>
