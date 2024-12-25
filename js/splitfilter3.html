@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Filter Splitter Test</title>
+  <script>
+    function splitFilters(filterString) {
+      function splitRecursive(filter) {
+        const featureFilters = [];
+        const contextFilters = [];
+
+        // Helper to determine feature filters
+        const isFeatureFilter = (condition) => {
+          return condition[1][0] === 'get'; // Example: ['==', ['get', 'type'], 'road']
+        };
+
+        if (Array.isArray(filter)) {
+          const [logic, ...conditions] = filter;
+
+          if (logic === 'all' || logic === 'any') {
+            conditions.forEach((condition) => {
+              const [ff, cf] = splitRecursive(condition);
+              featureFilters.push(...ff);
+              contextFilters.push(...cf);
+            });
+          } else {
+            if (isFeatureFilter(filter)) {
+              featureFilters.push(filter);
+            } else {
+              contextFilters.push(filter);
+            }
+          }
+        }
+
+        return [featureFilters, contextFilters];
+      }
+
+      // Recurse to split the filters
+      const [featureFilters, contextFilters] = splitRecursive(filterString);
+
+      // Helper to optimize filters by removing unnecessary 'all' or 'any'
+      const optimizeFilters = (filters) => {
+        if (filters.length === 1) return filters[0];
+        if (filters.length > 1) return ['all', ...filters];
+        return null;
+      };
+
+      return {
+        featureFilters: optimizeFilters(featureFilters),
+        contextFilters: optimizeFilters(contextFilters),
+      };
+    }
+
+    function testSplitFilters() {
+      const filterString = [
+        'all',
+        ['==', ['get', 'type'], 'road'],
+        ['>=', ['get', 'importance'], 3],
+        ['any', ['<', ['zoom'], 5], ['>', ['zoom'], 10]],
+        ['>', ['resolution'], 10]
+      ];
+
+      const result = splitFilters(filterString);
+
+      document.getElementById('featureFilters').textContent = JSON.stringify(result.featureFilters, null, 2);
+      document.getElementById('contextFilters').textContent = JSON.stringify(result.contextFilters, null, 2);
+    }
+  </script>
+</head>
+<body>
+  <h1>Filter Splitter Test</h1>
+  <button onclick="testSplitFilters()">Run Test</button>
+  <h2>Feature Filters:</h2>
+  <pre id="featureFilters"></pre>
+  <h2>Context Filters:</h2>
+  <pre id="contextFilters"></pre>
+</body>
+</html>
