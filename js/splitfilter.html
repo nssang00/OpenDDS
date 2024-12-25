@@ -65,14 +65,11 @@
 
             return { static: staticResult, dynamic: dynamicResult };
           } else {
-            const containsDynamic = args.some((arg) =>
-              Array.isArray(arg) && dynamicKeys.includes(arg[0])
-            );
-            if (containsDynamic) {
-              return { static: null, dynamic: condition };
-            } else {
-              return { static: condition, dynamic: null };
-            }
+            const isDynamic = args.some((arg) => Array.isArray(arg) && dynamicKeys.includes(arg[0]));
+            return {
+              static: isDynamic ? null : condition,
+              dynamic: isDynamic ? condition : null,
+            };
           }
         }
         return { static: null, dynamic: null };
