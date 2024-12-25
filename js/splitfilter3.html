@@ -10,11 +10,12 @@
         const featureFilters = [];
         const contextFilters = [];
 
-        // Helper to determine feature filters
+        // Helper to determine if the condition is a feature filter
         const isFeatureFilter = (condition) => {
-          return condition[1][0] === 'get'; // Example: ['==', ['get', 'type'], 'road']
+          return condition[1] && Array.isArray(condition[1]) && condition[1][0] === 'get';
         };
 
+        // Process filters recursively
         if (Array.isArray(filter)) {
           const [logic, ...conditions] = filter;
 
@@ -40,24 +41,25 @@
       const [featureFilters, contextFilters] = splitRecursive(filterString);
 
       // Helper to optimize filters by removing unnecessary 'all' or 'any'
-      const optimizeFilters = (filters) => {
+      const optimizeFilters = (filters, logic) => {
         if (filters.length === 1) return filters[0];
-        if (filters.length > 1) return ['all', ...filters];
+        if (filters.length > 1) return [logic, ...filters];
         return null;
       };
 
       return {
-        featureFilters: optimizeFilters(featureFilters),
-        contextFilters: optimizeFilters(contextFilters),
+        featureFilters: optimizeFilters(featureFilters, 'all'),
+        contextFilters: optimizeFilters(contextFilters, 'all'),
       };
     }
 
     function testSplitFilters() {
       const filterString = [
         'all',
-        ['==', ['get', 'type'], 'road'],
-        ['>=', ['get', 'importance'], 3],
+        ["in", ["get", "class"], ["literal", ["lake", "river"]]],
+        ["==", ["get", "layer"], "waterway"],
         ['any', ['<', ['zoom'], 5], ['>', ['zoom'], 10]],
+        ["==", ["geometry-type"], "Polygon"],
         ['>', ['resolution'], 10]
       ];
 
