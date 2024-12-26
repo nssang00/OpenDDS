@@ -20,7 +20,7 @@
     }
   </style>
   <script>
-  function splitFilters(filterString) {
+  function splitFilters(filters) {
   
     const classifyFilters = (expression) => {
       if (!Array.isArray(expression)) return [[], []];
@@ -47,7 +47,7 @@
       return isFeatureFilter ? [[expression], []] : [[], [expression]];
     };
   
-    const [featureFilters, contextFilters] = classifyFilters(filterString);
+    const [featureFilters, contextFilters] = classifyFilters(filters);
   
     return {
         featureFilters: featureFilters.length === 1 ? featureFilters[0] : featureFilters,
@@ -63,8 +63,8 @@
         const { static, dynamic } = splitFilters(filterArray);
         const result = splitFilters(filterArray);
 
-document.getElementById('featureFilters').textContent = JSON.stringify(result.featureFilters, null, 2);
-document.getElementById('contextFilters').textContent = JSON.stringify(result.contextFilters, null, 2);
+        document.getElementById('featureFilters').textContent = JSON.stringify(result.featureFilters, null, 2);
+        document.getElementById('contextFilters').textContent = JSON.stringify(result.contextFilters, null, 2);
         
       } catch (error) {
         alert('Invalid JSON input! Please check your filter string.');
@@ -80,11 +80,6 @@ document.getElementById('contextFilters').textContent = JSON.stringify(result.co
         ["==", ["geometry-type"], "Polygon"],
         ['>', ['resolution'], 10]
       ];
-
-      const result = splitFilters(filterString);
-
-      document.getElementById('featureFilters').textContent = JSON.stringify(result.featureFilters, null, 2);
-      document.getElementById('contextFilters').textContent = JSON.stringify(result.contextFilters, null, 2);
       */
     }
   </script>
