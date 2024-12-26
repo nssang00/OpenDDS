@@ -119,7 +119,7 @@ function splitFilters(filterString) {
 /////////////////
       const input = document.getElementById('filterInput').value;
       try {
-        const filterArray = JSON.parse(input);
+        const filterArray = JSON.parse(input.replace(/'/g, '"'));
         const { static, dynamic } = splitFilters(filterArray);
         const result = splitFilters(filterArray);
 
