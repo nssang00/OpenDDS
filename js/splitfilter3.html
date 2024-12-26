@@ -75,6 +75,7 @@
       const filterString = [
         'all',
         ["in", ["get", "class"], ["literal", ["lake", "river"]]],
+        ["!", ["in", ["get", "class"], ["literal", ["lake", "river"]]]],
         ["==", ["get", "layer"], "waterway"],
         ['any', ['<', ['zoom'], 5], ['>', ['zoom'], 10]],
         ["==", ["geometry-type"], "Polygon"],
