@@ -4,6 +4,41 @@ function splitFilters(filters) {
 
     const [operator, ...values] = expression;
 
+    if (['all', 'any', '!'].includes(operator)) {
+      const featureFilters = [];
+      const contextFilters = [];
+
+      values.forEach((value) => {
+        const [ff, cf] = classifyFilters(value);
+        featureFilters.push(...ff);
+        contextFilters.push(...cf);
+      });
+
+      return [
+        featureFilters.length > 1 || operator === '!' ? [[operator, ...featureFilters]] : featureFilters,
+        contextFilters.length > 1 || operator === '!' ? [[operator, ...contextFilters]] : contextFilters,
+      ];
+    }
+
+    const isFeatureFilter = Array.isArray(expression[1]) && expression[1][0] === 'get';
+    return isFeatureFilter ? [[expression], []] : [[], [expression]];
+  };
+
+  const [featureFilters, contextFilters] = classifyFilters(filters);
+
+  return {
+    featureFilters: featureFilters.length === 1 ? featureFilters[0] : featureFilters,
+    contextFilters: contextFilters.length === 1 ? contextFilters[0] : contextFilters,
+  };
+}
+
+////////////////
+function splitFilters(filters) {
+  const classifyFilters = (expression) => {
+    if (!Array.isArray(expression)) return [[], []];
+
+    const [operator, ...values] = expression;
+
     // Recursively handle logical operators
     if (['all', 'any', '!'].includes(operator)) {
       const featureFilters = [];
