@@ -1,3 +1,49 @@
+function splitFilters(filterString) {
+  function splitRecursive(filter) {
+    const featureFilters = [];
+    const contextFilters = [];
+
+    // Helper to determine if the condition is a feature filter
+    const isFeatureFilter = (condition) =>
+      condition[1] && Array.isArray(condition[1]) && condition[1][0] === 'get';
+
+    // Process filters recursively
+    if (Array.isArray(filter)) {
+      const [logic, ...conditions] = filter;
+
+      if (logic === 'all' || logic === 'any') {
+        const localFeatureFilters = [];
+        const localContextFilters = [];
+
+        for (const condition of conditions) {
+          const [ff, cf] = splitRecursive(condition);
+          localFeatureFilters.push(...ff);
+          localContextFilters.push(...cf);
+        }
+
+        if (localFeatureFilters.length) featureFilters.push([logic, ...localFeatureFilters]);
+        if (localContextFilters.length) contextFilters.push([logic, ...localContextFilters]);
+      } else {
+        (isFeatureFilter(filter) ? featureFilters : contextFilters).push(filter);
+      }
+    }
+
+    return [featureFilters, contextFilters];
+  }
+
+  // Recurse to split the filters
+  const [featureFilters, contextFilters] = splitRecursive(filterString);
+
+  const simplify = (filters) => (filters.length === 1 ? filters[0] : filters);
+
+  return {
+    featureFilters: simplify(featureFilters),
+    contextFilters: simplify(contextFilters),
+  };
+}
+
+//////////
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
