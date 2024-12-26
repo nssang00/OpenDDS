@@ -13,11 +13,17 @@ function splitFilters(filterString) {
     const [operator, ...values] = expression;
 
     if (operator === 'all' || operator === 'any') {
+      // 재귀적으로 하위 필터 분리
       const groupedFeatureFilters = [];
       const groupedContextFilters = [];
 
-      values.forEach((value) => classifyFilters(value));
+      values.forEach((value) => {
+        const [ff, cf] = classifyFilters(value);
+        groupedFeatureFilters.push(...ff);
+        groupedContextFilters.push(...cf);
+      });
 
+      // operator를 포함하여 추가
       if (groupedFeatureFilters.length > 0) {
         featureFilters.push([operator, ...groupedFeatureFilters]);
       }
@@ -25,9 +31,11 @@ function splitFilters(filterString) {
         contextFilters.push([operator, ...groupedContextFilters]);
       }
     } else {
-      // Push directly into the appropriate array
+      // 일반적인 경우 바로 분류 후 추가
       (isFeatureFilter(expression) ? featureFilters : contextFilters).push(expression);
     }
+
+    return [featureFilters, contextFilters]; // 재귀 호출 결과 반환
   }
 
   classifyFilters(filterString);
