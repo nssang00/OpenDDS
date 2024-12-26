@@ -1,97 +1,3 @@
-function splitFilters(filterString) {
-  function classifyFilters(expression) {
-    const featureFilters = [];
-    const contextFilters = [];
-
-    // Helper to determine if the condition is a feature filter
-    const isFeatureFilter = (value) => {
-      return value[1] && Array.isArray(value[1]) && value[1][0] === 'get';
-    };
-
-    if (Array.isArray(expression)) {
-      const [operator, ...values] = expression;
-
-      if (operator === 'all' || operator === 'any') {
-        const resultFeatureFilters = [];
-        const resultContextFilters = [];
-
-        values.forEach((value) => {
-          const [ff, cf] = classifyFilters(value);
-          resultFeatureFilters.push(...ff);
-          resultContextFilters.push(...cf);
-        });
-
-        if (resultFeatureFilters.length > 0) {
-          featureFilters.push(
-            resultFeatureFilters.length === 1
-              ? resultFeatureFilters[0]
-              : [operator, ...resultFeatureFilters]
-          );
-        }
-        if (resultContextFilters.length > 0) {
-          contextFilters.push(
-            resultContextFilters.length === 1
-              ? resultContextFilters[0]
-              : [operator, ...resultContextFilters]
-          );
-        }
-      } else {
-        (isFeatureFilter(expression) ? featureFilters : contextFilters).push(expression);
-      }
-    }
-
-    return [featureFilters, contextFilters];
-  }
-
-  const [featureFilters, contextFilters] = classifyFilters(filterString);
-
-  return {
-    featureFilters: featureFilters.length === 1 ? featureFilters[0] : featureFilters,
-    contextFilters: contextFilters.length === 1 ? contextFilters[0] : contextFilters,
-  };
-}
-//////////
-function splitFilters(filterString) {
-  // Helper to classify filters
-  const classifyFilters = (expression) => {
-    if (!Array.isArray(expression)) return [[], []];
-
-    const [operator, ...values] = expression;
-
-    if (operator === 'all' || operator === 'any') {
-      const featureFilters = [];
-      const contextFilters = [];
-
-      values.forEach((value) => {
-        const [ff, cf] = classifyFilters(value);
-        featureFilters.push(...ff);
-        contextFilters.push(...cf);
-      });
-
-      return [
-        featureFilters.length > 1 ? [[operator, ...featureFilters]] : featureFilters,
-        contextFilters.length > 1 ? [[operator, ...contextFilters]] : contextFilters,
-      ];
-    }
-
-    const isFeatureFilter =
-      expression[1] && Array.isArray(expression[1]) && expression[1][0] === 'get';
-    return isFeatureFilter ? [[expression], []] : [[], [expression]];
-  };
-
-  // Final classification
-  const [featureFilters, contextFilters] = classifyFilters(filterString);
-
-  // Normalize single filter outputs
-  const normalize = (filters) => (filters.length === 1 ? filters[0] : filters);
-
-  return {
-    featureFilters: normalize(featureFilters),
-    contextFilters: normalize(contextFilters),
-  };
-}
-//////
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -114,50 +20,40 @@ function splitFilters(filterString) {
     }
   </style>
   <script>
-    function splitFilters(filterString) {
-      function classifyFilters(expression) {
+  function splitFilters(filterString) {
+  
+    const classifyFilters = (expression) => {
+      if (!Array.isArray(expression)) return [[], []];
+  
+      const [operator, ...values] = expression;
+  
+      if (operator === 'all' || operator === 'any') {
         const featureFilters = [];
         const contextFilters = [];
-
-        // Helper to determine if the condition is a feature filter
-        const isFeatureFilter = (value) => {
-          return value[1] && Array.isArray(value[1]) && value[1][0] === 'get';
-        };
-
-        if (Array.isArray(expression)) {
-          const [operator, ...values] = expression;
-
-          if (operator === 'all' || operator === 'any') {
-            const resultFeatureFilters = [];
-            const resultContextFilters = [];
-
-            values.forEach((value) => {
-              const [ff, cf] = classifyFilters(value);
-              resultFeatureFilters.push(...ff);
-              resultContextFilters.push(...cf);
-            });
-
-            if (resultFeatureFilters.length > 0) {
-              featureFilters.push([operator, ...resultFeatureFilters]);
-            }
-            if (resultContextFilters.length > 0) {
-              contextFilters.push([operator, ...resultContextFilters]);
-            }
-          } else {
-            (isFeatureFilter(expression) ? featureFilters : contextFilters).push(expression);
-          }
-        }
-
-        return [featureFilters, contextFilters];
+  
+        values.forEach((value) => {
+          const [ff, cf] = classifyFilters(value);
+          featureFilters.push(...ff);
+          contextFilters.push(...cf);
+        });
+  
+        return [
+          featureFilters.length > 1 ? [[operator, ...featureFilters]] : featureFilters,
+          contextFilters.length > 1 ? [[operator, ...contextFilters]] : contextFilters,
+        ];
       }
-
-      const [featureFilters, contextFilters] = classifyFilters(filterString);
-
-      return {
+  
+      const isFeatureFilter = expression[1] && Array.isArray(expression[1]) && expression[1][0] === 'get';
+      return isFeatureFilter ? [[expression], []] : [[], [expression]];
+    };
+  
+    const [featureFilters, contextFilters] = classifyFilters(filterString);
+  
+    return {
         featureFilters: featureFilters.length === 1 ? featureFilters[0] : featureFilters,
         contextFilters: contextFilters.length === 1 ? contextFilters[0] : contextFilters,
-      };
-    }
+    };
+  }
 
     function testSplitFilters() {
 /////////////////
