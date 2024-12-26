@@ -1,51 +1,55 @@
 function splitFilters(filterString) {
-  const featureFilters = [];
-  const contextFilters = [];
-
-  // Helper to determine if the condition is a feature filter
-  const isFeatureFilter = (value) => {
-    return value[1] && Array.isArray(value[1]) && value[1][0] === 'get';
-  };
-
   function classifyFilters(expression) {
-    if (!Array.isArray(expression)) return;
+    const featureFilters = [];
+    const contextFilters = [];
 
-    const [operator, ...values] = expression;
+    // Helper to determine if the condition is a feature filter
+    const isFeatureFilter = (value) => {
+      return value[1] && Array.isArray(value[1]) && value[1][0] === 'get';
+    };
 
-    if (operator === 'all' || operator === 'any') {
-      // 재귀적으로 하위 필터 분리
-      const groupedFeatureFilters = [];
-      const groupedContextFilters = [];
+    if (Array.isArray(expression)) {
+      const [operator, ...values] = expression;
 
-      values.forEach((value) => {
-        const [ff, cf] = classifyFilters(value);
-        groupedFeatureFilters.push(...ff);
-        groupedContextFilters.push(...cf);
-      });
+      if (operator === 'all' || operator === 'any') {
+        const resultFeatureFilters = [];
+        const resultContextFilters = [];
 
-      // operator를 포함하여 추가
-      if (groupedFeatureFilters.length > 0) {
-        featureFilters.push([operator, ...groupedFeatureFilters]);
+        values.forEach((value) => {
+          const [ff, cf] = classifyFilters(value);
+          resultFeatureFilters.push(...ff);
+          resultContextFilters.push(...cf);
+        });
+
+        if (resultFeatureFilters.length > 0) {
+          featureFilters.push(
+            resultFeatureFilters.length === 1
+              ? resultFeatureFilters[0]
+              : [operator, ...resultFeatureFilters]
+          );
+        }
+        if (resultContextFilters.length > 0) {
+          contextFilters.push(
+            resultContextFilters.length === 1
+              ? resultContextFilters[0]
+              : [operator, ...resultContextFilters]
+          );
+        }
+      } else {
+        (isFeatureFilter(expression) ? featureFilters : contextFilters).push(expression);
       }
-      if (groupedContextFilters.length > 0) {
-        contextFilters.push([operator, ...groupedContextFilters]);
-      }
-    } else {
-      // 일반적인 경우 바로 분류 후 추가
-      (isFeatureFilter(expression) ? featureFilters : contextFilters).push(expression);
     }
 
-    return [featureFilters, contextFilters]; // 재귀 호출 결과 반환
+    return [featureFilters, contextFilters];
   }
 
-  classifyFilters(filterString);
+  const [featureFilters, contextFilters] = classifyFilters(filterString);
 
   return {
     featureFilters: featureFilters.length === 1 ? featureFilters[0] : featureFilters,
     contextFilters: contextFilters.length === 1 ? contextFilters[0] : contextFilters,
   };
 }
-
 //////
 
 <!DOCTYPE html>
