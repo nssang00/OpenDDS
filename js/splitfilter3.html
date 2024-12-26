@@ -50,6 +50,46 @@ function splitFilters(filterString) {
     contextFilters: contextFilters.length === 1 ? contextFilters[0] : contextFilters,
   };
 }
+//////////
+function splitFilters(filterString) {
+  // Helper to classify filters
+  const classifyFilters = (expression) => {
+    if (!Array.isArray(expression)) return [[], []];
+
+    const [operator, ...values] = expression;
+
+    if (operator === 'all' || operator === 'any') {
+      const featureFilters = [];
+      const contextFilters = [];
+
+      values.forEach((value) => {
+        const [ff, cf] = classifyFilters(value);
+        featureFilters.push(...ff);
+        contextFilters.push(...cf);
+      });
+
+      return [
+        featureFilters.length > 1 ? [[operator, ...featureFilters]] : featureFilters,
+        contextFilters.length > 1 ? [[operator, ...contextFilters]] : contextFilters,
+      ];
+    }
+
+    const isFeatureFilter =
+      expression[1] && Array.isArray(expression[1]) && expression[1][0] === 'get';
+    return isFeatureFilter ? [[expression], []] : [[], [expression]];
+  };
+
+  // Final classification
+  const [featureFilters, contextFilters] = classifyFilters(filterString);
+
+  // Normalize single filter outputs
+  const normalize = (filters) => (filters.length === 1 ? filters[0] : filters);
+
+  return {
+    featureFilters: normalize(featureFilters),
+    contextFilters: normalize(contextFilters),
+  };
+}
 //////
 
 <!DOCTYPE html>
