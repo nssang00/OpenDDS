@@ -36,7 +36,7 @@
           contextFilters.push(...cf);
         });
   
-        const checkLength = operator === 'all' || operator === 'any' ? 1 : 0;
+        const checkLength = ['all', 'any'].includes(operator) ? 1 : 0;
         return [
           featureFilters.length > checkLength ? [[operator, ...featureFilters]] : featureFilters,
           contextFilters.length > checkLength ? [[operator, ...contextFilters]] : contextFilters,
