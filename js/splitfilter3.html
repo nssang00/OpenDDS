@@ -4,6 +4,51 @@ function splitFilters(filters) {
 
     const [operator, ...values] = expression;
 
+    const featureFilters = [];
+    const contextFilters = [];
+
+    values.forEach((value) => {
+      const [ff, cf] = classifyFilters(value);
+      featureFilters.push(...ff);
+      contextFilters.push(...cf);
+    });
+
+    const shouldGroup = ['all', 'any'].includes(operator) && featureFilters.length > 1;
+
+    return [
+      shouldGroup ? [[operator, ...featureFilters]] : featureFilters,
+      shouldGroup ? [[operator, ...contextFilters]] : contextFilters,
+    ];
+  };
+
+  const [featureFilters, contextFilters] = classifyFilters(filters);
+
+  return {
+    featureFilters: featureFilters.length === 1 ? featureFilters[0] : featureFilters,
+    contextFilters: contextFilters.length === 1 ? contextFilters[0] : contextFilters,
+  };
+}
+
+// 테스트 데이터
+const filterString = [
+  'all',
+  ["in", ["get", "class"], ["literal", ["lake", "river"]]],
+  ["!", ["in", ["get", "class"], ["literal", ["lake", "river"]]]],
+  ["==", ["get", "layer"], "waterway"],
+  ['any', ['<', ['zoom'], 5], ['>', ['zoom'], 10]],
+  ["==", ["geometry-type"], "Polygon"],
+  ['>', ['resolution'], 10],
+];
+
+// 실행 결과
+console.log(splitFilters(filterString));
+//////////
+function splitFilters(filters) {
+  const classifyFilters = (expression) => {
+    if (!Array.isArray(expression)) return [[], []];
+
+    const [operator, ...values] = expression;
+
     if (['all', 'any', '!'].includes(operator)) {
       const featureFilters = [];
       const contextFilters = [];
