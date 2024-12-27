@@ -36,10 +36,10 @@
           contextFilters.push(...cf);
         });
   
-        const checkLength = ['all', 'any'].includes(operator) ? 1 : 0;
+        const minOpCount = ['all', 'any'].includes(operator) ? 1 : 0;
         return [
-          featureFilters.length > checkLength ? [[operator, ...featureFilters]] : featureFilters,
-          contextFilters.length > checkLength ? [[operator, ...contextFilters]] : contextFilters,
+          featureFilters.length > minOpCount ? [[operator, ...featureFilters]] : featureFilters,
+          contextFilters.length > minOpCount ? [[operator, ...contextFilters]] : contextFilters,
         ];
       }
   
