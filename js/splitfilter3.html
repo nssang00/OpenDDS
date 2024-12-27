@@ -14,9 +14,16 @@ function splitFilters(filters) {
         contextFilters.push(...cf);
       });
 
+      if(operator === 'all' || operator === 'any') {
+      {
+        return [
+          featureFilters.length > 1 ? [[operator, ...featureFilters]] : featureFilters,
+          contextFilters.length > 1 ? [[operator, ...contextFilters]] : contextFilters,
+        ];
+      }
       return [
-        featureFilters.length > 1 || operator === '!' ? [[operator, ...featureFilters]] : featureFilters,
-        contextFilters.length > 1 || operator === '!' ? [[operator, ...contextFilters]] : contextFilters,
+        featureFilters.length > 0 ? [[operator, ...featureFilters]] : featureFilters,
+        contextFilters.length > 0 ? [[operator, ...contextFilters]] : contextFilters,
       ];
     }
 
