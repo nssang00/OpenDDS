@@ -43,7 +43,7 @@
         ];
       }
   
-      const isFeatureFilter = Array.isArray(expression[1]) && expression[1][0] === 'get';
+      const isFeatureFilter = Array.isArray(expression[1]) && expression[1][0] === 'get' || operator === 'has';
       return isFeatureFilter ? [[expression], []] : [[], [expression]];
     };
   
