@@ -43,7 +43,7 @@
         ];
       }
   
-      const isFeatureFilter = Array.isArray(expression[1]) && expression[1][0] === 'get' || operator === 'has';
+      const isFeatureFilter = Array.isArray(expression[1]) && ['get', 'geometry-type'].includes(expression[1][0]) || operator === 'has';
       return isFeatureFilter ? [[expression], []] : [[], [expression]];
     };
   
