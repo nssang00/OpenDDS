@@ -1,3 +1,61 @@
+async generateBuffers(geometryBatch, transform) {
+  const renderInstructions = this.generateRenderInstructions_(
+    geometryBatch,
+    transform,
+  );
+
+  const bufferTypes = [
+    { instructions: 'polygonInstructions', type: 'Polygon' },
+    { instructions: 'lineStringInstructions', type: 'LineString' },
+    { instructions: 'pointInstructions', type: 'Point' },
+  ];
+
+  const buffers = await Promise.all(
+    bufferTypes.map(({ instructions, type }) =>
+      this.generateBuffersForType_(
+        renderInstructions[instructions],
+        type,
+        transform
+      )
+    )
+  );
+
+  const invertVerticesTransform = makeInverseTransform(
+    createTransform(),
+    transform,
+  );
+
+  return {
+    polygonBuffers: buffers[0],
+    lineStringBuffers: buffers[1],
+    pointBuffers: buffers[2],
+    invertVerticesTransform: invertVerticesTransform,
+  };
+}
+
+generateRenderInstructions_(geometryBatch, transform) {
+  const types = [
+    { batch: 'polygonBatch', generator: generatePolygonRenderInstructions, flag: 'hasFill_' },
+    { batch: 'lineStringBatch', generator: generateLineStringRenderInstructions, flag: 'hasStroke_' },
+    { batch: 'pointBatch', generator: generatePointRenderInstructions, flag: 'hasSymbol_' },
+  ];
+
+  return types.reduce((instructions, { batch, generator, flag }) => {
+    instructions[`${batch.replace('Batch', 'Instructions')}`] = this[flag]
+      ? generator(
+          geometryBatch[batch],
+          new Float32Array(0),
+          this.customAttributes_,
+          transform
+        )
+      : null;
+    return instructions;
+  }, {});
+}
+
+
+
+
 // ... 기존 코드 ...
 generateRenderInstructions_(features, transform) {
   const lineStringFeatures = features.filter(feature => {
