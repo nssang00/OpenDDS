@@ -4,42 +4,40 @@ using UnityEngine;
 public class WebViewToTexture : MonoBehaviour
 {
     private AndroidJavaObject webViewRenderer;
-    public int textureWidth = 1024; // WebView 너비
-    public int textureHeight = 1024; // WebView 높이
+    private Texture2D webViewTexture;
+
+    public int textureWidth = 1024;
+    public int textureHeight = 1024;
 
     void Start()
     {
-        // Java 클래스 초기화
+        // Java WebViewRenderer 초기화
         using (AndroidJavaClass pluginClass = new AndroidJavaClass("com.example.webviewrenderer.WebViewRenderer"))
         {
             webViewRenderer = pluginClass.CallStatic<AndroidJavaObject>("getInstance", GetUnityActivity());
         }
 
-        // WebView URL 로드
+        // WebView 설정 및 URL 로드
         LoadUrl("https://example.com");
+
+        // Texture2D 초기화
+        webViewTexture = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false);
     }
 
     public void LoadUrl(string url)
     {
-        if (webViewRenderer != null)
-        {
-            webViewRenderer.Call("loadUrl", url);
-        }
+        webViewRenderer?.Call("loadUrl", url);
     }
 
-    public Texture2D CaptureWebView()
+    void Update()
     {
-        if (webViewRenderer == null) return null;
-
-        // Java에서 RAW 데이터를 가져옴
-        byte[] rawData = webViewRenderer.Call<byte[]>("captureWebView");
-
-        // Unity Texture2D 생성
-        Texture2D texture = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false);
-        texture.LoadRawTextureData(rawData);
-        texture.Apply();
-
-        return texture;
+        // Java에서 캡처된 WebView 데이터를 가져와 Texture2D 업데이트
+        byte[] imageData = webViewRenderer?.Call<byte[]>("captureWebView");
+        if (imageData != null)
+        {
+            webViewTexture.LoadRawTextureData(imageData);
+            webViewTexture.Apply();
+        }
     }
 
     private AndroidJavaObject GetUnityActivity()
@@ -48,5 +46,11 @@ public class WebViewToTexture : MonoBehaviour
         {
             return unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
         }
+    }
+
+    void OnGUI()
+    {
+        // 캡처된 Texture2D를 화면에 그리기
+        GUI.DrawTexture(new Rect(0, 0, textureWidth, textureHeight), webViewTexture);
     }
 }
