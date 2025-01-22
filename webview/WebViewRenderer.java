@@ -18,6 +18,9 @@ public class WebViewRenderer {
         int height = 1024; // WebView 높이
         bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         webView.layout(0, 0, width, height);
+        webView.getSettings().setBuiltInZoomControls(true);
+        webView.getSettings().setDisplayZoomControls(false);
+        
     }
 
     public void loadUrl(String url) {
