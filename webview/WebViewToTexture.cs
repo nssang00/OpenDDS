@@ -1,62 +1,68 @@
-using System.Threading.Tasks;
 using UnityEngine;
 
-public class WebViewTexture : MonoBehaviour
+public class WebViewTextureHandler : MonoBehaviour
 {
     private AndroidJavaObject webViewHandler;
     private Texture2D webViewTexture;
+    private bool isProcessing = false;
 
-    async void Start()
+    void Start()
     {
-        // WebView 초기화
-        InitializeWebView();
-
-        // WebView에 URL 로드
-        await LoadWebViewAsync("https://example.com");
-
-        // 실시간으로 WebView 캡처 데이터를 반영
-        StartReceivingWebViewFrames();
-    }
-
-    private void InitializeWebView()
-    {
-        using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+        // WebView 객체 가져오기 (AndroidJavaObject)
+        using (AndroidJavaClass pluginClass = new AndroidJavaClass("com.yourcompany.webviewplugin.WebViewPlugin"))
         {
-            var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-            var webView = new AndroidJavaObject("android.webkit.WebView", activity);
-            webViewHandler = new AndroidJavaObject("com.yourcompany.webviewplugin.WebViewHandler", activity, webView);
+            webViewHandler = pluginClass.CallStatic<AndroidJavaObject>("getInstance");
         }
     }
 
-    private Task LoadWebViewAsync(string url)
+    void Update()
     {
-        return Task.Run(() => webViewHandler.Call("loadUrl", url));
-    }
-
-    private void StartReceivingWebViewFrames()
-    {
-        // 주기적으로 WebView 데이터를 가져오는 루프
-        InvokeRepeating(nameof(UpdateWebViewTexture), 0, 0.033f); // 30fps
-    }
-
-    private void UpdateWebViewTexture()
-    {
-        webViewHandler.Call("captureWebViewAndGetRawBitmapData", new AndroidJavaProxy("com.yourcompany.webviewplugin.WebViewHandler$WebViewCallback")
+        if (!isProcessing)
         {
-            onComplete = new AndroidJavaRunnableProxy((rawBitmapData, width, height) =>
-            {
-                // Texture2D 초기화
-                if (webViewTexture == null || webViewTexture.width != width || webViewTexture.height != height)
-                {
-                    webViewTexture = new Texture2D(width, height, TextureFormat.RGBA32, false);
-                    GetComponent<Renderer>().material.mainTexture = webViewTexture;
-                }
+            isProcessing = true;
+            RequestWebViewFrame();
+        }
+    }
 
-                // RAW 데이터를 Texture2D에 반영
-                webViewTexture.LoadRawTextureData(rawBitmapData);
-                webViewTexture.Apply();
-            })
-        });
+    private void RequestWebViewFrame()
+    {
+        // WebView 캡처 및 콜백 처리
+        webViewHandler.Call("captureWebViewBitmapData", new WebViewCallback(this));
+    }
+
+    // 콜백 메서드: WebView 캡처 완료 후 호출
+    public void OnWebViewCaptured(byte[] bitmapData, int width, int height)
+    {
+        if (webViewTexture == null || webViewTexture.width != width || webViewTexture.height != height)
+        {
+            // WebView 캡처 후 Texture2D 초기화
+            webViewTexture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            GetComponent<Renderer>().material.mainTexture = webViewTexture;
+        }
+
+        // 비트맵 데이터를 Texture2D에 로드
+        webViewTexture.LoadRawTextureData(bitmapData);
+        webViewTexture.Apply();
+
+        // 처리 완료 표시
+        isProcessing = false;
+    }
+}
+
+// Java에서 호출되는 콜백을 위한 C# 클래스
+public class WebViewCallback : AndroidJavaProxy
+{
+    private WebViewTextureHandler textureHandler;
+
+    public WebViewCallback(WebViewTextureHandler handler) : base("com.yourcompany.webviewplugin.WebViewPlugin$WebViewCallback")
+    {
+        textureHandler = handler;
+    }
+
+    // Java에서 호출될 콜백 메서드
+    public void onComplete(byte[] bitmapData, int width, int height)
+    {
+        textureHandler.OnWebViewCaptured(bitmapData, width, height);
     }
 }
 ///////////////////////////////////
