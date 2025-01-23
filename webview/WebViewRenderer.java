@@ -1,48 +1,47 @@
-package com.yourcompany.webviewplugin;
-
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Rect;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-
+import android.os.Handler;
+import android.os.Looper;
 import java.nio.ByteBuffer;
 
-public class WebViewHandler {
-    private WebView webView;
-    private Activity activity;
+public class WebViewPlugin {
 
-    // 생성자에서 WebView와 Activity를 받음
-    public WebViewHandler(Activity activity, WebView webView) {
+    private Activity activity;
+    private android.webkit.WebView webView;
+
+    public WebViewPlugin(Activity activity, android.webkit.WebView webView) {
         this.activity = activity;
         this.webView = webView;
-        this.webView.setWebViewClient(new WebViewClient());
     }
 
-    // WebView의 렌더링 결과를 캡처하고 RAW 데이터로 반환
+    // WebView 캡처 후 RAW 비트맵 데이터를 반환하는 함수
     public void captureWebViewAndGetRawBitmapData(final WebViewCallback callback) {
-        activity.runOnUiThread(() -> {
-            Bitmap bitmap = Bitmap.createBitmap(webView.getWidth(), webView.getHeight(), Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            webView.draw(canvas);
+        // UI 스레드에서 작업을 실행
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                // WebView의 크기만큼 비트맵 생성
+                Bitmap bitmap = Bitmap.createBitmap(webView.getWidth(), webView.getHeight(), Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                webView.draw(canvas);  // WebView를 캔버스에 그려서 비트맵에 저장
 
-            // Bitmap을 RAW 데이터(byte[])로 변환
-            int size = bitmap.getWidth() * bitmap.getHeight() * 4; // ARGB_8888: 4 bytes per pixel
-            ByteBuffer buffer = ByteBuffer.allocate(size);
-            bitmap.copyPixelsToBuffer(buffer);
-            byte[] rawBitmapData = buffer.array();
+                // Bitmap을 RAW 데이터(byte[])로 변환
+                ByteBuffer buffer = ByteBuffer.allocate(bitmap.getWidth() * bitmap.getHeight() * 4); // ARGB_8888: 4 bytes per pixel
+                bitmap.copyPixelsToBuffer(buffer);
+                byte[] rawBitmapData = buffer.array();  // RAW 데이터로 변환
 
-            callback.onComplete(rawBitmapData, bitmap.getWidth(), bitmap.getHeight());
+                // 콜백 호출하여 결과 전달
+                callback.onComplete(rawBitmapData, bitmap.getWidth(), bitmap.getHeight());
+            }
         });
     }
 
-    // WebView 작업이 완료된 후 호출될 콜백 인터페이스
+    // WebView 캡처 후 결과를 처리할 콜백 인터페이스
     public interface WebViewCallback {
-        void onComplete(byte[] rawBitmapData, int width, int height);
+        void onComplete(byte[] bitmapData, int width, int height);
     }
 }
-
 //////////////////////////
 // WebViewRenderer.java
 package com.example.webviewrenderer;
