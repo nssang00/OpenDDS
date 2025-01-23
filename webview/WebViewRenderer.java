@@ -2,6 +2,8 @@ package com.yourcompany.webviewplugin;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
@@ -18,27 +20,26 @@ public class WebViewHandler {
         this.webView.setWebViewClient(new WebViewClient());
     }
 
-    // WebView 캡처 후 byte 배열로 반환하는 함수
-    public void captureWebViewAndGetBitmapBytes(final WebViewCallback callback) {
+    // WebView의 렌더링 결과를 캡처하고 RAW 데이터로 반환
+    public void captureWebViewAndGetRawBitmapData(final WebViewCallback callback) {
         activity.runOnUiThread(() -> {
             Bitmap bitmap = Bitmap.createBitmap(webView.getWidth(), webView.getHeight(), Bitmap.Config.ARGB_8888);
-            webView.draw(new android.graphics.Canvas(bitmap)); // WebView의 내용을 bitmap으로 캡처
+            Canvas canvas = new Canvas(bitmap);
+            webView.draw(canvas);
 
-            // Bitmap을 byte 배열로 변환
-            int size = bitmap.getByteCount();
-            ByteBuffer buffer = ByteBuffer.allocate(size); // ByteBuffer 생성
-            bitmap.copyPixelsToBuffer(buffer); // Bitmap 데이터를 ByteBuffer로 복사
+            // Bitmap을 RAW 데이터(byte[])로 변환
+            int size = bitmap.getWidth() * bitmap.getHeight() * 4; // ARGB_8888: 4 bytes per pixel
+            ByteBuffer buffer = ByteBuffer.allocate(size);
+            bitmap.copyPixelsToBuffer(buffer);
+            byte[] rawBitmapData = buffer.array();
 
-            byte[] byteArray = buffer.array(); // ByteBuffer를 byte 배열로 변환
-
-            // 콜백 호출하여 byte 배열 전달
-            callback.onComplete(byteArray);
+            callback.onComplete(rawBitmapData, bitmap.getWidth(), bitmap.getHeight());
         });
     }
 
     // WebView 작업이 완료된 후 호출될 콜백 인터페이스
     public interface WebViewCallback {
-        void onComplete(byte[] bitmapBytes);
+        void onComplete(byte[] rawBitmapData, int width, int height);
     }
 }
 
