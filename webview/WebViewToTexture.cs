@@ -2,16 +2,20 @@ using UnityEngine;
 
 public class WebViewTextureHandler : MonoBehaviour
 {
-    private AndroidJavaObject webViewHandler;
+    private AndroidJavaObject webViewPlugin;
     private Texture2D webViewTexture;
     private bool isProcessing = false;
 
     void Start()
     {
-        // WebView 객체 가져오기 (AndroidJavaObject)
+        // AndroidJavaObject로 WebViewPlugin 객체 가져오기
         using (AndroidJavaClass pluginClass = new AndroidJavaClass("com.yourcompany.webviewplugin.WebViewPlugin"))
         {
-            webViewHandler = pluginClass.CallStatic<AndroidJavaObject>("getInstance");
+            using (AndroidJavaObject activity = GetActivity())
+            {
+                AndroidJavaObject webView = GetWebView(); // WebView를 가져오는 코드 필요
+                webViewPlugin = new AndroidJavaObject("com.yourcompany.webviewplugin.WebViewPlugin", activity, webView);
+            }
         }
     }
 
@@ -27,7 +31,7 @@ public class WebViewTextureHandler : MonoBehaviour
     private void RequestWebViewFrame()
     {
         // WebView 캡처 및 콜백 처리
-        webViewHandler.Call("captureWebViewBitmapData", new WebViewCallback(this));
+        webViewPlugin.Call("captureWebViewAndGetRawBitmapData", new WebViewCallback(this));
     }
 
     // 콜백 메서드: WebView 캡처 완료 후 호출
@@ -47,22 +51,37 @@ public class WebViewTextureHandler : MonoBehaviour
         // 처리 완료 표시
         isProcessing = false;
     }
-}
 
-// Java에서 호출되는 콜백을 위한 C# 클래스
-public class WebViewCallback : AndroidJavaProxy
-{
-    private WebViewTextureHandler textureHandler;
-
-    public WebViewCallback(WebViewTextureHandler handler) : base("com.yourcompany.webviewplugin.WebViewPlugin$WebViewCallback")
+    // Java에서 호출되는 콜백을 위한 C# 클래스
+    public class WebViewCallback : AndroidJavaProxy
     {
-        textureHandler = handler;
+        private WebViewTextureHandler textureHandler;
+
+        public WebViewCallback(WebViewTextureHandler handler) : base("com.yourcompany.webviewplugin.WebViewPlugin$WebViewCallback")
+        {
+            textureHandler = handler;
+        }
+
+        // Java에서 호출될 콜백 메서드
+        public void onComplete(byte[] bitmapData, int width, int height)
+        {
+            textureHandler.OnWebViewCaptured(bitmapData, width, height);
+        }
     }
 
-    // Java에서 호출될 콜백 메서드
-    public void onComplete(byte[] bitmapData, int width, int height)
+    // 현재 Activity를 반환하는 메서드 (Unity에서 호출할 수 있도록)
+    private AndroidJavaObject GetActivity()
     {
-        textureHandler.OnWebViewCaptured(bitmapData, width, height);
+        using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+        {
+            return unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+        }
+    }
+
+    // WebView를 가져오는 메서드 (여기서는 예시로 빈 객체 사용)
+    private AndroidJavaObject GetWebView()
+    {
+        return new AndroidJavaObject("android.webkit.WebView", GetActivity());
     }
 }
 ///////////////////////////////////
