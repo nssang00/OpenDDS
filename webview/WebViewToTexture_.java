@@ -1,3 +1,37 @@
+import android.graphics.SurfaceTexture;
+  import android.view.Surface;
+  import android.webkit.WebView;
+
+  public class WebViewRenderer {
+      private WebView webView;
+      private SurfaceTexture surfaceTexture;
+      private Surface surface;
+
+      public void setupWebView(WebView webView, int textureId) {
+          this.webView = webView;
+
+          // SurfaceTexture 생성 (Unity에서 생성한 텍스처 ID 사용)
+          surfaceTexture = new SurfaceTexture(textureId);
+
+          // Surface 생성
+          surface = new Surface(surfaceTexture);
+
+          // WebView를 Surface에 렌더링
+          webView.setWebViewClient(new WebViewClient() {
+              @Override
+              public void onPageFinished(WebView view, String url) {
+                  // WebView를 Surface에 렌더링
+                  view.draw(new Canvas(surface));
+              }
+          });
+      }
+
+      public void updateTexture() {
+          // SurfaceTexture 업데이트
+          surfaceTexture.updateTexImage();
+      }
+  }
+///////
 package com.example.webviewtotexture;
 
 import android.graphics.SurfaceTexture;
