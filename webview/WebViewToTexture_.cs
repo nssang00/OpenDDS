@@ -1,3 +1,38 @@
+using UnityEngine;
+  using System.Collections;
+
+  public class WebViewSurfaceTexture : MonoBehaviour
+  {
+      private Texture2D texture;
+      private AndroidJavaObject webViewRenderer;
+
+      void Start()
+      {
+          // Texture2D 생성
+          texture = new Texture2D(1024, 1024, TextureFormat.ARGB32, false);
+
+          // 네이티브 텍스처 ID 가져오기
+          int textureId = (int)texture.GetNativeTexturePtr();
+
+          // 안드로이드 플러그인 초기화
+          AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+          AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+          webViewRenderer = new AndroidJavaObject("com.example.WebViewRenderer");
+
+          // WebView 및 SurfaceTexture 설정
+          webViewRenderer.Call("setupWebView", activity, textureId);
+
+          // 텍스처를 머티리얼에 적용
+          GetComponent<Renderer>().material.mainTexture = texture;
+      }
+
+      void Update()
+      {
+          // 매 프레임마다 SurfaceTexture 업데이트
+          webViewRenderer.Call("updateTexture");
+      }
+  }
+/////////
 using System;
 using UnityEngine;
 
