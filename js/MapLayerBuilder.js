@@ -205,6 +205,9 @@ class MapLayerBuilder {
 
     // Point 스타일 객체를 OpenLayers 스타일로 변환하는 함수
     buildPointStyle(pointStyleObj) {
+        if(!pointStyleObj.symbolizers) {
+            return { style: {} };
+        }
         const offset = [Number(pointStyleObj.OffsetX), Number(pointStyleObj.OffsetY)];
         for (const symbolizer of pointStyleObj.symbolizers) {
             switch (symbolizer.type) {
@@ -212,7 +215,7 @@ class MapLayerBuilder {
                     if (symbolizer.Shape === "0") { // Circle
                         return {
                             style: {
-                                'circle-radius': symbolizer.Size,
+                                'circle-radius': Number(symbolizer.Size),
                                 'circle-fill-color': this.toRGBAArray(symbolizer.Color),
                                 'circle-displacement': offset,
                             }
@@ -221,7 +224,7 @@ class MapLayerBuilder {
                         return {
                             style: {
                                 'shape-points': 4,
-                                'shape-radius': symbolizer.Size,
+                                'shape-radius': Number(symbolizer.Size),
                                 'shape-fill-color': this.toRGBAArray(symbolizer.Color),
                                 'shape-displacement': offset,
                                 'shape-angle': Math.PI / 4,
@@ -245,6 +248,9 @@ class MapLayerBuilder {
 
     // Line 스타일 객체를 OpenLayers 스타일로 변환하는 함수
     buildLineStyle(lineStyleObj) {
+        if(!lineStyleObj.symbolizers) {
+            return { style: {} };
+        }
         return (lineStyleObj.symbolizers || []).map(symbolizer => this.buildLineSymbolizer(symbolizer));
     }
 
