@@ -107,3 +107,40 @@ public:
 
 // 🟢 애플리케이션 실행
 CWorkerThreadApp theApp;
+
+///////
+class CMyDialog : public CDialogEx {
+public:
+    enum { WM_TASK_COMPLETE = WM_USER + 1 }; // 사용자 정의 메시지
+    afx_msg LRESULT OnTaskComplete(WPARAM wParam, LPARAM lParam);
+    
+    void OnTimer(UINT_PTR nIDEvent) override;
+    DECLARE_MESSAGE_MAP()
+};
+
+BEGIN_MESSAGE_MAP(CMyDialog, CDialogEx)
+    ON_MESSAGE(WM_TASK_COMPLETE, &CMyDialog::OnTaskComplete)
+    ON_WM_TIMER()
+END_MESSAGE_MAP()
+
+void CMyDialog::OnTimer(UINT_PTR nIDEvent) {
+    if (nIDEvent == 1) {
+        // 백그라운드에서 실행할 비동기 작업
+        std::future<int> future = std::async(std::launch::async, []() {
+            Sleep(2000); // 2초 동안 블로킹 작업 (예제)
+            return 42;   // 결과 반환
+        });
+
+        // 백그라운드 작업 완료 후 UI 스레드로 결과 전달
+        std::thread([this, future = std::move(future)]() mutable {
+            int result = future.get(); // 결과 대기
+            PostMessage(WM_TASK_COMPLETE, result, 0); // UI 스레드로 결과 전달
+        }).detach();
+    }
+}
+
+LRESULT CMyDialog::OnTaskComplete(WPARAM wParam, LPARAM lParam) {
+    int result = static_cast<int>(wParam);
+    MessageBox(CString("Result: ") + std::to_wstring(result).c_str(), L"Async Result", MB_OK);
+    return 0;
+}
