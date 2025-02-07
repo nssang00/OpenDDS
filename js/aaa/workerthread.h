@@ -1,3 +1,35 @@
+
+void CMyDialog::OnTimer(UINT_PTR nIDEvent)
+{
+
+        std::async(std::launch::async, [this]() {
+            std::this_thread::sleep_for(std::chrono::seconds(2)); // 2초 대기
+            m_Result = 42; // 결과 설정
+
+            // UI 업데이트는 반드시 메인 스레드에서 수행해야 함
+            if (this->GetSafeHwnd()) {
+                this->PostMessage(WM_USER + 1); // 사용자 정의 메시지 전송
+            }
+        });
+    
+
+    CDialogEx::OnTimer(nIDEvent);
+}
+
+afx_msg LRESULT CMyDialog::OnAsyncTaskComplete(WPARAM wParam, LPARAM lParam)
+{
+    // m_Result를 이용하여 UI 업데이트
+    CString str;
+    str.Format(_T("Result: %d"), m_Result);
+    AfxMessageBox(str); // 예제용 메시지 박스
+
+    return 0;
+}
+
+
+
+///////////
+
 #include <afxwin.h>
 
 #define WM_WORKER_TASK (WM_USER + 1)  // 사용자 정의 메시지
