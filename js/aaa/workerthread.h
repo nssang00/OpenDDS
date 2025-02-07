@@ -1,4 +1,18 @@
 
+class MyClass {
+public:
+    void DoSomethingAsync() {
+        CefPostTask(TID_UI, [this]() {  // this 포인터 캡처
+            ProcessResult();
+        });
+    }
+
+    void ProcessResult() {
+        printf("ProcessResult() called in UI thread!\n");
+    }
+};
+
+///////
 void CMyDialog::OnTimer(UINT_PTR nIDEvent)
 {
 
