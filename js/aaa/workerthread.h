@@ -16,25 +16,10 @@ void CMyDialog::OnTimer(UINT_PTR nIDEvent)
     CDialogEx::OnTimer(nIDEvent);
 }
 
-afx_msg LRESULT CMyDialog::OnAsyncTaskComplete(WPARAM wParam, LPARAM lParam)
-{
-    // m_Result를 이용하여 UI 업데이트
-    CString str;
-    str.Format(_T("Result: %d"), m_Result);
-    AfxMessageBox(str); // 예제용 메시지 박스
-
-    return 0;
-}
-
-
-
 ///////////
-
-#include <afxwin.h>
-
 #define WM_WORKER_TASK (WM_USER + 1)  // 사용자 정의 메시지
 
-// 🟢 Worker Thread 클래스
+// Worker Thread 클래스
 class CWorkerThread : public CWinThread
 {
 public:
@@ -44,11 +29,6 @@ public:
     CWorkerThread(CWorkerThreadDlg* pDlg)
         : m_pDlg(pDlg)
     {}
-
-    virtual BOOL InitInstance()
-    {
-        return TRUE;  // 메시지 루프 유지 (PostThreadMessage 사용 가능)
-    }
 
     afx_msg void OnDoWork(WPARAM wParam, LPARAM lParam)
     {
@@ -94,13 +74,6 @@ public:
         }
     }
 
-    // UI 업데이트 메서드
-    void UpdateUI()
-    {
-        // 예: UI 갱신 (예: 버튼 텍스트 변경)
-        SetDlgItemText(IDC_BUTTON1, _T("작업 완료"));
-    }
-
     afx_msg void OnTimer(UINT_PTR nIDEvent)
     {
         if (m_pWorkerThread)
@@ -124,21 +97,6 @@ BEGIN_MESSAGE_MAP(CWorkerThreadDlg, CDialogEx)
     ON_WM_TIMER()
 END_MESSAGE_MAP()
 
-// 🟢 MFC 애플리케이션 클래스
-class CWorkerThreadApp : public CWinApp
-{
-public:
-    virtual BOOL InitInstance()
-    {
-        CWorkerThreadDlg dlg;
-        m_pMainWnd = &dlg;
-        dlg.DoModal();  // 다이얼로그 표시
-        return FALSE;
-    }
-};
-
-// 🟢 애플리케이션 실행
-CWorkerThreadApp theApp;
 
 ///////
 class CMyDialog : public CDialogEx {
@@ -171,8 +129,3 @@ void CMyDialog::OnTimer(UINT_PTR nIDEvent) {
     }
 }
 
-LRESULT CMyDialog::OnTaskComplete(WPARAM wParam, LPARAM lParam) {
-    int result = static_cast<int>(wParam);
-    MessageBox(CString("Result: ") + std::to_wstring(result).c_str(), L"Async Result", MB_OK);
-    return 0;
-}
