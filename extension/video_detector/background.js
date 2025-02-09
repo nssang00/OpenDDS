@@ -1,10 +1,11 @@
-// 컨텐츠 스크립트에서 메시지 수신
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'VIDEOS_DETECTED') {
-    chrome.action.setBadgeText({
-      text: message.count > 0 ? `${message.count}` : ''
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'downloadVideo') {
+    const filename = request.title.replace(/[^a-z0-9]/gi, '_') + '.mp4';
+    
+    chrome.downloads.download({
+      url: request.url,
+      filename: filename,
+      conflictAction: 'uniquify'
     });
-    // 저장소에 비디오 정보 저장
-    chrome.storage.local.set({ detectedVideos: message.videos });
   }
 });
