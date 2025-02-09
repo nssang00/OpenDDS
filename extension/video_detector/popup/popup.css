@@ -1,0 +1,29 @@
+body {
+  width: 300px;
+  padding: 10px;
+  font-family: Arial, sans-serif;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+#refresh-btn {
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.video-item {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.video-item p {
+  margin: 5px 0;
+  word-break: break-all;
+}
