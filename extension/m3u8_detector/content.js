@@ -9,29 +9,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// 📌 MutationObserver로 video 태그의 src 변경 감지
+// 📌 MutationObserver 등록 (document.body에서 감지)
 const observer = new MutationObserver((mutations) => {
     mutations.forEach(mutation => {
-        if (mutation.type === "attributes" && mutation.attributeName === "src") {
+        if (mutation.type === "childList") {
+            mutation.addedNodes.forEach(node => {
+                if (node.tagName === "VIDEO") {
+                    console.log("New Video Element Detected");
+                    observeVideo(node);
+                }
+            });
+        } else if (mutation.type === "attributes" && mutation.attributeName === "src") {
             const video = mutation.target;
-            const blobURL = video.src;
-
-            if (blobURL.startsWith("blob:") && pendingM3U8) {
-                console.log("Detected Blob URL:", blobURL);
-
-                // 📌 가장 최근 감지된 M3U8을 Blob과 매칭
-                videoMap.set(blobURL, pendingM3U8);
-                addDownloadButton(video, pendingM3U8);
-                pendingM3U8 = null; // 사용 후 초기화
-            }
+            checkVideoSrc(video);
         }
     });
 });
 
-// 📌 Video 태그 감지 & MutationObserver 등록
-document.querySelectorAll("video").forEach(video => {
-    observer.observe(video, { attributes: true });
-});
+// 📌 Body 전체에서 Video 태그 변화를 감지
+observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+
+// 📌 기존 video 태그도 감지하도록 실행
+document.querySelectorAll("video").forEach(video => observeVideo(video));
+
+// 📌 Video 태그 감지 함수
+function observeVideo(video) {
+    if (!video.dataset.observed) {
+        video.dataset.observed = "true";
+        checkVideoSrc(video);
+    }
+}
+
+// 📌 video.src 확인 후 Blob URL과 M3U8 매칭
+function checkVideoSrc(video) {
+    const blobURL = video.src;
+    if (blobURL.startsWith("blob:") && pendingM3U8) {
+        console.log("Detected Blob URL:", blobURL);
+
+        // 📌 Blob과 M3U8 매칭
+        videoMap.set(blobURL, pendingM3U8);
+        addDownloadButton(video, pendingM3U8);
+        pendingM3U8 = null; // 사용 후 초기화
+    }
+}
 
 // 📌 다운로드 버튼 추가 함수
 function addDownloadButton(video, m3u8URL) {
