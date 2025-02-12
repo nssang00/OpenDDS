@@ -369,9 +369,9 @@ class MapLayerBuilder {
         const size = Number(labelStyleObj.Size);
         const offsetX = Number(labelStyleObj.OffsetX);
         const offsetY = Number(labelStyleObj.OffsetY);
-        const bold = Boolean(labelStyleObj.Bold);
-        const italic = Boolean(labelStyleObj.Italic);
-        const underline = Boolean(labelStyleObj.Underline);
+        const bold = labelStyleObj.Bold === "true";
+        const italic = labelStyleObj.Italic === "true";
+        const underline = labelStyleObj.Underline === "true";
         const textAlign = Number(labelStyleObj.Align);
         const textAligns = [
             ['left', 'top'],    ['center', 'top'],      ['right', 'top'],   // 0, 1, 2
@@ -392,7 +392,7 @@ class MapLayerBuilder {
             symbol: {
                 'type': 'label',
                 'label-underline': underline,
-                'label-sea-water-level': Boolean(labelStyleObj.SeaWaterLevel),
+                'label-sea-water-level': labelStyleObj.SeaWaterLevel === "true",
                 'label-decimal': Number(labelStyleObj.Decimal),
                 'label-prefix': labelStyleObj.Prefix,
                 'label-postfix': labelStyleObj.Postfix,
@@ -408,11 +408,11 @@ class MapLayerBuilder {
             }
         };
 
-        if (Boolean(labelStyleObj.Outline)) {
+        if (labelStyleObj.Outline === "true") {
             olLabelStyleObj.style['text-stroke-color'] = this.toRGBAArray(labelStyleObj.OutlineColor);
         }
 
-        if (Boolean(labelStyleObj.Box)) {
+        if (labelStyleObj.Box === "true") {
             olLabelStyleObj.style['text-background-fill-color'] = this.toRGBAArray(labelStyleObj.BoxColor);
         }
 
