@@ -292,7 +292,8 @@ class MapLayerBuilder {
                 style: {
                     'stroke-pattern-src': `${this.baseSymbolPath}${symbolizer.Picture}`, // Picture
                     //'icon-src': `${this.baseSymbolPath}${symbolizer.Picture}`,//Picture
-                    'stroke-width': Number(symbolizer.Width) || 20, // Width
+                    //'stroke-width': Number(symbolizer.Width) || 20, // Width
+                    ...(symbolizer.Width && { 'stroke-width': Number(symbolizer.Width) }) // Width
                 }
             };
         
