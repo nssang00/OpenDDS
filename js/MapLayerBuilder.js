@@ -278,7 +278,7 @@ class MapLayerBuilder {
                     'stroke-width': symbolizer.Width,//Width
                     'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//JoinType
                     'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//DashCap
-                    'stroke-line-dash-offset': symbolizer.DashOffset,//DashOffset
+                    'stroke-line-dash-offset': Number(symbolizer.DashOffset),//DashOffset
                     'stroke-line-dash': symbolizer.Dash.map(Number),//Dash, DashItem
                 }
             };
