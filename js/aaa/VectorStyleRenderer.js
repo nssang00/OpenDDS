@@ -525,7 +525,7 @@ class VectorStyleRenderer {
     }
     //kmg
     
-    if (!this.evaluators_.contextfiltersEvaluator({
+    if (!this.evaluators_.contextFilters({
       variables: {},      
       resolution: frameState.viewState.resolution,
     })) {
