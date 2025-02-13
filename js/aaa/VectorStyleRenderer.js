@@ -287,7 +287,7 @@ class VectorStyleRenderer {
       const properties = feature.getPropertiesInternal();
       const geometryType = feature.getGeometry().getType();
     
-      if (this.evaluators_.featureFiltersEvaluator({ properties, geometryType })) {
+      if (this.evaluators_.featureFilters({ properties, geometryType })) {
         switch (geometryType) {
           case 'MultiPolygon':
           case 'Polygon':
