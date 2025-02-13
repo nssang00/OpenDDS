@@ -327,8 +327,8 @@ class MapLayerBuilder {
                     'double-line-color': this.toRGBAArray(symbolizer.Color),//Color
                     'double-line-width': Number(symbolizer.Width),//Width
                     'double-line-type': Number(symbolizer.Type),//Type
-                    'double-line-space': Number(symbolizer.Space),//Space
-                    'double-line-line-join': lineJoins[Number(symbolizer.JoinType)],//JoinType, 0:miter, 1:bevel, 2:round
+                    'double-line-space': Number(symbolizer.Space ?? 0),//Space
+                    'double-line-line-join': lineJoins[Number(symbolizer.JoinType ?? 0)],//JoinType, 0:miter, 1:bevel, 2:round
                 },  
             };
             break;
