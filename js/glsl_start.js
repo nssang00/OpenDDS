@@ -1,3 +1,29 @@
+///////center image처리
+vec4 sampleStrokePattern(
+  sampler2D texture, 
+  vec2 textureSize, 
+  vec2 textureOffset, 
+  vec2 sampleSize, 
+  float spacingPx, 
+  float startOffsetPx, 
+  float currentLengthPx, 
+  float currentRadiusRatio, 
+  float lineWidth
+) {
+  float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
+  float spacingScaled = spacingPx * (sampleSize.y / lineWidth);
+  // Subtract half the image width from startOffsetPx to center it
+  float uCoordPx = mod(currentLengthScaled + startOffsetPx - sampleSize.x * 0.5, spacingScaled);
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+  float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
+  if (uCoordPx > sampleSize.x - 1.0) {
+    return vec4(0.0);
+  }
+  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+  return samplePremultiplied(texture, texCoord);
+}
+
+
 vec4 sampleStrokePattern(
   sampler2D texture, 
   vec2 textureSize, 
