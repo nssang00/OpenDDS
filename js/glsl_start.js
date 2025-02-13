@@ -1,12 +1,13 @@
 //간격이 좁은 문제
 float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
 float spacingScaled = spacingPx * (sampleSize.y / lineWidth);
-float uCoordPx = mod(currentLengthScaled + startOffsetPx, spacingScaled);
-uCoordPx = clamp(uCoordPx, 0.0, sampleSize.x - 1.0);
-if (uCoordPx >= sampleSize.x - 1.0) {
+float uCoordPx = mod(currentLengthScaled - startOffsetPx, spacingScaled) + startOffsetPx;
+if (uCoordPx > spacingScaled - 1.0) {
   return vec4(0.0);
 }
-float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;  
+
+uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
 vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
 return samplePremultiplied(texture, texCoord);
 
