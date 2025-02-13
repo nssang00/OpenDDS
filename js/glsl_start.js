@@ -1,15 +1,65 @@
-//간격이 좁은 문제
-float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
-float spacingScaled = spacingPx * (sampleSize.y / lineWidth);
-float uCoordPx = mod(currentLengthScaled - startOffsetPx, spacingScaled) + startOffsetPx;
-if (uCoordPx > spacingScaled - 1.0) {
-  return vec4(0.0);
-}
+//deepseek
+vec4 sampleStrokePattern(
+  sampler2D texture, 
+  vec2 textureSize, 
+  vec2 textureOffset, 
+  vec2 sampleSize, 
+  float spacingPx, 
+  float startOffsetPx, 
+  float currentLengthPx, 
+  float currentRadiusRatio, 
+  float lineWidth
+) {
+  // Scale all length-related values by the same factor
+  float scaleFactor = sampleSize.y / lineWidth;
+  float currentLengthScaled = currentLengthPx * scaleFactor;
+  float spacingScaled = spacingPx * scaleFactor;
+  float startOffsetScaled = startOffsetPx * scaleFactor; // Fix: Scale the start offset
 
-uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
-float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
-vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
-return samplePremultiplied(texture, texCoord);
+  // Apply scaled offset to the mod calculation
+  float uCoordPx = mod(
+    currentLengthScaled + (sampleSize.x * 0.5 - startOffsetScaled), // Fixed: use scaled offset
+    spacingScaled
+  );
+  
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+  if (uCoordPx > sampleSize.x - 1.0) {
+    return vec4(0.0);
+  }
+  
+  float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;  
+  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+  return samplePremultiplied(texture, texCoord);
+}
+////chatgpt
+vec4 sampleStrokePattern(
+  sampler2D texture, 
+  vec2 textureSize, 
+  vec2 textureOffset, 
+  vec2 sampleSize, 
+  float spacingPx, 
+  float startOffsetPx, 
+  float currentLengthPx, 
+  float currentRadiusRatio, 
+  float lineWidth
+) {
+  float scaleFactor = sampleSize.y / lineWidth;
+  float currentLengthScaled = currentLengthPx * scaleFactor;
+  float spacingScaled = spacingPx * scaleFactor;
+  float startOffsetScaled = startOffsetPx * scaleFactor;
+
+  // startOffsetPx 적용 방식 변경
+  float uCoordPx = mod(currentLengthScaled - startOffsetScaled, spacingScaled) + (sampleSize.x * 0.5);
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+
+  if (uCoordPx > sampleSize.x - 1.0) {
+    return vec4(0.0);
+  }
+
+  float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;  
+  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
+  return samplePremultiplied(texture, texCoord);
+}
 
 ///////center image처리
 vec4 sampleStrokePattern(
