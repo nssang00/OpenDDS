@@ -14,6 +14,7 @@ vec4 sampleStrokePattern(
   float spacingScaled = spacingPx * sampleSize.y / lineWidth;
   float startOffsetScaled = startOffsetPx * sampleSize.y / lineWidth;
   float uCoordPx = mod(currentLengthScaled + (sampleSize.x * 0.5 - startOffsetPx * sampleSize.y / lineWidth), spacingScaled);
+  // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
   uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
   if (uCoordPx > sampleSize.x - 1.0) {
     return vec4(0.0);
