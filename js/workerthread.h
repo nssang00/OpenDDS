@@ -1,35 +1,33 @@
-
-class MyClass {
-public:
-    void DoSomethingAsync() {
-        CefPostTask(TID_UI, [this]() {  // this 포인터 캡처
-            ProcessResult();
-        });
-    }
-
-    void ProcessResult() {
-        printf("ProcessResult() called in UI thread!\n");
-    }
-};
-
-///////
 void CMyDialog::OnTimer(UINT_PTR nIDEvent)
 {
+    CefPostTask(TID_UI, [this]() {  // this 포인터 캡처
+        ProcessResult();
+    });
 
-        std::async(std::launch::async, [this]() {
-            std::this_thread::sleep_for(std::chrono::seconds(2)); // 2초 대기
-            m_Result = 42; // 결과 설정
+    std::async(std::launch::async, [this]() {
+        std::this_thread::sleep_for(std::chrono::seconds(2)); // 2초 대기
+        m_Result = 42; // 결과 설정
 
-            // UI 업데이트는 반드시 메인 스레드에서 수행해야 함
-            if (this->GetSafeHwnd()) {
-                this->PostMessage(WM_USER + 1); // 사용자 정의 메시지 전송
-            }
-        });
+        // UI 업데이트는 반드시 메인 스레드에서 수행해야 함
+        if (this->GetSafeHwnd()) {
+            this->PostMessage(WM_USER + 1); // 사용자 정의 메시지 전송
+        }
+    });
+/////
+    std::future<int> future = std::async(std::launch::async, []() {
+        Sleep(2000); // 2초 동안 블로킹 작업 (예제)
+        return 42;   // 결과 반환
+    });
+
+    // 백그라운드 작업 완료 후 UI 스레드로 결과 전달
+    std::thread([this, future = std::move(future)]() mutable {
+        int result = future.get(); // 결과 대기
+        PostMessage(WM_TASK_COMPLETE, result, 0); // UI 스레드로 결과 전달
+    }).detach();
+    //////
     
-
     CDialogEx::OnTimer(nIDEvent);
 }
-
 ///////////
 #define WM_WORKER_TASK (WM_USER + 1)  // 사용자 정의 메시지
 
@@ -110,36 +108,3 @@ public:
 BEGIN_MESSAGE_MAP(CWorkerThreadDlg, CDialogEx)
     ON_WM_TIMER()
 END_MESSAGE_MAP()
-
-
-///////
-class CMyDialog : public CDialogEx {
-public:
-    enum { WM_TASK_COMPLETE = WM_USER + 1 }; // 사용자 정의 메시지
-    afx_msg LRESULT OnTaskComplete(WPARAM wParam, LPARAM lParam);
-    
-    void OnTimer(UINT_PTR nIDEvent) override;
-    DECLARE_MESSAGE_MAP()
-};
-
-BEGIN_MESSAGE_MAP(CMyDialog, CDialogEx)
-    ON_MESSAGE(WM_TASK_COMPLETE, &CMyDialog::OnTaskComplete)
-    ON_WM_TIMER()
-END_MESSAGE_MAP()
-
-void CMyDialog::OnTimer(UINT_PTR nIDEvent) {
-    if (nIDEvent == 1) {
-        // 백그라운드에서 실행할 비동기 작업
-        std::future<int> future = std::async(std::launch::async, []() {
-            Sleep(2000); // 2초 동안 블로킹 작업 (예제)
-            return 42;   // 결과 반환
-        });
-
-        // 백그라운드 작업 완료 후 UI 스레드로 결과 전달
-        std::thread([this, future = std::move(future)]() mutable {
-            int result = future.get(); // 결과 대기
-            PostMessage(WM_TASK_COMPLETE, result, 0); // UI 스레드로 결과 전달
-        }).detach();
-    }
-}
-
