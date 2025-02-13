@@ -969,10 +969,10 @@ export function parseLiteralStyle(style) {
     const { featureFilters, contextFilters } = splitFilters(style.filter);
 
     const parsingContext = newParsingContext();
-    evaluators.featureFiltersEvaluator =
+    evaluators.featureFilters =
       featureFilters.length > 0 ? buildCpuExpression(featureFilters, BooleanType, parsingContext)
         : (parsingContext) => true;  
-    evaluators.contextfiltersEvaluator =
+    evaluators.contextfilters =
       contextFilters.length > 0 ? buildCpuExpression(contextFilters, BooleanType, parsingContext)
         : (parsingContext) => true;     
   }
