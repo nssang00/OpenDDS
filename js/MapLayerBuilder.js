@@ -277,7 +277,7 @@ class MapLayerBuilder {
                     'stroke-color': this.toRGBAArray(symbolizer.Color),//Color
                     'stroke-width': symbolizer.Width,//Width
                     'stroke-line-join': lineJoins[Number(symbolizer.JoinType)],//JoinType
-                    'stroke-line-cap': lineCaps[Number(symbolizer.StartCap)],//DashCap
+                    'stroke-line-cap': lineCaps[Number(symbolizer.DashCap)],//DashCap
                     'stroke-line-dash-offset': Number(symbolizer.DashOffset),//DashOffset
                     'stroke-line-dash': symbolizer.Dash.map(Number),//Dash, DashItem
                 }
