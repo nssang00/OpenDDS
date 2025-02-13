@@ -12,13 +12,12 @@ vec4 sampleStrokePattern(
 ) {
   float currentLengthScaled = currentLengthPx * (sampleSize.y / lineWidth);
   float spacingScaled = spacingPx * (sampleSize.y / lineWidth);
-  // Subtract half the image width from startOffsetPx to center it
-  float uCoordPx = mod(currentLengthScaled + startOffsetPx - sampleSize.x * 0.5, spacingScaled);
+  float uCoordPx = mod(currentLengthScaled + (sampleSize.x * 0.5 - startOffsetPx), spacingScaled);
   uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
-  float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
   if (uCoordPx > sampleSize.x - 1.0) {
     return vec4(0.0);
   }
+  float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;  
   vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
   return samplePremultiplied(texture, texCoord);
 }
