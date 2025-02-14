@@ -170,11 +170,13 @@ class MapLayerBuilder {
             if (child.children.length > 0) {
                 children.push(this.parseLayerNode(child));
             } else {
-                const childObj = {};
+                //kmg 2025.02.14
+                const childObj = {type: child.tagName};
                 for (const attr of child.attributes) {
                     childObj[attr.name] = attr.value;
                 }
-                nodeObj[child.tagName] = childObj;
+                //nodeObj[child.tagName] = childObj;
+                children.push(childObj);
             }
         }
 
