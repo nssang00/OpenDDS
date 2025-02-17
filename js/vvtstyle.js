@@ -1,5 +1,38 @@
 parseLayerNode(node) {
     const nodeObj = { type: node.tagName };
+
+    // 속성 처리
+    for (const attr of node.attributes) {
+        nodeObj[attr.name] = attr.value;
+    }
+
+    // 자식 노드 속성 객체 생성 함수
+    const getAttributes = (el) => Object.fromEntries([...el.attributes].map(attr => [attr.name, attr.value]));
+
+    const children = Array.from(node.children).map(child => {
+        if (child.children.length > 0) {
+            return this.parseLayerNode(child);
+        }
+        const childObj = getAttributes(child);
+
+        if (node.tagName === "Feature") {
+            nodeObj[child.tagName] = childObj;
+            return nodeObj; // Feature 노드는 단일 객체 반환
+        }
+        return childObj;
+    });
+
+    if (children.length > 0) {
+        nodeObj[node.tagName === "Layer" ? "features" : "layers"] = children;
+    }
+
+    return nodeObj;
+}
+
+
+
+parseLayerNode(node) {
+    const nodeObj = { type: node.tagName };
     for (const attr of node.attributes) {
         nodeObj[attr.name] = attr.value;
     }
