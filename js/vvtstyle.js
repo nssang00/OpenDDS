@@ -1,4 +1,31 @@
 parseLayerNode(node) {
+    const getAttributes = (el) =>
+        Object.fromEntries([...el.attributes].map(attr => [attr.name, attr.value]));
+
+    const nodeObj = { type: node.tagName, ...getAttributes(node) };
+
+    const children = Array.from(node.children).map(child => {
+        if (child.children.length > 0) {
+            return this.parseLayerNode(child);
+        }
+        const childObj = getAttributes(child);
+
+        if (node.tagName === "Feature") {
+            nodeObj[child.tagName] = childObj;
+            return nodeObj;
+        }
+        return childObj;
+    });
+
+    if (children.length > 0) {
+        nodeObj[node.tagName === "Layer" ? "features" : "layers"] = children;
+    }
+
+    return nodeObj;
+}
+
+////
+parseLayerNode(node) {
     const nodeObj = { type: node.tagName };
 
     // 속성 처리
