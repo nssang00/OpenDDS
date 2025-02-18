@@ -167,16 +167,16 @@ class MapLayerBuilder {
 
         let children = [];
         for (let child of node.children) {
-            if (child.children.length > 0) {
+            if(['Layer', 'Feature'].includes(child.tagName)) {
                 children.push(this.parseLayerNode(child));
             } else {
-                //kmg 2025.02.14
-                const childObj = {type: child.tagName};
-                for (const attr of child.attributes) {
-                    childObj[attr.name] = attr.value;
+                if (child.children.length === 0) {
+                    const childObj = {};
+                    for (const attr of child.attributes) {
+                        childObj[attr.name] = attr.value;
+                    }
+                    nodeObj[child.tagName] = childObj;
                 }
-                //nodeObj[child.tagName] = childObj;
-                children.push(childObj);
             }
         }
 
@@ -488,7 +488,7 @@ class MapLayerBuilder {
                 .replace(/&lt;/g, '<')
                 .replace(/&gt;/g, '>')
                 .replace(/<>/g, '!')
-                .match(/([<>=!]+)?([\w+,]+)/);
+                .match(/([<>=!]+)?([\w\uAC00-\uD7A3/,]+)/);
 
             if (valuesPart.includes(',')) {
                 const values = valuesPart.split(',').map(value => isNaN(Number(value)) ? value : Number(value));
