@@ -14,15 +14,13 @@ void CreateEMFWithD2D1() {
     Ellipse(hEmfDC, 50, 50, 150, 150);
     DeleteObject(hRedPen);
 
-    // 3. 메모리 DC 및 임시 버퍼 생성
+    // 3. 메모리 버퍼 생성 및 EMF 내용 복사
     HDC memDC = CreateCompatibleDC(hEmfDC);
     HBITMAP hBitmap = CreateCompatibleBitmap(hEmfDC, 400, 300);
     SelectObject(memDC, hBitmap);
-    
-    // 4. EMF DC의 내용을 임시 버퍼로 복사
-    BitBlt(memDC, 0, 0, 400, 300, hEmfDC, 0, 0, SRCCOPY);
+    BitBlt(memDC, 0, 0, 400, 300, hEmfDC, 0, 0, SRCCOPY); // EMF 내용 복사
 
-    // 5. Direct2D 초기화
+    // 4. Direct2D 초기화
     ID2D1Factory* pD2DFactory = nullptr;
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &pD2DFactory);
 
@@ -34,7 +32,7 @@ void CreateEMFWithD2D1() {
     ID2D1DCRenderTarget* pDCRT = nullptr;
     pD2DFactory->CreateDCRenderTarget(&props, &pDCRT);
 
-    // 6. DirectWrite 초기화
+    // 5. DirectWrite 초기화
     IDWriteFactory* pDWriteFactory = nullptr;
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&pDWriteFactory);
 
@@ -45,58 +43,52 @@ void CreateEMFWithD2D1() {
         24.0f, L"en-us", &pTextFormat
     );
 
-    // 7. Direct2D 텍스트 그리기 (흰색 배경)
+    // 6. Direct2D 텍스트 그리기 (기존 내용 유지)
     RECT rect = { 0, 0, 400, 300 };
     pDCRT->BindDC(memDC, &rect);
     pDCRT->BeginDraw();
     
-    // 흰색 배경 채우기
-    ID2D1SolidColorBrush* pWhiteBrush = nullptr;
-    pDCRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f), &pWhiteBrush);
-    pDCRT->FillRectangle(D2D1::RectF(0, 0, 400, 300), pWhiteBrush);
-    
-    // 검은색 텍스트 그리기
-    ID2D1SolidColorBrush* pBlackBrush = nullptr;
-    pDCRT->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1.0f), &pBlackBrush);
+    // 기존 내용 유지한 상태로 텍스트만 추가
+    ID2D1SolidColorBrush* pBrush = nullptr;
+    pDCRT->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1.0f), &pBrush);
     pDCRT->DrawText(
         L"Transparent Text", wcslen(L"Transparent Text"),
         pTextFormat, D2D1::RectF(100, 100, 400, 300),
-        pBlackBrush
+        pBrush
     );
     pDCRT->EndDraw();
 
-    // 8. 마스크 생성
+    // 7. 개선된 마스킹 처리
     HDC maskDC = CreateCompatibleDC(hEmfDC);
     HBITMAP hMaskBmp = CreateBitmap(400, 300, 1, 1, NULL);
     SelectObject(maskDC, hMaskBmp);
-    
-    // 마스크 생성 (흰색 배경, 검은색 텍스트)
-    SetBkColor(memDC, RGB(255, 255, 255));
+
+    // 마스크 생성 (텍스트 영역: 0, 배경: 1)
+    SetBkColor(memDC, RGB(0, 0, 0)); // 텍스트 색상을 배경으로 설정
     BitBlt(maskDC, 0, 0, 400, 300, memDC, 0, 0, SRCCOPY);
-
-    // 9. 3단계 합성
-    // 1단계: 원본 EMF 내용과 텍스트 OR 연산
-    BitBlt(memDC, 0, 0, 400, 300, hEmfDC, 0, 0, SRCPAINT);
     
-    // 2단계: 마스크로 배경 제거
-    BitBlt(memDC, 0, 0, 400, 300, maskDC, 0, 0, SRCAND);
-    
-    // 3단계: 최종 결과 복사
-    BitBlt(hEmfDC, 0, 0, 400, 300, memDC, 0, 0, SRCCOPY);
+    // 마스크 반전 (텍스트 영역: 1, 배경: 0)
+    BitBlt(maskDC, 0, 0, 400, 300, maskDC, 0, 0, NOTSRCCOPY);
 
-    // 10. 리소스 정리
+    // 8. 3단계 합성
+    // 1단계: 원본 도형 보존 (SRCAND)
+    BitBlt(hEmfDC, 0, 0, 400, 300, maskDC, 0, 0, SRCAND);
+    
+    // 2단계: 텍스트 추가 (SRCPAINT)
+    BitBlt(hEmfDC, 0, 0, 400, 300, memDC, 0, 0, SRCPAINT);
+
+    // 9. 리소스 정리
     DeleteDC(maskDC);
     DeleteObject(hMaskBmp);
     DeleteDC(memDC);
     DeleteObject(hBitmap);
-    pWhiteBrush->Release();
-    pBlackBrush->Release();
+    pBrush->Release();
     pTextFormat->Release();
     pDWriteFactory->Release();
     pDCRT->Release();
     pD2DFactory->Release();
 
-    // 11. EMF 저장
+    // 10. EMF 저장
     HENHMETAFILE hemf = CloseEnhMetaFile(hEmfDC);
     CopyEnhMetaFile(hemf, L"output.emf");
     DeleteEnhMetaFile(hemf);
