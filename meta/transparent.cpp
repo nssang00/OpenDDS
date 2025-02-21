@@ -8,7 +8,7 @@ void CreateEMFWithD2D1() {
     // 1. EMF DC 생성
     HDC hEmfDC = CreateEnhMetaFile(NULL, L"output.emf", NULL, NULL);
 
-    // 2. GDI 빨간색 원 그리기
+    // 2. GDI로 빨간색 원 그리기
     HPEN hRedPen = CreatePen(PS_SOLID, 3, RGB(255, 0, 0));
     SelectObject(hEmfDC, hRedPen);
     Ellipse(hEmfDC, 50, 50, 150, 150);
@@ -19,8 +19,8 @@ void CreateEMFWithD2D1() {
     HBITMAP hBitmap = CreateCompatibleBitmap(hEmfDC, 400, 300);
     SelectObject(hMemDC, hBitmap);
 
-    // 4. 배경을 특정 색상(예: Magenta)으로 초기화
-    HBRUSH hBrush = CreateSolidBrush(RGB(255, 0, 255));
+    // 4. 배경을 초록색(RGB(0, 255, 0))으로 채우기 (마스크용)
+    HBRUSH hBrush = CreateSolidBrush(RGB(0, 255, 0));
     RECT rect = { 0, 0, 400, 300 };
     FillRect(hMemDC, &rect, hBrush);
     DeleteObject(hBrush);
@@ -66,18 +66,26 @@ void CreateEMFWithD2D1() {
     pDCRT->Release();
     pD2DFactory->Release();
 
-    // 7. 마스크 DC 생성 및 특정 색상 제거
+    // 7. 마스크 DC 생성 및 초록색 배경 제거
     HDC hMaskDC = CreateCompatibleDC(hEmfDC);
-    HBITMAP hMaskBitmap = CreateBitmap(400, 300, 1, 1, NULL);
+    HBITMAP hMaskBitmap = CreateCompatibleBitmap(hEmfDC, 400, 300);
     SelectObject(hMaskDC, hMaskBitmap);
 
-    // 특정 색상(RGB(255, 0, 255))을 마스크로 변환
-    SetBkColor(hMemDC, RGB(255, 0, 255));
+    // 초록색을 마스크로 변환
+    SetBkColor(hMemDC, RGB(0, 255, 0));
     BitBlt(hMaskDC, 0, 0, 400, 300, hMemDC, 0, 0, SRCCOPY);
-    
+
+    // 마스크 확인용 디버깅 코드
+    COLORREF testColor = GetPixel(hMaskDC, 150, 150);  // 중앙 픽셀 값 확인
+    if (testColor == RGB(0, 255, 0)) {
+        MessageBox(NULL, L"마스크 생성 실패 (배경색 감지됨)", L"디버깅", MB_OK);
+    } else {
+        MessageBox(NULL, L"마스크 생성 성공", L"디버깅", MB_OK);
+    }
+
     // 8. 배경을 투명하게 처리하여 EMF에 적용
-    BitBlt(hEmfDC, 0, 0, 400, 300, hMaskDC, 0, 0, SRCAND);
-    BitBlt(hEmfDC, 0, 0, 400, 300, hMemDC, 0, 0, SRCPAINT);
+    BitBlt(hEmfDC, 0, 0, 400, 300, hMaskDC, 0, 0, SRCAND);  // 배경 제거
+    BitBlt(hEmfDC, 0, 0, 400, 300, hMemDC, 0, 0, SRCPAINT); // 텍스트 유지
 
     // 9. 정리 및 EMF 저장
     DeleteDC(hMaskDC);
