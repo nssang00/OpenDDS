@@ -8,36 +8,31 @@ void CreateEMFWithD2D1() {
     // 1. EMF DC 생성
     HDC hEmfDC = CreateEnhMetaFile(NULL, L"output.emf", NULL, NULL);
 
-    // 2. GDI로 빨간색 원 그리기
+    // 2. GDI 크로마키 색상(녹색)으로 배경 채우기
+    HBRUSH hBrush = CreateSolidBrush(RGB(0, 255, 0));  // 크로마키 색상
+    RECT bgRect = { 0, 0, 400, 300 };
+    FillRect(hEmfDC, &bgRect, hBrush);
+    DeleteObject(hBrush);
+
+    // 3. GDI 빨간색 원 그리기
     HPEN hRedPen = CreatePen(PS_SOLID, 3, RGB(255, 0, 0));
     SelectObject(hEmfDC, hRedPen);
     Ellipse(hEmfDC, 50, 50, 150, 150);
     DeleteObject(hRedPen);
 
-    // 3. 메모리 DC 생성
-    HDC hMemDC = CreateCompatibleDC(hEmfDC);
-    HBITMAP hBitmap = CreateCompatibleBitmap(hEmfDC, 400, 300);
-    SelectObject(hMemDC, hBitmap);
-
-    // 4. 배경을 초록색(RGB(0, 255, 0))으로 채우기 (마스크용)
-    HBRUSH hBrush = CreateSolidBrush(RGB(0, 255, 0));
-    RECT rect = { 0, 0, 400, 300 };
-    FillRect(hMemDC, &rect, hBrush);
-    DeleteObject(hBrush);
-
-    // 5. Direct2D 초기화
+    // 4. Direct2D 초기화
     ID2D1Factory* pD2DFactory = nullptr;
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &pD2DFactory);
 
     D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_DEFAULT,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
     );
 
     ID2D1DCRenderTarget* pDCRT = nullptr;
     pD2DFactory->CreateDCRenderTarget(&props, &pDCRT);
 
-    // 6. DirectWrite 초기화 및 텍스트 그리기
+    // 5. DirectWrite 초기화
     IDWriteFactory* pDWriteFactory = nullptr;
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&pDWriteFactory);
 
@@ -48,11 +43,14 @@ void CreateEMFWithD2D1() {
         24.0f, L"en-us", &pTextFormat
     );
 
-    pDCRT->BindDC(hMemDC, &rect);
+    // 6. Direct2D로 텍스트 그리기 (크로마키 배경 유지)
+    RECT rect = { 100, 100, 400, 300 };
+    pDCRT->BindDC(hEmfDC, &rect);
     pDCRT->BeginDraw();
+    pDCRT->Clear(D2D1::ColorF(0, 1, 0, 1));  // 크로마키 배경색 (녹색)
 
     ID2D1SolidColorBrush* pBrush = nullptr;
-    pDCRT->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1.0f), &pBrush);
+    pDCRT->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &pBrush);
     pDCRT->DrawText(
         L"Transparent Text", wcslen(L"Transparent Text"),
         pTextFormat, D2D1::RectF(100, 100, 400, 300),
@@ -66,41 +64,49 @@ void CreateEMFWithD2D1() {
     pDCRT->Release();
     pD2DFactory->Release();
 
-    // 7. 마스크 DC 생성 및 초록색 배경 제거
-    HDC hMaskDC = CreateCompatibleDC(hEmfDC);
-    HBITMAP hMaskBitmap = CreateCompatibleBitmap(hEmfDC, 400, 300);
-    SelectObject(hMaskDC, hMaskBitmap);
-
-    // 초록색을 마스크로 변환
-    SetBkColor(hMemDC, RGB(0, 255, 0));
-    BitBlt(hMaskDC, 0, 0, 400, 300, hMemDC, 0, 0, SRCCOPY);
-
-    // 마스크 확인용 디버깅 코드
-    COLORREF testColor = GetPixel(hMaskDC, 150, 150);  // 중앙 픽셀 값 확인
-    if (testColor == RGB(0, 255, 0)) {
-        MessageBox(NULL, L"마스크 생성 실패 (배경색 감지됨)", L"디버깅", MB_OK);
-    } else {
-        MessageBox(NULL, L"마스크 생성 성공", L"디버깅", MB_OK);
-    }
-
-    // 8. 배경을 투명하게 처리하여 EMF에 적용
-    BitBlt(hEmfDC, 0, 0, 400, 300, hMaskDC, 0, 0, SRCAND);  // 배경 제거
-    BitBlt(hEmfDC, 0, 0, 400, 300, hMemDC, 0, 0, SRCPAINT); // 텍스트 유지
-
-    // 9. 정리 및 EMF 저장
-    DeleteDC(hMaskDC);
-    DeleteObject(hMaskBitmap);
-    DeleteDC(hMemDC);
-    DeleteObject(hBitmap);
-
+    // 7. EMF 저장
     HENHMETAFILE hemf = CloseEnhMetaFile(hEmfDC);
     CopyEnhMetaFile(hemf, L"output.emf");
     DeleteEnhMetaFile(hemf);
 }
 
+// 크로마키를 적용하여 출력하는 함수
+void DrawEMFWithTransparency(HDC hdcDest, int x, int y) {
+    HENHMETAFILE hemf = GetEnhMetaFile(L"output.emf");
+    if (hemf) {
+        HDC hdcMem = CreateCompatibleDC(hdcDest);
+        HBITMAP hbm = CreateCompatibleBitmap(hdcDest, 400, 300);
+        HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbm);
+
+        RECT rect = { 0, 0, 400, 300 };
+        FillRect(hdcMem, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+        PlayEnhMetaFile(hdcMem, hemf, &rect);
+
+        // 크로마키 색상(RGB 0,255,0) 투명 처리
+        TransparentBlt(hdcDest, x, y, 400, 300, hdcMem, 0, 0, 400, 300, RGB(0, 255, 0));
+
+        SelectObject(hdcMem, hbmOld);
+        DeleteObject(hbm);
+        DeleteDC(hdcMem);
+        DeleteEnhMetaFile(hemf);
+    }
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     CoInitialize(NULL);
     CreateEMFWithD2D1();
+
+    // 윈도우 생성
+    HWND hwnd = CreateWindowEx(0, L"STATIC", L"Transparent EMF Example",
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 500, 400,
+        NULL, NULL, hInstance, NULL);
+
+    HDC hdc = GetDC(hwnd);
+    DrawEMFWithTransparency(hdc, 50, 50);  // (50,50) 위치에 EMF 출력
+    ReleaseDC(hwnd, hdc);
+
+    MessageBox(NULL, L"Press OK to exit.", L"Info", MB_OK);
     CoUninitialize();
     return 0;
 }
