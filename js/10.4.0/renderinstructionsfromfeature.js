@@ -1,9 +1,22 @@
-for (let j = 0, jj = flatCoords.length; j < jj; j += stride) {
-  for (let k = 0; k < stride; k++) {
-    renderInstructions[renderIndex++] = flatCoords[j + k];
-  }
-}
+function pushCustomAttributesInRenderInstructionsFromFeature(
+  renderInstructions,
+  customAttributes,
+  feature,
+  currentIndex,
+) {
+  let shift = 0;
+  for (const key in customAttributes) {
+    const attr = customAttributes[key];
+    const value = attr.callback(feature);
+    const size = attr.size ?? 1;
 
+    for (let i = 0; i < size; i++) {
+      renderInstructions[currentIndex + shift++] = value[i] ?? value;
+    }
+  }
+  return shift;
+}
+//////////
 
 // ... existing code ...
 
