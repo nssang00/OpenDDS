@@ -26,7 +26,7 @@ function pushCustomAttributesInRenderInstructionsFromFeature(
   let shift = 0;
   for (const key in customAttributes) {
     const attr = customAttributes[key];
-    const value = attr.callback.call(null, feature);
+    const value = attr.callback(feature);
     renderInstructions[currentIndex + shift++] = value?.[0] ?? value;
     if (!attr.size || attr.size === 1) {
       continue;
