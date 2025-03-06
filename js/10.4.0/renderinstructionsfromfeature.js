@@ -1,3 +1,10 @@
+for (let j = 0, jj = flatCoords.length; j < jj; j += stride) {
+  for (let k = 0; k < stride; k++) {
+    renderInstructions[renderIndex++] = flatCoords[j + k];
+  }
+}
+
+
 // ... existing code ...
 
 import {transform2D} from '../../geom/flat/transform.js';
@@ -19,7 +26,7 @@ function pushCustomAttributesInRenderInstructionsFromFeature(
   let shift = 0;
   for (const key in customAttributes) {
     const attr = customAttributes[key];
-    const value = attr.callback.call({ feature }, feature);
+    const value = attr.callback.call(null, feature);
     renderInstructions[currentIndex + shift++] = value?.[0] ?? value;
     if (!attr.size || attr.size === 1) {
       continue;
