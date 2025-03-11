@@ -1,27 +1,31 @@
-  //kmg
-  /////////
-  let features = [];
+  let features2 = [];
   for (const featureUid in batch.entries) {
     const batchEntry = batch.entries[featureUid];
-    features.push(batchEntry.feature);
+    features2.push(batchEntry.feature);
   }
+  
   let verticesCount = 0;
   let geometriesCount = 0;
-  for(const feature of features) {
+  let ringsCount = 0;
+  for (const feature of features2) {
     const geometry = feature.getGeometry();
+    const ends = geometry.getEnds();
     verticesCount += geometry.getFlatCoordinates().length / geometry.getStride();
     geometriesCount += geometry.getEnds().length;
+    ringsCount += ends.length;
   }
+  console.log('polygon', features, features2);
 
   const totalInstructionsCount2 =
-    3 * verticesCount +
-    (1 + getCustomAttributesSize(customAttributes)) * geometriesCount;
+    2 * verticesCount +
+    (1 + getCustomAttributesSize(customAttributes)) * geometriesCount +
+    ringsCount;
 
   const flatCoords2 = [];
   let renderIndex2 = 0;
   let renderInstructions2 = new Float32Array(totalInstructionsCount2);
-  console.log('features', features.length)
-  for (const feature of features) {
+
+  for (const feature of features2) {
     const geometry = feature.getGeometry();
     const flatCoordinates = geometry.getFlatCoordinates();
     const stride = geometry.getStride();
@@ -44,7 +48,7 @@
 
       for (const key in customAttributes) {
         const attr = customAttributes[key];
-        const value = attr.callback(feature);
+        const value = attr.callback.call({ref:1}, feature);
         const size = attr.size ?? 1;
 
         for (let j = 0; j < size; j++) {
@@ -52,16 +56,22 @@
         }
       }
 
-      // vertices count
-      renderInstructions2[renderIndex2++] = (end - offset) / stride;
+      const ringsVerticesCount = ends.map((end, ind, arr) =>
+        ind > 0 ? (end - arr[ind - 1]) / stride : end / stride,
+      );
+      // ring count
+      renderInstructions2[renderIndex2++] = ringsVerticesCount.length;
+
+      // vertices count in each ring
+      for (let j = 0, jj = ringsVerticesCount.length; j < jj; j++) {
+        renderInstructions2[renderIndex2++] = ringsVerticesCount[j];
+      }
 
       // looping on points for positions
       for (let j = offset; j < end; j += stride) {
         renderInstructions2[renderIndex2++] = flatCoords2[j]; 
         renderInstructions2[renderIndex2++] = flatCoords2[j + 1];
-        renderInstructions2[renderIndex2++] = stride === 3 ? flatCoords2[j + 2] : 0;
       }
       offset = end;
     }
-    console.log('ggg', feature.id_, totalInstructionsCount2, renderIndex2)
   }
