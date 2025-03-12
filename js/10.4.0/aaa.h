@@ -11,7 +11,7 @@
     const geometry = feature.getGeometry();
     const ends = geometry.getEnds();
     verticesCount += geometry.getFlatCoordinates().length / geometry.getStride();
-    geometriesCount += geometry.getEnds().length;
+    geometriesCount++;
     ringsCount += ends.length;
   }
   console.log('polygon', features, features2);
@@ -42,27 +42,27 @@
       stride,
     );
 
+    for (const key in customAttributes) {
+      const attr = customAttributes[key];
+      const value = attr.callback.call({ref:1}, feature);
+      const size = attr.size ?? 1;
+
+      for (let j = 0; j < size; j++) {
+        renderInstructions2[renderIndex2++] = value[j] ?? value;
+      }
+    }
+
+    const ringsVerticesCount = ends.map((end, ind, arr) =>
+      ind > 0 ? (end - arr[ind - 1]) / stride : end / stride,
+    );
+    // ring count
+    renderInstructions2[renderIndex2++] = ringsVerticesCount.length;
+
     let offset = 0;    
     for(let i = 0, ii = ends.length; i < ii; i++) {
       let end = ends[i];
 
-      for (const key in customAttributes) {
-        const attr = customAttributes[key];
-        const value = attr.callback.call({ref:1}, feature);
-        const size = attr.size ?? 1;
-
-        for (let j = 0; j < size; j++) {
-          renderInstructions2[renderIndex2++] = value[j] ?? value;
-        }
-      }
-
-      const ringsVerticesCount = ends.map((end, ind, arr) =>
-        ind > 0 ? (end - arr[ind - 1]) / stride : end / stride,
-      );
-      // ring count
-      renderInstructions2[renderIndex2++] = ringsVerticesCount.length;
-
-      // vertices count in each ring
+     // vertices count in each ring
       for (let j = 0, jj = ringsVerticesCount.length; j < jj; j++) {
         renderInstructions2[renderIndex2++] = ringsVerticesCount[j];
       }
