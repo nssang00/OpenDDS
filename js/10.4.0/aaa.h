@@ -58,14 +58,14 @@
     // ring count
     renderInstructions2[renderIndex2++] = ringsVerticesCount.length;
 
+    // vertices count in each ring
+    for (let j = 0, jj = ringsVerticesCount.length; j < jj; j++) {
+      renderInstructions2[renderIndex2++] = ringsVerticesCount[j];
+    }
+
     let offset = 0;    
     for(let i = 0, ii = ends.length; i < ii; i++) {
       let end = ends[i];
-
-     // vertices count in each ring
-      for (let j = 0, jj = ringsVerticesCount.length; j < jj; j++) {
-        renderInstructions2[renderIndex2++] = ringsVerticesCount[j];
-      }
 
       // looping on points for positions
       for (let j = offset; j < end; j += stride) {
