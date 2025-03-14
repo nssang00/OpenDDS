@@ -1,21 +1,31 @@
+export function generatePolygonRenderInstructions(
+  batch,
+  renderInstructions,
+  customAttributes,
+  transform,
+  features,//kmg
+) {
   //kmg
+  /*
   let features2 = [];
   for (const featureUid in batch.entries) {
     const batchEntry = batch.entries[featureUid];
     features2.push(batchEntry.feature);
   }
-  
+  */
   let verticesCount = 0;
   let geometriesCount = 0;
   let ringsCount = 0;
-  for (const feature of features2) {
+  for (const feature of features) {
     const geometry = feature.getGeometry();
     const flatCoordinates = geometry.getFlatCoordinates();
     const ends = geometry.getEnds();
 
     verticesCount += flatCoordinates.length / geometry.getStride();
     ringsCount += ends.length;
+
     geometriesCount += inflateEnds(flatCoordinates, ends).length;
+
   }
 
   const totalInstructionsCount2 =
@@ -28,13 +38,14 @@
   let renderInstructions2 = new Float32Array(totalInstructionsCount2);
 
   let refCounter = 0;
-  for (const feature of features2) {
+  for (const feature of features) {
     const geometry = feature.getGeometry();
     const flatCoordinates = geometry.getFlatCoordinates();
     const stride = geometry.getStride();
     const ends = geometry.getEnds();
 
     flatCoords2.length = flatCoordinates.length;
+
     transform2D(
       flatCoordinates,
       0,
@@ -48,9 +59,7 @@
     ++refCounter;
     let offset = 0;
     const multiPolygonEndss = inflateEnds(flatCoordinates, ends);
-    for (let i = 0, ii = multiPolygonEndss.length; i < ii; i++) {
-      let polygonEnds = multiPolygonEndss[i];
-  
+    for (const polygonEnds of multiPolygonEndss) {
 
       for (const key in customAttributes) {
         const attr = customAttributes[key];
@@ -62,38 +71,14 @@
         }
       }
 
-      const ringsVerticesCount = polygonEnds.map((end, ind, arr) =>
-        ind > 0 ? (end - arr[ind - 1]) / stride : end / stride,
-      );
-
-      if(totalInstructionsCount2 === 863)
-        {
-          console.log('polygonEnds', polygonEnds, ends, ringsVerticesCount, offset)
-        }    
-
       // ring count
-      renderInstructions2[renderIndex2++] = ringsVerticesCount.length;
+      renderInstructions2[renderIndex2++] = polygonEnds.length;
 
       // vertices count in each ring
-      /*
-      for (let j = 0, jj = ringsVerticesCount.length; j < jj; j++) {
-        if(totalInstructionsCount2 === 863)
-          {
-        console.log('hhh', ringsVerticesCount[j], offset)
-          }
-        renderInstructions2[renderIndex2++] = ringsVerticesCount[j];
-      }
-        */
-       ///*
-      let prevPolygonEnds = 0;
       for(let j = 0, jj = polygonEnds.length; j < jj; j++) {
-        if(totalInstructionsCount2 === 863)
-          {
-        console.log('hhh2', (polygonEnds[j] - prevPolygonEnds - offset) / stride, polygonEnds[j], offset)
-          }
-        renderInstructions2[renderIndex2++] = (polygonEnds[j] - prevPolygonEnds - offset) / stride;
-        prevPolygonEnds = polygonEnds[j];
-      }//*/
+          renderInstructions2[renderIndex2++] =
+            (polygonEnds[j] - (j === 0 ? 0 : polygonEnds[j - 1]) - offset) / stride;
+      }
   
       for(let j = 0, jj = polygonEnds.length; j < jj; j++) {
         let end = polygonEnds[j];
@@ -103,10 +88,6 @@
           renderInstructions2[renderIndex2++] = flatCoords2[k]; 
           renderInstructions2[renderIndex2++] = flatCoords2[k + 1];
         }
-        if(totalInstructionsCount2 === 863)
-          {
-        console.log('kkk', offset, end)
-          }
         offset = end;
       }
 
