@@ -1,3 +1,4 @@
+  //kmg
   let features2 = [];
   for (const featureUid in batch.entries) {
     const batchEntry = batch.entries[featureUid];
@@ -9,12 +10,13 @@
   let ringsCount = 0;
   for (const feature of features2) {
     const geometry = feature.getGeometry();
+    const flatCoordinates = geometry.getFlatCoordinates();
     const ends = geometry.getEnds();
-    verticesCount += geometry.getFlatCoordinates().length / geometry.getStride();
-    geometriesCount++;
+
+    verticesCount += flatCoordinates.length / geometry.getStride();
     ringsCount += ends.length;
+    geometriesCount += inflateEnds(flatCoordinates, ends).length;
   }
-  console.log('polygon', features, features2);
 
   const totalInstructionsCount2 =
     2 * verticesCount +
@@ -25,6 +27,7 @@
   let renderIndex2 = 0;
   let renderInstructions2 = new Float32Array(totalInstructionsCount2);
 
+  let refCounter = 0;
   for (const feature of features2) {
     const geometry = feature.getGeometry();
     const flatCoordinates = geometry.getFlatCoordinates();
@@ -42,36 +45,70 @@
       stride,
     );
 
-    for (const key in customAttributes) {
-      const attr = customAttributes[key];
-      const value = attr.callback.call({ref:1}, feature);
-      const size = attr.size ?? 1;
+    ++refCounter;
+    let offset = 0;
+    const multiPolygonEndss = inflateEnds(flatCoordinates, ends);
+    for (let i = 0, ii = multiPolygonEndss.length; i < ii; i++) {
+      let polygonEnds = multiPolygonEndss[i];
+  
 
-      for (let j = 0; j < size; j++) {
-        renderInstructions2[renderIndex2++] = value[j] ?? value;
+      for (const key in customAttributes) {
+        const attr = customAttributes[key];
+        const value = attr.callback.call({ref:refCounter}, feature);
+        const size = attr.size ?? 1;
+
+        for (let j = 0; j < size; j++) {
+          renderInstructions2[renderIndex2++] = value[j] ?? value;
+        }
       }
-    }
 
-    const ringsVerticesCount = ends.map((end, ind, arr) =>
-      ind > 0 ? (end - arr[ind - 1]) / stride : end / stride,
-    );
-    // ring count
-    renderInstructions2[renderIndex2++] = ringsVerticesCount.length;
+      const ringsVerticesCount = polygonEnds.map((end, ind, arr) =>
+        ind > 0 ? (end - arr[ind - 1]) / stride : end / stride,
+      );
 
-    // vertices count in each ring
-    for (let j = 0, jj = ringsVerticesCount.length; j < jj; j++) {
-      renderInstructions2[renderIndex2++] = ringsVerticesCount[j];
-    }
+      if(totalInstructionsCount2 === 863)
+        {
+          console.log('polygonEnds', polygonEnds, ends, ringsVerticesCount, offset)
+        }    
 
-    let offset = 0;    
-    for(let i = 0, ii = ends.length; i < ii; i++) {
-      let end = ends[i];
+      // ring count
+      renderInstructions2[renderIndex2++] = ringsVerticesCount.length;
 
-      // looping on points for positions
-      for (let j = offset; j < end; j += stride) {
-        renderInstructions2[renderIndex2++] = flatCoords2[j]; 
-        renderInstructions2[renderIndex2++] = flatCoords2[j + 1];
+      // vertices count in each ring
+      /*
+      for (let j = 0, jj = ringsVerticesCount.length; j < jj; j++) {
+        if(totalInstructionsCount2 === 863)
+          {
+        console.log('hhh', ringsVerticesCount[j], offset)
+          }
+        renderInstructions2[renderIndex2++] = ringsVerticesCount[j];
       }
-      offset = end;
+        */
+       ///*
+      let prevPolygonEnds = 0;
+      for(let j = 0, jj = polygonEnds.length; j < jj; j++) {
+        if(totalInstructionsCount2 === 863)
+          {
+        console.log('hhh2', (polygonEnds[j] - prevPolygonEnds - offset) / stride, polygonEnds[j], offset)
+          }
+        renderInstructions2[renderIndex2++] = (polygonEnds[j] - prevPolygonEnds - offset) / stride;
+        prevPolygonEnds = polygonEnds[j];
+      }//*/
+  
+      for(let j = 0, jj = polygonEnds.length; j < jj; j++) {
+        let end = polygonEnds[j];
+
+        // looping on points for positions
+        for (let k = offset; k < end; k += stride) {
+          renderInstructions2[renderIndex2++] = flatCoords2[k]; 
+          renderInstructions2[renderIndex2++] = flatCoords2[k + 1];
+        }
+        if(totalInstructionsCount2 === 863)
+          {
+        console.log('kkk', offset, end)
+          }
+        offset = end;
+      }
+
     }
   }
