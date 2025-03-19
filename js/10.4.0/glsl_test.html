@@ -1,168 +1,177 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGL GeoJSON Renderer</title>
+    <title>GeoJSON WebGL 렌더링</title>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { width: 100vw; height: 100vh; display: block; }
     </style>
 </head>
 <body>
-    <canvas id="webglCanvas"></canvas>
+    <canvas id="glCanvas"></canvas>
 
-    <script>
-        const canvas = document.getElementById("webglCanvas");
-        const gl = canvas.getContext("webgl");
+<script>
+// WebGL 컨텍스트 초기화
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl');
 
-        // 화면 크기 설정
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-
-        // **Vertex Shader**
-        const vertexShaderSource = `
-            attribute vec2 a_position;
-            attribute vec3 a_color;
-            attribute float a_dashPattern;
-            attribute float a_lineWidth;
-            attribute float a_type; // 0: Point, 1: LineString, 2: Polygon
-
-            varying vec3 v_color;
-            varying float v_dashPattern;
-            varying float v_lineWidth;
-            varying vec2 v_position;
-            varying float v_type;
-
-            void main() {
-                gl_Position = vec4(a_position, 0.0, 1.0);
-                v_position = a_position;
-                v_color = a_color;
-                v_dashPattern = a_dashPattern;
-                v_lineWidth = a_lineWidth;
-                v_type = a_type;
+// GeoJSON 샘플 데이터
+const geoJson = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [0.5, 0.5]
             }
-        `;
-
-        // **Fragment Shader**
-        const fragmentShaderSource = `
-            precision mediump float;
-            varying vec3 v_color;
-            varying float v_dashPattern;
-            varying float v_lineWidth;
-            varying vec2 v_position;
-            varying float v_type;
-
-            void main() {
-                float dashSize = v_dashPattern * 20.0;
-                float distanceAlongLine = mod(v_position.x + v_position.y, dashSize * 2.0);
-
-                if (v_type == 1.0) { // LineString
-                    if (distanceAlongLine > dashSize) discard;
-                }
-
-                gl_FragColor = vec4(v_color, 1.0);
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[0.1, 0.1], [0.9, 0.9]]
             }
-        `;
-
-        // **WebGL 프로그램 생성**
-        function createShader(gl, type, source) {
-            const shader = gl.createShader(type);
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(shader));
-                gl.deleteShader(shader);
-                return null;
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[0.2,0.2], [0.8,0.2], [0.5,0.8], [0.2,0.2]]]
             }
-            return shader;
         }
+    ]
+};
 
-        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+// 쉐이더 초기화 함수
+function initShaders(vertexSrc, fragmentSrc) {
+    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vertexShader, vertexSrc);
+    gl.compileShader(vertexShader);
 
-        const program = gl.createProgram();
-        gl.attachShader(program, vertexShader);
-        gl.attachShader(program, fragmentShader);
-        gl.linkProgram(program);
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            console.error(gl.getProgramInfoLog(program));
-        }
-        gl.useProgram(program);
+    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fragmentShader, fragmentSrc);
+    gl.compileShader(fragmentShader);
 
-        // **GeoJSON 데이터 (Point, LineString, Polygon)**
-        const geojson = [
-            { type: "Point", coordinates: [0.2, 0.2], color: [1, 0, 0], dashPattern: 0.0, lineWidth: 0.02 },
-            { type: "LineString", coordinates: [[-0.8, 0.6], [0.8, -0.6]], color: [0, 1, 0], dashPattern: 0.1, lineWidth: 0.02 },
-            { type: "Polygon", coordinates: [[-0.4, -0.4], [0.4, -0.4], [0.0, 0.4]], color: [0, 0, 1], dashPattern: 0.0, lineWidth: 0.02 }
-        ];
+    const program = gl.createProgram();
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
 
-        function convertGeoJSONToVertices(geojson) {
-            let vertices = [];
-            geojson.forEach(feature => {
-                let type = feature.type === "Point" ? 0.0 : feature.type === "LineString" ? 1.0 : 2.0;
-                let color = feature.color;
-                let dashPattern = feature.dashPattern;
-                let lineWidth = feature.lineWidth;
+    return program;
+}
 
-                if (feature.type === "Point") {
-                    vertices.push(...feature.coordinates, ...color, dashPattern, lineWidth, type);
-                } else if (feature.type === "LineString") {
-                    let coords = feature.coordinates;
-                    for (let i = 0; i < coords.length - 1; i++) {
-                        vertices.push(...coords[i], ...color, dashPattern, lineWidth, type);
-                        vertices.push(...coords[i + 1], ...color, dashPattern, lineWidth, type);
-                    }
-                } else if (feature.type === "Polygon") {
-                    let coords = feature.coordinates;
-                    for (let i = 1; i < coords.length - 1; i++) {
-                        vertices.push(...coords[0], ...color, dashPattern, lineWidth, type);
-                        vertices.push(...coords[i], ...color, dashPattern, lineWidth, type);
-                        vertices.push(...coords[i + 1], ...color, dashPattern, lineWidth, type);
-                    }
-                }
-            });
-            return new Float32Array(vertices);
-        }
+// 쉐이더 소스 코드
+const vertexShaderSource = `
+attribute vec2 aPosition;
+uniform mat3 uTransform;
 
-        const vertices = convertGeoJSONToVertices(geojson);
+void main() {
+    vec3 pos = uTransform * vec3(aPosition, 1.0);
+    gl_Position = vec4(pos.xy, 0.0, 1.0);
+    gl_PointSize = 10.0;
+}
+`;
 
-        // **WebGL 버퍼 설정**
-        const buffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+const fragmentShaderSource = `
+precision mediump float;
+uniform vec4 uColor;
 
-        const positionLocation = gl.getAttribLocation(program, "a_position");
-        const colorLocation = gl.getAttribLocation(program, "a_color");
-        const dashPatternLocation = gl.getAttribLocation(program, "a_dashPattern");
-        const lineWidthLocation = gl.getAttribLocation(program, "a_lineWidth");
-        const typeLocation = gl.getAttribLocation(program, "a_type");
+void main() {
+    gl_FragColor = uColor;
+}
+`;
 
-        const stride = Float32Array.BYTES_PER_ELEMENT * 7;
+// 변환 매트릭스 (정규화 좌표 → WebGL 클립공간)
+const transform = new Float32Array([
+    2, 0, -1,
+    0, 2, -1,
+    0, 0, 1
+]);
 
-        gl.enableVertexAttribArray(positionLocation);
-        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, stride, 0);
+// 스타일 정의
+const styles = {
+    Point: { color: [1, 0, 0, 1] },          // 빨간색 점
+    LineString: { color: [0, 1, 0, 1],       // 초록색 선
+                 lineWidth: 3 },             // 선 두께 3픽셀
+    Polygon: { color: [0, 0, 1, 0.5] }       // 반투명 파란색 폴리곤
+};
 
-        gl.enableVertexAttribArray(colorLocation);
-        gl.vertexAttribPointer(colorLocation, 3, gl.FLOAT, false, stride, 8);
+// WebGL 프로그램 초기화
+const program = initShaders(vertexShaderSource, fragmentShaderSource);
+gl.useProgram(program);
 
-        gl.enableVertexAttribArray(dashPatternLocation);
-        gl.vertexAttribPointer(dashPatternLocation, 1, gl.FLOAT, false, stride, 20);
+// 버퍼 생성 함수
+function createBuffer(data) {
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+    return buffer;
+}
 
-        gl.enableVertexAttribArray(lineWidthLocation);
-        gl.vertexAttribPointer(lineWidthLocation, 1, gl.FLOAT, false, stride, 24);
+// 렌더링 함수
+function renderFeature(feature) {
+    const geom = feature.geometry;
+    const style = styles[geom.type];
+    
+    gl.uniform4fv(gl.getUniformLocation(program, 'uColor'), style.color);
 
-        gl.enableVertexAttribArray(typeLocation);
-        gl.vertexAttribPointer(typeLocation, 1, gl.FLOAT, false, stride, 28);
+    switch(geom.type) {
+        case 'Point':
+            const pointCoords = geom.coordinates;
+            const pointBuffer = createBuffer(pointCoords);
+            gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(0);
+            gl.drawArrays(gl.POINTS, 0, 1);
+            break;
 
-        function render() {
-            gl.clearColor(0, 0, 0, 1);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 7);
-        }
+        case 'LineString':
+            const lineCoords = geom.coordinates.flat();
+            const lineBuffer = createBuffer(lineCoords);
+            gl.bindBuffer(gl.ARRAY_BUFFER, lineBuffer);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(0);
+            gl.lineWidth(style.lineWidth);
+            gl.drawArrays(gl.LINE_STRIP, 0, lineCoords.length/2);
+            break;
 
-        render();
-    </script>
+        case 'Polygon':
+            const polyCoords = geom.coordinates[0].flat();
+            const polyBuffer = createBuffer(polyCoords);
+            gl.bindBuffer(gl.ARRAY_BUFFER, polyBuffer);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(0);
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, polyCoords.length/2);
+            break;
+    }
+}
+
+// 렌더링 준비
+function render() {
+    gl.clearColor(1, 1, 1, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    
+    gl.uniformMatrix3fv(
+        gl.getUniformLocation(program, 'uTransform'),
+        false,
+        transform
+    );
+    
+    geoJson.features.forEach(renderFeature);
+}
+
+// 창 크기 조정 핸들러
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    render();
+}
+
+// 이벤트 리스너 등록
+window.addEventListener('resize', resize);
+resize();
+</script>
 </body>
 </html>
