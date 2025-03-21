@@ -1,1 +1,0 @@
-a_segmentStart (vec2): 선분의 시작점 (world 좌표)a_segmentEnd (vec2): 선분의 끝점 (world 좌표)a_measureStart (float): 선분 시작점의 메트릭 값a_measureEnd (float): 선분 끝점의 메트릭 값a_parameters (float): vertex 번호와 기타 정보가 결합된 값a_distance (float): 선분의 거리 오프셋a_joinAngles (vec2): 시작점과 끝점의 조인 각도a_hitColor (vec4): 히트 디텍션 색상a_prop_class (float): 클래스 속성a_prop_layer (float): 레이어 속성
