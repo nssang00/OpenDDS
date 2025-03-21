@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL 두께 있는 LineString</title>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+        canvas { border: 1px solid white; }
+    </style>
+</head>
+<body>
+    <canvas id="glCanvas" width="500" height="500"></canvas>
+
+    <script>
+        // == 1. WebGL 컨텍스트 생성 ==
+        const canvas = document.getElementById("glCanvas");
+        const gl = canvas.getContext("webgl");
+
+        // == 2. Vertex / Fragment Shader 코드 ==
+        const vsSource = `
+            attribute vec2 a_position;
+            attribute vec2 a_segmentStart;
+            attribute vec2 a_segmentEnd;
+            attribute float a_width;
+            varying vec2 v_segmentStart;
+            varying vec2 v_segmentEnd;
+            varying float v_width;
+            void main() {
+                v_segmentStart = a_segmentStart;
+                v_segmentEnd = a_segmentEnd;
+                v_width = a_width;
+                gl_Position = vec4(a_position, 0.0, 1.0);
+            }
+        `;
+
+        const fsSource = `
+            precision mediump float;
+            varying vec2 v_segmentStart;
+            varying vec2 v_segmentEnd;
+            varying float v_width;
+            void main() {
+                float distance = length(v_segmentStart - v_segmentEnd);
+                float alpha = smoothstep(0.5, -0.5, distance);
+                gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);
+            }
+        `;
+
+        // == 3. Shader 컴파일 ==
+        function compileShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                return null;
+            }
+            return shader;
+        }
+
+        // == 4. WebGL 프로그램 생성 ==
+        const vertexShader = compileShader(gl, vsSource, gl.VERTEX_SHADER);
+        const fragmentShader = compileShader(gl, fsSource, gl.FRAGMENT_SHADER);
+        const shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+        gl.useProgram(shaderProgram);
+
+        // == 5. GeoJSON 데이터 ==
+        const geojson = {
+            type: "FeatureCollection",
+            features: [{
+                type: "Feature",
+                geometry: {
+                    type: "LineString",
+                    coordinates: [[-0.5, -0.5], [0.5, 0.5]]
+                }
+            }]
+        };
+
+        // == 6. LineString을 삼각형으로 변환하는 함수 ==
+        function createLineBuffers(geojson, thickness) {
+            let vertices = [];
+            let indices = [];
+            let indexOffset = 0;
+
+            geojson.features.forEach(feature => {
+                const coords = feature.geometry.coordinates;
+
+                for (let i = 0; i < coords.length - 1; i++) {
+                    const p0 = coords[i];
+                    const p1 = coords[i + 1];
+
+                    // 선 벡터
+                    let dx = p1[0] - p0[0];
+                    let dy = p1[1] - p0[1];
+                    let len = Math.sqrt(dx * dx + dy * dy);
+                    dx /= len;
+                    dy /= len;
+
+                    // 법선 벡터
+                    let nx = -dy * thickness / 2;
+                    let ny = dx * thickness / 2;
+
+                    // 사각형을 구성하는 4개의 꼭짓점
+                    const v0 = [p0[0] - nx, p0[1] - ny, p0[0], p0[1], p1[0], p1[1], thickness];
+                    const v1 = [p0[0] + nx, p0[1] + ny, p0[0], p0[1], p1[0], p1[1], thickness];
+                    const v2 = [p1[0] - nx, p1[1] - ny, p0[0], p0[1], p1[0], p1[1], thickness];
+                    const v3 = [p1[0] + nx, p1[1] + ny, p0[0], p0[1], p1[0], p1[1], thickness];
+
+                    vertices.push(...v0, ...v1, ...v2, ...v3);
+
+                    // 삼각형 2개 (사각형)
+                    indices.push(indexOffset, indexOffset + 1, indexOffset + 2);
+                    indices.push(indexOffset + 1, indexOffset + 3, indexOffset + 2);
+
+                    indexOffset += 4;
+                }
+            });
+
+            return { vertices: new Float32Array(vertices), indices: new Uint16Array(indices) };
+        }
+
+        // == 7. VBO & IBO 설정 ==
+        const { vertices, indices } = createLineBuffers(geojson, 0.1);
+        const vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+        const ibo = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+        // == 8. Shader 속성 연결 ==
+        const a_position = gl.getAttribLocation(shaderProgram, "a_position");
+        gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 7 * 4, 0);
+        gl.enableVertexAttribArray(a_position);
+
+        const a_segmentStart = gl.getAttribLocation(shaderProgram, "a_segmentStart");
+        gl.vertexAttribPointer(a_segmentStart, 2, gl.FLOAT, false, 7 * 4, 2 * 4);
+        gl.enableVertexAttribArray(a_segmentStart);
+
+        const a_segmentEnd = gl.getAttribLocation(shaderProgram, "a_segmentEnd");
+        gl.vertexAttribPointer(a_segmentEnd, 2, gl.FLOAT, false, 7 * 4, 4 * 4);
+        gl.enableVertexAttribArray(a_segmentEnd);
+
+        const a_width = gl.getAttribLocation(shaderProgram, "a_width");
+        gl.vertexAttribPointer(a_width, 1, gl.FLOAT, false, 7 * 4, 6 * 4);
+        gl.enableVertexAttribArray(a_width);
+
+        // == 9. WebGL 렌더링 함수 ==
+        function render() {
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+        }
+
+        render();
+    </script>
+</body>
+</html>
