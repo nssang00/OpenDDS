@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL LineString 렌더링 테스트</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="400" height="400"></canvas>
+    <script>
+        // WebGL 초기화
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl');
+        if (!gl) {
+            alert('WebGL을 지원하지 않는 브라우저입니다.');
+            throw new Error('WebGL not supported');
+        }
+
+        // 버텍스 셰이더
+        const vertexShaderSource = `
+            attribute vec2 a_position;
+            uniform mat4 u_matrix;
+            void main() {
+                gl_Position = u_matrix * vec4(a_position, 0, 1);
+            }
+        `;
+
+        // 프래그먼트 셰이더
+        const fragmentShaderSource = `
+            precision mediump float;
+            uniform vec4 u_color;
+            void main() {
+                gl_FragColor = u_color;
+            }
+        `;
+
+        // 셰이더 생성 함수
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        // 셰이더 프로그램 생성
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Program link error:', gl.getProgramInfoLog(program));
+            return;
+        }
+        gl.useProgram(program);
+
+        // LineString 좌표 (테스트 데이터)
+        const points = [
+            { x: 10.2, y: 1.0 },
+            { x: 10.3, y: 2.0 },
+            { x: 10.4, y: 2.5 }
+        ];
+
+        // 라인 두께
+        const lineWidth = 0.1; // 좌표 단위
+
+        // 버텍스와 인덱스 배열
+        const vertices = [];
+        const indices = [];
+
+        // 사각형 추가 함수 (선분을 두께 있는 삼각형으로 변환)
+        function addQuad(p1, p2, width) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len === 0) return;
+
+            const nx = (dy / len) * (width / 2);
+            const ny = (-dx / len) * (width / 2);
+
+            const v1 = { x: p1.x + nx, y: p1.y + ny };
+            const v2 = { x: p1.x - nx, y: p1.y - ny };
+            const v3 = { x: p2.x + nx, y: p2.y + ny };
+            const v4 = { x: p2.x - nx, y: p2.y - ny };
+
+            const startIndex = vertices.length / 2;
+            vertices.push(v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v4.x, v4.y);
+            indices.push(startIndex, startIndex + 1, startIndex + 2);
+            indices.push(startIndex + 1, startIndex + 2, startIndex + 3);
+        }
+
+        // 선분마다 사각형 생성
+        for (let i = 1; i < points.length; i++) {
+            addQuad(points[i - 1], points[i], lineWidth);
+        }
+
+        // 버퍼 설정
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+        // 속성 설정
+        const aPosition = gl.getAttribLocation(program, 'a_position');
+        gl.enableVertexAttribArray(aPosition);
+        gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+
+        // 정사영 행렬 설정 (좌표를 캔버스에 맞게 스케일링)
+        const uMatrix = gl.getUniformLocation(program, 'u_matrix');
+        const minX = 10.0, maxX = 10.5, minY = 0.5, maxY = 3.0;
+        const scaleX = 2 / (maxX - minX);
+        const scaleY = 2 / (maxY - minY);
+        const translateX = -minX * scaleX - 1;
+        const translateY = -minY * scaleY + 1;
+        const matrix = [
+            scaleX, 0, 0, 0,
+            0, scaleY, 0, 0,
+            0, 0, 1, 0,
+            translateX, translateY, 0, 1
+        ];
+        gl.uniformMatrix4fv(uMatrix, false, matrix);
+
+        // 색상 설정 (빨간색)
+        const uColor = gl.getUniformLocation(program, 'u_color');
+        gl.uniform4fv(uColor, [1, 0, 0, 1]);
+
+        // 렌더링
+        gl.clearColor(0, 0, 0, 1); // 배경을 검정색으로 설정
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+    </script>
+</body>
+</html>
