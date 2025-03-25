@@ -1,4 +1,52 @@
 const worker = new Worker('webglWorker.js');
+////////////////////////
+const path = require('path');
+
+module.exports = {
+  entry: './src/main.js',
+  output: {
+    filename: 'bundle.js',
+    path: path.resolve(__dirname, 'dist'),
+  },
+  module: {
+    rules: [
+      {
+        test: /\.worker\.js$/, // .worker.js 파일에 적용
+        use: {
+          loader: 'worker-loader',
+          options: {
+            inline: 'fallback', // 인라인 처리 + 폴백 제공
+          },
+        },
+      },
+      {
+        test: /\.js$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader',
+          options: {
+            presets: ['@babel/preset-env'],
+          },
+        },
+      },
+    ],
+  },
+  resolve: {
+    extensions: ['.js'],
+  },
+  mode: 'development',
+};
+
+
+
+
+
+
+
+//////////////////////
+
+
+
 
 export function create() {
   const workerScript = `
