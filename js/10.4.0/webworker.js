@@ -1,5 +1,9 @@
 const worker = new Worker('webglWorker.js');
 
+export const create = () => {
+  return new Worker(new URL('./worker/webgl.worker.js', import.meta.url));
+};
+
 ///////////////////////////
 const path = require('path');
 
