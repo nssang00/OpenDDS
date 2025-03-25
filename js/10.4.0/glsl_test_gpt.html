@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Shader Test</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { width: 100vw; height: 100vh; display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="webglCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("webglCanvas");
+        const gl = canvas.getContext("webgl");
+
+        if (!gl) {
+            alert("WebGL을 지원하지 않는 브라우저입니다.");
+        }
+
+        // 버텍스 셰이더 코드 (기존 코드 유지)
+        const vertexShaderSource = `
+            attribute vec2 a_segmentStart;
+            attribute vec2 a_segmentEnd;
+            attribute vec2 a_normalDir;
+            attribute float a_miterLength;
+
+            uniform mat4 u_projectionMatrix;
+            uniform float u_thickness;
+
+            varying vec2 v_segmentStart;
+            varying vec2 v_segmentEnd;
+            varying vec2 v_normalDir;
+            varying float v_miterLength;
+            varying float v_thickness;
+
+            void main() {
+                v_segmentStart = a_segmentStart;
+                v_segmentEnd = a_segmentEnd;
+                v_normalDir = a_normalDir;
+                v_miterLength = a_miterLength;
+                v_thickness = u_thickness;
+
+                vec2 offset = v_normalDir * v_miterLength * u_thickness;
+                gl_Position = u_projectionMatrix * vec4(a_segmentStart + offset, 0.0, 1.0);
+            }
+        `;
+
+        // 프래그먼트 셰이더 코드 (기존 코드 유지)
+        const fragmentShaderSource = `
+            precision mediump float;
+            varying vec2 v_segmentStart;
+            varying vec2 v_segmentEnd;
+            varying vec2 v_normalDir;
+            varying float v_miterLength;
+            varying float v_thickness;
+
+            void main() {
+                gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); // 녹색
+            }
+        `;
+
+        function compileShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error("Shader compile error:", gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+
+            return shader;
+        }
+
+        const vertexShader = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
+        const fragmentShader = compileShader(gl, fragmentShaderSource, gl.FRAGMENT_SHADER);
+
+        const shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            console.error("Shader program link error:", gl.getProgramInfoLog(shaderProgram));
+        }
+
+        gl.useProgram(shaderProgram);
+
+        const lineVertices = new Float32Array([
+            -0.5, -0.5, 0.5, 0.5,  // a_segmentStart, a_segmentEnd
+            0.0, 1.0, 0.0, 1.0     // a_normalDir, a_miterLength
+        ]);
+
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, lineVertices, gl.STATIC_DRAW);
+
+        const a_segmentStart = gl.getAttribLocation(shaderProgram, "a_segmentStart");
+        gl.enableVertexAttribArray(a_segmentStart);
+        gl.vertexAttribPointer(a_segmentStart, 2, gl.FLOAT, false, 16, 0);
+
+        const a_segmentEnd = gl.getAttribLocation(shaderProgram, "a_segmentEnd");
+        gl.enableVertexAttribArray(a_segmentEnd);
+        gl.vertexAttribPointer(a_segmentEnd, 2, gl.FLOAT, false, 16, 8);
+
+        const u_thickness = gl.getUniformLocation(shaderProgram, "u_thickness");
+        gl.uniform1f(u_thickness, 0.05);
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener("resize", resizeCanvas);
+        resizeCanvas();
+
+        function render() {
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.LINES, 0, 2);
+            requestAnimationFrame(render);
+        }
+
+        render();
+    </script>
+</body>
+</html>
