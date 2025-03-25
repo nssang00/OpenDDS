@@ -1,4 +1,34 @@
 const worker = new Worker('webglWorker.js');
+
+///////////////////////////
+const path = require('path');
+
+module.exports = {
+  entry: './src/worker/webgl.worker.js',
+  output: {
+    filename: 'webgl.worker.js',
+    path: path.resolve(__dirname, 'dist'),
+  },
+  module: {
+    rules: [
+      {
+        test: /\.worker\.js$/,
+        use: {
+          loader: 'worker-loader',
+          options: {
+            inline: 'fallback',
+          },
+        },
+      },
+    ],
+  },
+  resolve: {
+    extensions: ['.js'],
+  },
+  mode: 'development',
+};
+
+
 ////////////////////////
 const path = require('path');
 
