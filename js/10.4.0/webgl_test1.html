@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interleaved Buffer를 사용한 선 렌더링</title>
+    <title>두께를 고려한 선 그리기</title>
 </head>
 <body>
     <canvas id="canvas" width="800" height="600"></canvas>
@@ -17,13 +17,9 @@
         const vsSource = `
             precision mediump float;
             attribute vec2 a_position;
-            attribute vec2 a_normal;
-            attribute float a_miter;
             uniform mat4 u_projectionMatrix;
-            uniform float u_thickness;
             void main() {
-                vec2 position = a_position + a_normal * a_miter * u_thickness / 2.0;
-                gl_Position = u_projectionMatrix * vec4(position, 0.0, 1.0);
+                gl_Position = u_projectionMatrix * vec4(a_position, 0.0, 1.0);
             }
         `;
 
@@ -58,46 +54,23 @@
         gl.useProgram(program);
 
         const positionLocation = gl.getAttribLocation(program, 'a_position');
-        const normalLocation = gl.getAttribLocation(program, 'a_normal');
-        const miterLocation = gl.getAttribLocation(program, 'a_miter');
         const projectionLocation = gl.getUniformLocation(program, 'u_projectionMatrix');
-        const thicknessLocation = gl.getUniformLocation(program, 'u_thickness');
 
         const points = [
             [100, 100], [300, 500], [500, 300], [700, 700]
         ];
         const thickness = 5.0;
 
-        function subtract(a, b) {
-            return [a[0] - b[0], a[1] - b[1]];
-        }
-        function add(a, b) {
-            return [a[0] + b[0], a[1] + b[1]];
-        }
-        function scale(v, s) {
-            return [v[0] * s, v[1] * s];
-        }
+        function subtract(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
         function normalize(v) {
             const len = Math.sqrt(v[0] * v[0] + v[1] * v[1]);
-            return [v[0] / len, v[1] / len];
+            return len === 0 ? [0, 0] : [v[0] / len, v[1] / len];
         }
-        function perpendicular(v) {
-            return [-v[1], v[0]];
-        }
-        function dot(a, b) {
-            return a[0] * b[0] + a[1] * b[1];
-        }
+        function perpendicular(v) { return [-v[1], v[0]]; }
+        function scale(v, s) { return [v[0] * s, v[1] * s]; }
+        function add(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
 
-        function computeMiter(prevDir, currDir) {
-            const prevPerp = normalize(perpendicular(prevDir));
-            const currPerp = normalize(perpendicular(currDir));
-            const tangent = normalize(add(prevPerp, currPerp));
-            const miter = perpendicular(tangent);
-            const miterLength = 1.0 / dot(miter, prevPerp);
-            return miterLength;
-        }
-
-        const interleavedData = [];
+        const vertexData = [];
         const indices = [];
         let index = 0;
 
@@ -105,48 +78,32 @@
             const P0 = points[i];
             const P1 = points[i + 1];
             const D = subtract(P1, P0);
-            const D_perp = normalize(perpendicular(D));
+            const N = normalize(perpendicular(D));
+            const offset = scale(N, thickness);
 
-            if (i === 0) {
-                interleavedData.push(P0[0], P0[1], D_perp[0], D_perp[1], 1.0);
-                interleavedData.push(P0[0], P0[1], -D_perp[0], -D_perp[1], 1.0);
-            }
+            const p0_left  = add(P0, offset);
+            const p0_right = subtract(P0, offset);
+            const p1_left  = add(P1, offset);
+            const p1_right = subtract(P1, offset);
 
-            if (i > 0) {
-                const prevD = subtract(P0, points[i - 1]);
-                const miterLength = computeMiter(prevD, D);
-                interleavedData.push(P0[0], P0[1], D_perp[0], D_perp[1], miterLength);
-                interleavedData.push(P0[0], P0[1], -D_perp[0], -D_perp[1], miterLength);
-            }
-
-            interleavedData.push(P1[0], P1[1], D_perp[0], D_perp[1], 1.0);
-            interleavedData.push(P1[0], P1[1], -D_perp[0], -D_perp[1], 1.0);
+            vertexData.push(...p0_left, ...p0_right, ...p1_left, ...p1_right);
 
             indices.push(index, index + 1, index + 2);
             indices.push(index + 1, index + 2, index + 3);
-            index += 2;
+
+            index += 4;
         }
 
-        console.log("Interleaved Data:", interleavedData);
-        console.log("Indices:", indices);
-
-        const interleavedBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, interleavedBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(interleavedData), gl.STATIC_DRAW);
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexData), gl.STATIC_DRAW);
 
         const indexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
 
-        const stride = Float32Array.BYTES_PER_ELEMENT * 5;
         gl.enableVertexAttribArray(positionLocation);
-        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, stride, 0);
-
-        gl.enableVertexAttribArray(normalLocation);
-        gl.vertexAttribPointer(normalLocation, 2, gl.FLOAT, false, stride, 8);
-
-        gl.enableVertexAttribArray(miterLocation);
-        gl.vertexAttribPointer(miterLocation, 1, gl.FLOAT, false, stride, 16);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
         const projectionMatrix = new Float32Array([
             2 / 800, 0, 0, 0,
@@ -157,9 +114,7 @@
 
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
-
         gl.uniformMatrix4fv(projectionLocation, false, projectionMatrix);
-        gl.uniform1f(thicknessLocation, thickness);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
         gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
