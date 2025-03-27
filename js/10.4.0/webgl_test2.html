@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interleaved Buffer 방식으로 일정한 두께의 선 렌더링</title>
+    <title>WebGL Round Join Line Rendering</title>
 </head>
 <body>
     <canvas id="canvas" width="800" height="600"></canvas>
@@ -68,28 +68,20 @@
         }
         function perpendicular(v) { return [-v[1], v[0]]; }
 
-        function computeMiterJoin(P0, P1, P2, thickness) {
-            const D1 = normalize(subtract(P1, P0));
-            const D2 = normalize(subtract(P2, P1));
-
-            const N1 = perpendicular(D1);
-            const N2 = perpendicular(D2);
-            
-            const miter = normalize([N1[0] + N2[0], N1[1] + N2[1]]);
-            const dot = D1[0] * -D2[0] + D1[1] * -D2[1];
-            const miterLength = thickness / Math.max(0.5, dot);
-
-            return (miterLength > thickness * 2) ? null : [miter[0] * miterLength, miter[1] * miterLength];
-        }
-
-        function computeBevelJoin(P1, N1, N2, thickness) {
-            const offset1 = [N1[0] * thickness / 2, N1[1] * thickness / 2];
-            const offset2 = [N2[0] * thickness / 2, N2[1] * thickness / 2];
-
-            return [
-                [P1[0] + offset1[0], P1[1] + offset1[1]],
-                [P1[0] + offset2[0], P1[1] + offset2[1]]
-            ];
+        function computeRoundJoin(P1, N1, N2, thickness, segments = 10) {
+            const verts = [];
+            for (let i = 0; i <= segments; i++) {
+                const t = i / segments;
+                const angle = Math.acos(N1[0] * N2[0] + N1[1] * N2[1]);
+                const rotAngle = angle * t;
+                const cosA = Math.cos(rotAngle), sinA = Math.sin(rotAngle);
+                const rotatedNormal = [
+                    N1[0] * cosA - N1[1] * sinA,
+                    N1[0] * sinA + N1[1] * cosA
+                ];
+                verts.push([P1[0] + rotatedNormal[0] * thickness / 2, P1[1] + rotatedNormal[1] * thickness / 2]);
+            }
+            return verts;
         }
 
         const vertexData = [];
@@ -114,18 +106,16 @@
 
             if (i < points.length - 2) {
                 const P2 = points[i + 2];
-                const miterOffset = computeMiterJoin(P0, P1, P2, thickness);
+                const D2 = normalize(subtract(P2, P1));
+                const N2 = perpendicular(D2);
                 
-                if (miterOffset) {
-                    const P1_Miter = [P1[0] + miterOffset[0], P1[1] + miterOffset[1]];
-                    vertexData.push(...P1_Miter);
-                    indices.push(index - 2, index - 1, index);
+                const roundVerts = computeRoundJoin(P1, D_perp, N2, thickness);
+                const startIndex = index - 2;
+                
+                for (const vert of roundVerts) {
+                    vertexData.push(...vert);
+                    indices.push(startIndex, index - 1, index);
                     index++;
-                } else {
-                    const [P1_Bevel1, P1_Bevel2] = computeBevelJoin(P1, D_perp, normalize(perpendicular(subtract(P2, P1))), thickness);
-                    vertexData.push(...P1_Bevel1, ...P1_Bevel2);
-                    indices.push(index - 2, index - 1, index, index - 1, index + 1, index);
-                    index += 2;
                 }
             }
         }
