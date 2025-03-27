@@ -1,3 +1,89 @@
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+
+uniform mat4 u_projectionMatrix;
+uniform mat4 u_screenToWorldMatrix;
+uniform vec2 u_viewportSizePx;
+uniform float u_pixelRatio;
+uniform float u_globalAlpha;
+uniform float u_time;
+uniform float u_zoom;
+uniform float u_resolution;
+uniform float u_rotation;
+uniform vec4 u_renderExtent;
+uniform vec2 u_patternOrigin;
+uniform float u_depth;
+uniform mediump int u_hitDetection;
+
+const float PI = 3.141592653589793238;
+const float TWO_PI = 2.0 * PI;
+float currentLineMetric = 0.;
+
+uniform vec2 u_texture1269122425_size;
+uniform sampler2D u_texture1269122425;
+uniform sampler2D u_depthMask;
+uniform float u_tileZoomLevel;
+
+// Removed unused attributes
+// attribute vec2 a_segmentStart;
+// attribute vec2 a_segmentEnd;
+// attribute float a_measureStart;
+// attribute float a_measureEnd;
+// attribute float a_parameters;
+// attribute float a_distance;
+// attribute vec2 a_joinAngles;
+// attribute vec4 a_hitColor;
+// attribute float a_prop_layer;
+
+varying vec2 v_segmentStart;
+varying vec2 v_segmentEnd;
+varying float v_angleStart;
+varying float v_angleEnd;
+varying float v_width;
+varying vec4 v_hitColor;
+varying float v_distanceOffsetPx;
+varying float v_measureStart;
+varying float v_measureEnd;
+varying float v_prop_layer;
+
+// New attributes provided from writelinesegmenttobuffers
+attribute vec2 a_positionPx;  // The calculated positionPx
+attribute vec2 a_joinDirection;  // The calculated joinDirection
+attribute vec2 a_segmentStartPx;  // The calculated segmentStartPx
+attribute vec2 a_segmentEndPx;  // The calculated segmentEndPx
+
+vec2 worldToPx(vec2 worldPos) {
+  vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
+  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
+}
+
+vec4 pxToScreen(vec2 pxPos) {
+  vec2 screenPos = 2.0 * pxPos / u_viewportSizePx - 1.0;
+  return vec4(screenPos, u_depth, 1.0);
+}
+
+void main(void) {
+  // Calculate values based on provided data
+  v_segmentStart = a_segmentStartPx;
+  v_segmentEnd = a_segmentEndPx;
+  v_angleStart = 0.0;  // Set default or calculate if needed
+  v_angleEnd = 0.0;    // Set default or calculate if needed
+
+  v_width = 20.0;  // Set default or dynamically calculated line width
+  v_hitColor = vec4(1.0, 1.0, 1.0, 1.0);  // Set default hit color
+  v_distanceOffsetPx = 0.0;  // Set or calculate offset
+  v_measureStart = 0.0;  // Set or calculate
+  v_measureEnd = 0.0;    // Set or calculate
+  v_prop_layer = 0.0;  // Set or calculate
+
+  // Compute current vertex position
+  vec2 positionPx = a_positionPx + a_joinDirection * (v_width * 0.5 + 1.0);  // Apply antialiasing offset
+  gl_Position = pxToScreen(positionPx);
+}
+
 export function writeLineSegmentToBuffers(
   instructions,
   segmentStartIndex,
