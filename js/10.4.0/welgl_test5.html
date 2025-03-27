@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>두께가 일정한 선 렌더링</title>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <script>
+        // 캔버스와 WebGL 컨텍스트 설정
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl');
+        if (!gl) {
+            console.error('WebGL을 지원하지 않습니다.');
+
+        }
+
+        // 버텍스 셰이더: 마이터 조인트를 적용하여 선의 두께를 일정하게 유지
+        const vsSource = `
+            precision mediump float;
+            attribute vec2 a_position;        // 버텍스 위치
+            attribute vec2 a_normal;          // 법선 벡터
+            attribute float a_miter;          // 마이터 오프셋
+            uniform mat4 u_projectionMatrix;  // 투영 행렬
+            uniform float u_thickness;        // 선 두께 (픽셀 단위)
+            void main() {
+                vec2 position = a_position + a_normal * a_miter * u_thickness / 2.0;
+                gl_Position = u_projectionMatrix * vec4(position, 0.0, 1.0);
+            }
+        `;
+
+        // 프래그먼트 셰이더: 흰색 선 렌더링
+        const fsSource = `
+            precision mediump float;
+            void main() {
+                gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // 흰색
+            }
+        `;
+
+        // 셰이더 컴파일 함수
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('셰이더 컴파일 오류:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        // 셰이더 컴파일 및 프로그램 링크
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('프로그램 링크 오류:', gl.getProgramInfoLog(program));
+
+        }
+        gl.useProgram(program);
+
+        // 셰이더 변수 위치 가져오기
+        const positionLocation = gl.getAttribLocation(program, 'a_position');
+        const normalLocation = gl.getAttribLocation(program, 'a_normal');
+        const miterLocation = gl.getAttribLocation(program, 'a_miter');
+        const projectionLocation = gl.getUniformLocation(program, 'u_projectionMatrix');
+        const thicknessLocation = gl.getUniformLocation(program, 'u_thickness');
+
+        // linestring 점 정의 (2D 좌표)
+        const points = [
+            [100, 100], [300, 500], [500, 300], [700, 700]
+        ];
+        const thickness = 5.0; // 선 두께
+
+        // 벡터 연산 함수들
+        function subtract(a, b) {
+            return [a[0] - b[0], a[1] - b[1]];
+        }
+        function add(a, b) {
+            return [a[0] + b[0], a[1] + b[1]];
+        }
+        function scale(v, s) {
+            return [v[0] * s, v[1] * s];
+        }
+        function normalize(v) {
+            const len = Math.sqrt(v[0] * v[0] + v[1] * v[1]);
+            return [v[0] / len, v[1] / len];
+        }
+        function perpendicular(v) {
+            return [-v[1], v[0]]; // 90도 회전
+        }
+        function dot(a, b) {
+            return a[0] * b[0] + a[1] * b[1];
+        }
+
+        // 마이터 오프셋 계산 함수
+        function computeMiter(prevDir, currDir) {
+            const prevPerp = normalize(perpendicular(prevDir));
+            const currPerp = normalize(perpendicular(currDir));
+            const tangent = normalize(add(prevPerp, currPerp));
+            const miter = perpendicular(tangent);
+            const miterLength = 1.0 / dot(miter, prevPerp);
+            return miterLength;
+        }
+
+        // 버텍스와 인덱스 생성
+        const vertices = [];
+        const normals = [];
+        const miters = [];
+        const indices = [];
+        let index = 0;
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const P0 = points[i];
+            const P1 = points[i + 1];
+            const D = subtract(P1, P0); // 방향 벡터
+            const D_perp = normalize(perpendicular(D)); // 수직 벡터
+
+            // 첫 번째 선분의 시작점
+            if (i === 0) {
+                vertices.push(P0[0], P0[1], P0[0], P0[1]);
+                normals.push(D_perp[0], D_perp[1], -D_perp[0], -D_perp[1]);
+                miters.push(1.0, 1.0);
+            }
+
+            // 중간 선분 (마이터 조인트 적용)
+            if (i > 0) {
+                const prevD = subtract(P0, points[i - 1]);
+                const miterLength = computeMiter(prevD, D);
+                vertices.push(P0[0], P0[1], P0[0], P0[1]);
+                normals.push(D_perp[0], D_perp[1], -D_perp[0], -D_perp[1]);
+                miters.push(miterLength, miterLength);
+            }
+
+            // 선분의 끝점
+            vertices.push(P1[0], P1[1], P1[0], P1[1]);
+            normals.push(D_perp[0], D_perp[1], -D_perp[0], -D_perp[1]);
+            miters.push(1.0, 1.0);
+
+            // 인덱스 정의 (삼각형 스트립)
+            indices.push(index, index + 1, index + 2);
+            indices.push(index + 1, index + 2, index + 3);
+            index += 2;
+        }
+
+        // 버퍼 데이터 준비
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+        const normalBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+
+        const miterBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, miterBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(miters), gl.STATIC_DRAW);
+
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+        // 투영 행렬 설정 (0~800, 0~600을 -1~1로 매핑)
+        const projectionMatrix = new Float32Array([
+            2 / 800, 0, 0, 0,
+            0, 2 / 600, 0, 0,
+            0, 0, 1, 0,
+            -1, -1, 0, 1
+        ]);
+
+        // 렌더링 설정 및 그리기
+        gl.clearColor(0, 0, 0, 1); // 배경을 검정색으로
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.uniformMatrix4fv(projectionLocation, false, projectionMatrix);
+        gl.uniform1f(thicknessLocation, thickness);
+
+        gl.enableVertexAttribArray(positionLocation);
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+        gl.enableVertexAttribArray(normalLocation);
+        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+        gl.vertexAttribPointer(normalLocation, 2, gl.FLOAT, false, 0, 0);
+
+        gl.enableVertexAttribArray(miterLocation);
+        gl.bindBuffer(gl.ARRAY_BUFFER, miterBuffer);
+        gl.vertexAttribPointer(miterLocation, 1, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+    </script>
+</body>
+</html>
