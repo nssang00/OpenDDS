@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>두께를 고려한 선 그리기</title>
+    <title>Interleaved Buffer 방식으로 일정한 두께의 선 렌더링</title>
 </head>
 <body>
     <canvas id="canvas" width="800" height="600"></canvas>
@@ -59,11 +59,72 @@
         const points = [
             [100, 100], [300, 500], [500, 300], [700, 700]
         ];
-        const thickness = 5.0;
+        const thickness = 10.0;
 
         function subtract(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
         function normalize(v) {
             const len = Math.sqrt(v[0] * v[0] + v[1] * v[1]);
+            return len === 0 ? [0, 0] : [v[0] / len, v[1] / len];
+        }
+        function perpendicular(v) { return [-v[1], v[0]]; }
+
+        const vertexData = [];
+        const indices = [];
+        let index = 0;
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const P0 = points[i];
+            const P1 = points[i + 1];
+            const D = subtract(P1, P0);
+            const D_perp = normalize(perpendicular(D));
+
+            const offset = [D_perp[0] * thickness / 2, D_perp[1] * thickness / 2];
+
+            // P0에서 네 개의 vertex 생성
+            const P0_TL = [P0[0] + offset[0], P0[1] + offset[1]];
+            const P0_TR = [P0[0] - offset[0], P0[1] - offset[1]];
+            const P1_BL = [P1[0] + offset[0], P1[1] + offset[1]];
+            const P1_BR = [P1[0] - offset[0], P1[1] - offset[1]];
+
+            vertexData.push(...P0_TL);
+            vertexData.push(...P0_TR);
+            vertexData.push(...P1_BL);
+            vertexData.push(...P1_BR);
+
+            // 삼각형 두 개를 만들어 사각형 구성
+            indices.push(index, index + 1, index + 2);
+            indices.push(index + 1, index + 2, index + 3);
+            index += 4;
+        }
+
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexData), gl.STATIC_DRAW);
+
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Projection Matrix
+        const projectionMatrix = new Float32Array([
+            2 / canvas.width, 0, 0, 0,
+            0, -2 / canvas.height, 0, 0,
+            0, 0, 1, 0,
+            -1, 1, 0, 1
+        ]);
+
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.uniformMatrix4fv(projectionLocation, false, projectionMatrix);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+    </script>
+</body>
+</html>            const len = Math.sqrt(v[0] * v[0] + v[1] * v[1]);
             return len === 0 ? [0, 0] : [v[0] / len, v[1] / len];
         }
         function perpendicular(v) { return [-v[1], v[0]]; }
