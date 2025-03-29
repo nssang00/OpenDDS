@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL 두꺼운 LineString (Cap & Join)</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body>
+    <canvas id="glCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("glCanvas");
+        const gl = canvas.getContext("webgl");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        const lineString = [
+            [-0.8, -0.5], [-0.2, 0.5], [0.4, -0.5], [0.8, 0.5]
+        ];
+
+        const thickness = 0.05;
+        const capType = "round";   // "butt", "round", "square"
+        const joinType = "round";  // "miter", "bevel", "round"
+
+        function generateThickLineTriangles(lineString, thickness, capType, joinType) {
+            const vertices = [];
+            const indices = [];
+            let baseIndex = 0;
+
+            function addQuad(p1, p2, normal, thickness) {
+                const halfThick = thickness * 0.5;
+                const offsetX = normal[0] * halfThick;
+                const offsetY = normal[1] * halfThick;
+
+                const p1_left = [p1[0] - offsetX, p1[1] - offsetY];
+                const p1_right = [p1[0] + offsetX, p1[1] + offsetY];
+                const p2_left = [p2[0] - offsetX, p2[1] - offsetY];
+                const p2_right = [p2[0] + offsetX, p2[1] + offsetY];
+
+                vertices.push(...p1_left, ...p1_right, ...p2_left, ...p2_right);
+                indices.push(baseIndex, baseIndex + 1, baseIndex + 2);
+                indices.push(baseIndex + 1, baseIndex + 2, baseIndex + 3);
+
+                baseIndex += 4;
+            }
+
+            function addRoundCap(p, normal, thickness, isStart) {
+                const halfThick = thickness * 0.5;
+                const step = Math.PI / 8;
+                const center = p;
+
+                const startAngle = isStart ? Math.PI : 0;
+                const endAngle = isStart ? 2 * Math.PI : Math.PI;
+
+                for (let angle = startAngle; angle <= endAngle; angle += step) {
+                    const x = center[0] + Math.cos(angle) * halfThick;
+                    const y = center[1] + Math.sin(angle) * halfThick;
+                    vertices.push(...center, x, y);
+                    indices.push(baseIndex, baseIndex + 1, baseIndex + 2);
+                    baseIndex += 2;
+                }
+            }
+
+            function addCap(p, normal, thickness, isStart) {
+                if (capType === "round") addRoundCap(p, normal, thickness, isStart);
+                else if (capType === "square") {
+                    const extension = [p[0] - normal[0] * thickness, p[1] - normal[1] * thickness];
+                    addQuad(extension, p, normal, thickness);
+                }
+            }
+
+            function addJoin(p, prevDir, nextDir, thickness) {
+                const normal1 = [-prevDir[1], prevDir[0]];
+                const normal2 = [-nextDir[1], nextDir[0]];
+                const halfThick = thickness * 0.5;
+
+                if (joinType === "miter") {
+                    const p1 = [p[0] + normal1[0] * halfThick, p[1] + normal1[1] * halfThick];
+                    const p2 = [p[0] + normal2[0] * halfThick, p[1] + normal2[1] * halfThick];
+                    vertices.push(...p1, ...p2);
+                    indices.push(baseIndex, baseIndex + 1);
+                    baseIndex += 2;
+                } else if (joinType === "bevel") {
+                    const mid = [(normal1[0] + normal2[0]) * halfThick, (normal1[1] + normal2[1]) * halfThick];
+                    vertices.push(...p, ...mid);
+                    indices.push(baseIndex, baseIndex + 1);
+                    baseIndex += 2;
+                } else if (joinType === "round") {
+                    addRoundCap(p, normal1, thickness, false);
+                }
+            }
+
+            for (let i = 0; i < lineString.length - 1; i++) {
+                const p1 = lineString[i];
+                const p2 = lineString[i + 1];
+
+                const dx = p2[0] - p1[0];
+                const dy = p2[1] - p1[1];
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const normal = [-dy / length, dx / length];
+
+                if (i === 0) addCap(p1, normal, thickness, true);
+                addQuad(p1, p2, normal, thickness);
+                if (i === lineString.length - 2) addCap(p2, normal, thickness, false);
+                else addJoin(p2, normal, [-dx / length, -dy / length], thickness);
+            }
+
+            return { vertices: new Float32Array(vertices), indices: new Uint16Array(indices) };
+        }
+
+        const { vertices, indices } = generateThickLineTriangles(lineString, thickness, capType, joinType);
+
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+
+        const vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+        const ebo = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(0);
+
+        const vsSource = `
+            attribute vec2 a_position;
+            void main() {
+                gl_Position = vec4(a_position, 0.0, 1.0);
+            }
+        `;
+
+        const fsSource = `
+            precision mediump float;
+            void main() {
+                gl_FragColor = vec4(1.0, 0.5, 0.0, 1.0);
+            }
+        `;
+
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        gl.useProgram(program);
+
+        function render() {
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.bindVertexArray(vao);
+            gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+        }
+
+        gl.clearColor(0, 0, 0, 1);
+        render();
+    </script>
+</body>
+</html>
