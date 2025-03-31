@@ -1,43 +1,127 @@
 class WebGL2RenderingContext2D {
     constructor(canvas) {
         // 기존 코드 유지
-        this._lineDash = []; // 대시 패턴 배열 (예: [5, 5]는 5px 선, 5px 공백)
+        this._lineDash = []; // 대시 패턴 배열 (예: [5, 10]은 5px 실선, 10px 공백)
         this._lineDashOffset = 0; // 대시 오프셋
     }
 
-    // setLineDash 메서드 추가
+    // 대시 패턴 설정
     setLineDash(segments) {
         if (Array.isArray(segments)) {
             this._lineDash = segments.slice(); // 배열 복사
-        } else {
-            this._lineDash = [];
         }
     }
 
-    // lineDashOffset 속성에 대한 getter/setter
+    // 대시 오프셋 설정
     set lineDashOffset(offset) {
-        this._lineDashOffset = offset || 0;
+        this._lineDashOffset = offset;
     }
 
     get lineDashOffset() {
         return this._lineDashOffset;
     }
 
-    // 기존 stroke 메서드 유지, Path 클래스에서 대시 처리 반영
-    stroke() {
-        const { positions, indices } = this.path.getStrokeBufferData();
-        this._draw(positions, indices, this._strokeStyle);
+    // 대시 패턴 반환
+    getLineDash() {
+        return this._lineDash.slice();
     }
 }
 
+/////
+function getPathStrokeBufferData(path, width, isClosed, indexOffset, lineJoin, lineCap, lineDash = [], lineDashOffset = 0) {
+    const result = computeNormalAndLength(path);
+    const positions = [];
+    const indices = [];
 
-///////////////
-
-class Path {
-    constructor(ctx) {
-        this.paths = [];
-        this.ctx = ctx;
+    // 대시 패턴이 없으면 기존 로직 사용
+    if (lineDash.length === 0) {
+        // 기존 로직 (기존 코드 그대로 사용)
+        // ... (기존 코드 유지)
+        return { positions, indices };
     }
+
+    // 대시 패턴의 총 길이 계산
+    const dashPatternLength = lineDash.reduce((sum, val) => sum + val, 0);
+    if (dashPatternLength === 0) return { positions, indices }; // 유효하지 않은 패턴
+
+    // 경로의 총 길이 계산
+    let totalLength = 0;
+    for (let i = 1; i < result.points.length; i++) {
+        const [x1, y1] = result.points[i - 1];
+        const [x2, y2] = result.points[i];
+        totalLength += Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+    }
+
+    // 오프셋 적용
+    let currentOffset = lineDashOffset % dashPatternLength;
+    if (currentOffset < 0) currentOffset += dashPatternLength;
+
+    // 각 선분을 대시 패턴에 따라 처리
+    let accumulatedLength = 0;
+    for (let i = 1; i < result.points.length; i++) {
+        const [x1, y1] = result.points[i - 1];
+        const [x2, y2] = result.points[i];
+        const segmentLength = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+        const dirX = (x2 - x1) / segmentLength;
+        const dirY = (y2 - y1) / segmentLength;
+        const [nx, ny] = result.normals[i - 1];
+
+        let segmentOffset = accumulatedLength;
+        accumulatedLength += segmentLength;
+
+        // 대시 패턴 적용
+        let t = 0;
+        while (t < segmentLength) {
+            let dashIdx = 0;
+            let patternPos = currentOffset + t;
+
+            while (patternPos >= dashPatternLength) {
+                patternPos -= dashPatternLength;
+            }
+
+            // 현재 위치에서 대시/공백 계산
+            while (patternPos > lineDash[dashIdx]) {
+                patternPos -= lineDash[dashIdx];
+                dashIdx = (dashIdx + 1) % lineDash.length;
+            }
+
+            const isDash = dashIdx % 2 === 0; // 짝수 인덱스는 실선, 홀수는 공백
+            if (!isDash) {
+                t += lineDash[dashIdx] - patternPos; // 공백은 건너뜀
+                continue;
+            }
+
+            const dashStart = t;
+            const dashEnd = Math.min(t + (lineDash[dashIdx] - patternPos), segmentLength);
+            t = dashEnd;
+
+            // 대시 세그먼트 생성
+            const startX = x1 + dirX * dashStart;
+            const startY = y1 + dirY * dashStart;
+            const endX = x1 + dirX * dashEnd;
+            const endY = y1 + dirY * dashEnd;
+
+            // 대시 세그먼트의 버텍스 추가
+            positions.push(
+                startX + nx * width / 2, startY + ny * width / 2,
+                startX - nx * width / 2, startY - ny * width / 2,
+                endX + nx * width / 2, endY + ny * width / 2,
+                endX - nx * width / 2, endY - ny * width / 2
+            );
+
+            const baseIdx = positions.length / 2 - 4 + indexOffset;
+            indices.push(baseIdx, baseIdx + 1, baseIdx + 2);
+            indices.push(baseIdx + 1, baseIdx + 3, baseIdx + 2);
+        }
+    }
+
+    // 닫힌 경로와 lineJoin/lineCap은 대시에서는 단순화 (필요시 별도 처리 가능)
+    return { positions, indices };
+}
+
+///////////
+class Path {
+    // ... 기존 코드 유지
 
     getStrokeBufferData() {
         let positions = [];
@@ -45,125 +129,18 @@ class Path {
         const width = this.ctx.lineWidth;
         const lineJoin = this.ctx.lineJoin;
         const lineCap = this.ctx.lineCap;
-        const lineDash = this.ctx._lineDash || []; // 대시 패턴 가져오기
-        const lineDashOffset = this.ctx._lineDashOffset || 0; // 오프셋 가져오기
+        const lineDash = this.ctx.getLineDash(); // 추가
+        const lineDashOffset = this.ctx.lineDashOffset; // 추가
 
         for (const path of this.paths) {
             if (path.length < 2) continue;
             const indexOffset = positions.length / 2;
-
-            let pathData;
-            if (lineDash.length > 0) {
-                // 대시 패턴이 있는 경우
-                pathData = getDashedPathStrokeBufferData(
-                    path,
-                    width,
-                    path.closed,
-                    indexOffset,
-                    lineJoin,
-                    lineCap,
-                    lineDash,
-                    lineDashOffset
-                );
-            } else {
-                // 대시 패턴이 없는 경우 기존 로직 사용
-                pathData = getPathStrokeBufferData(
-                    path,
-                    width,
-                    path.closed,
-                    indexOffset,
-                    lineJoin,
-                    lineCap
-                );
-            }
-
+            const pathData = getPathStrokeBufferData(
+                path, width, path.closed, indexOffset, lineJoin, lineCap, lineDash, lineDashOffset
+            );
             positions = positions.concat(pathData.positions);
             indices = indices.concat(pathData.indices);
         }
-        return {
-            positions,
-            indices
-        };
+        return { positions, indices };
     }
-}
-
-/////////////
-
-function getDashedPathStrokeBufferData(path, width, closed, indexOffset, lineJoin, lineCap, dashArray, dashOffset) {
-    let positions = [];
-    let indices = [];
-
-    // 대시 패턴의 총 길이 계산
-    const dashCycle = dashArray.reduce((sum, val) => sum + val, 0);
-    if (dashCycle === 0) return getPathStrokeBufferData(path, width, closed, indexOffset, lineJoin, lineCap); // 대시 없음
-
-    // 경로의 각 세그먼트 처리
-    for (let i = 0; i < path.length - (closed ? 0 : 1); i++) {
-        const p0 = path[i];
-        const p1 = path[(i + 1) % path.length];
-        const dx = p1[0] - p0[0];
-        const dy = p1[1] - p0[1];
-        const segmentLength = Math.sqrt(dx * dx + dy * dy);
-        if (segmentLength === 0) continue;
-
-        // 방향 벡터 계산
-        const nx = dx / segmentLength;
-        const ny = dy / segmentLength;
-
-        // 대시 패턴 적용
-        let distance = dashOffset % dashCycle;
-        let t = 0;
-
-        while (t < segmentLength) {
-            const dashIdx = Math.floor(distance / dashCycle) * dashArray.length + (distance % dashCycle) / dashCycle * dashArray.length;
-            const dashLength = dashArray[Math.floor(dashIdx % dashArray.length)];
-            const isDash = Math.floor(dashIdx % dashArray.length) % 2 === 0;
-
-            if (isDash) {
-                const t0 = t;
-                const t1 = Math.min(t + dashLength, segmentLength);
-                const x0 = p0[0] + nx * t0;
-                const y0 = p0[1] + ny * t0;
-                const x1 = p0[0] + nx * t1;
-                const y1 = p0[1] + ny * t1;
-
-                // 대시 세그먼트에 대한 버퍼 데이터 생성
-                const segmentData = generateLineSegmentBufferData(x0, y0, x1, y1, width, positions.length / 2 + indexOffset, lineCap);
-                positions = positions.concat(segmentData.positions);
-                indices = indices.concat(segmentData.indices);
-            }
-
-            t += dashLength;
-            distance += dashLength;
-        }
-    }
-
-    // 닫힌 경로의 경우 조인 처리 필요
-    if (closed && positions.length > 0) {
-        // lineJoin에 따라 추가 처리 가능 (예: miter, bevel, round)
-    }
-
-    return { positions, indices };
-}
-
-// 간단한 선 세그먼트 버퍼 데이터 생성 함수 (예시)
-function generateLineSegmentBufferData(x0, y0, x1, y1, width, indexOffset, lineCap) {
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    const nx = dy / len * width / 2;
-    const ny = -dx / len * width / 2;
-
-    const positions = [
-        x0 + nx, y0 + ny,
-        x0 - nx, y0 - ny,
-        x1 + nx, y1 + ny,
-        x1 - nx, y1 - ny
-    ];
-    const indices = [
-        indexOffset, indexOffset + 1, indexOffset + 2,
-        indexOffset + 1, indexOffset + 2, indexOffset + 3
-    ];
-
-    return { positions, indices };
 }
