@@ -1,0 +1,69 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel='stylesheet' href="./examples/style.css">
+    <title>WebGL2-2d</title>
+</head>
+
+<body>
+
+    <div id='examples'></div>
+
+    <script src="./renderer/renderer.js"></script>
+    <script src="./lib/earcut.js"></script>
+    <script src="./webgl2-2d.js"></script>
+    <script>
+        function createExample(draw) {
+            const div = document.createElement('div')
+
+            const divMain = document.createElement('div')
+            divMain.style = 'display: flex;'
+            const div2D = document.createElement('div')
+            const divWebGL = document.createElement('div')
+            const canvas2D = document.createElement('canvas')
+            const canvasWebGL = document.createElement('canvas')
+            div2D.appendChild(canvas2D)
+            divWebGL.appendChild(canvasWebGL)
+
+            divMain.append(div2D)
+            divMain.append(divWebGL)
+            div.append(divMain)
+
+            document.querySelector('#examples').appendChild(div)
+
+            const ctx2D = canvas2D.getContext('2d')
+            const ctxWebGL = canvasWebGL.getContext('webgl2-2d')
+            draw(ctx2D)
+            //draw(ctxWebGL)
+
+            const paths = [[[10,75], [90,100],[130,50],[150,100],[160,50],[170,100],[180,50]]];
+            ctxWebGL.stroke2(paths, 5, 'round', 'round')
+        }
+
+        function lineJoins(ctx) {
+
+            ctx.strokeStyle = 'black'
+            ctx.lineCap = 'round'//butt
+            ctx.lineJoin = 'round'
+            ctx.lineWidth = 12
+            ctx.beginPath()
+            ctx.moveTo(10, 75)
+            ctx.lineTo(90, 100)
+            ctx.lineTo(130, 50)
+            ctx.lineTo(150, 100)
+            ctx.lineTo(160, 50)
+            ctx.lineTo(170, 100)
+            ctx.lineTo(180, 50)
+
+            ctx.stroke()
+
+        }
+
+        createExample(lineJoins)
+
+    </script>
+</body>
+
+</html>
