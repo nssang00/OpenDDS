@@ -89,7 +89,7 @@
             vec2 zeroToTwo = zeroToOne * 2.0;
             vec2 clipSpace = zeroToTwo - 1.0;
 
-            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1); // Y축 반전 추가
+            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
 
             v_startPos = in_startPos;
             v_endPos = in_endPos;
@@ -158,9 +158,7 @@
             const vs = createShader(gl, vsSource, gl.VERTEX_SHADER);
             const fs = createShader(gl, fsSource, gl.FRAGMENT_SHADER);
             
-            if (!vs || !fs) {
-                return null;
-            }
+            if (!vs || !fs) return null;
 
             gl.attachShader(program, vs);
             gl.attachShader(program, fs);
@@ -189,24 +187,25 @@
         }
 
         const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
-        if (!program) {
-            throw new Error('Failed to create program');
-        }
+        if (!program) throw new Error('Failed to create program');
         gl.useProgram(program);
 
+        // 정점 데이터
         const shapeData = {
             positions: [-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5],
             indices: [0, 1, 2, 1, 3, 2]
         };
 
+        // 라인 데이터 (3개의 라인)
         const data = {
             startPos: [200, 500, 200, 500, 400, 100],
-            endPos: [0, 0, 400, 100, 600, 500],
-            prevPos: [200, 500, 0, 0, 200, 500],
-            nextPos: [0, 0, 400, 100, 600, 500],
-            lineWidth: [100, 100, 100]
+            endPos: [400, 100, 400, 100, 600, 500],
+            prevPos: [0, 0, 200, 500, 400, 100],  // 첫번째 라인의 이전점
+            nextPos: [400, 100, 600, 500, 800, 0], // 마지막 라인의 다음점
+            lineWidth: [20, 20, 20]  // 더 명확한 확인을 위해 두께 20으로 변경
         };
 
+        // 버퍼 생성
         const shapePosBuffer = createBuffer(gl, shapeData.positions);
         const startPosBuffer = createBuffer(gl, data.startPos);
         const endPosBuffer = createBuffer(gl, data.endPos);
@@ -215,6 +214,7 @@
         const lineWidthBuffer = createBuffer(gl, data.lineWidth);
         const ebo = createIndexBuffer(gl, shapeData.indices);
 
+        // Attribute 위치 가져오기
         const attributeLocations = {
             position: gl.getAttribLocation(program, "in_position"),
             startPos: gl.getAttribLocation(program, "in_startPos"),
@@ -224,38 +224,48 @@
             lineWidth: gl.getAttribLocation(program, "in_lineWidth")
         };
 
+        // 유니폼 위치 가져오기
         const uniformLocations = {
             resolution: gl.getUniformLocation(program, "u_resolution"),
             lineJoin: gl.getUniformLocation(program, "u_lineJoin"),
             lineCap: gl.getUniformLocation(program, "u_lineCap")
         };
 
-        // Attribute 설정
-        const setupAttribute = (buffer, location, size) => {
+        // Attribute 설정 함수 (divisor 파라미터 추가)
+        const setupAttribute = (buffer, location, size, divisor) => {
             gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
             gl.enableVertexAttribArray(location);
             gl.vertexAttribPointer(location, size, gl.FLOAT, false, 0, 0);
-            gl.vertexAttribDivisor(location, 1); // instancing을 위해 추가
+            gl.vertexAttribDivisor(location, divisor); // 핵심 수정 부분
         };
 
-        setupAttribute(shapePosBuffer, attributeLocations.position, 2);
-        setupAttribute(startPosBuffer, attributeLocations.startPos, 2);
-        setupAttribute(endPosBuffer, attributeLocations.endPos, 2);
-        setupAttribute(prevPosBuffer, attributeLocations.prevPos, 2);
-        setupAttribute(nextPosBuffer, attributeLocations.nextPos, 2);
-        setupAttribute(lineWidthBuffer, attributeLocations.lineWidth, 1);
+        // 속성 설정 (divisor 값 명시적 지정)
+        setupAttribute(shapePosBuffer, attributeLocations.position, 2, 0);  // 정점 당 ��이터
+        setupAttribute(startPosBuffer, attributeLocations.startPos, 2, 1); // 인스턴스 당 데이터
+        setupAttribute(endPosBuffer, attributeLocations.endPos, 2, 1);
+        setupAttribute(prevPosBuffer, attributeLocations.prevPos, 2, 1);
+        setupAttribute(nextPosBuffer, attributeLocations.nextPos, 2, 1);
+        setupAttribute(lineWidthBuffer, attributeLocations.lineWidth, 1, 1);
 
+        // 유니폼 설정
         gl.uniform2f(uniformLocations.resolution, canvas.width, canvas.height);
         gl.uniform1f(uniformLocations.lineJoin, 1.0); // bevel
         gl.uniform1f(uniformLocations.lineCap, 2.0);  // round
 
+        // 렌더링
         function draw() {
             gl.viewport(0, 0, canvas.width, canvas.height);
             gl.clearColor(1.0, 1.0, 1.0, 1.0);
             gl.clear(gl.COLOR_BUFFER_BIT);
 
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-            gl.drawElementsInstanced(gl.TRIANGLES, shapeData.indices.length, gl.UNSIGNED_SHORT, 0, 3); // 3개의 인스턴스
+            gl.drawElementsInstanced(
+                gl.TRIANGLES,
+                shapeData.indices.length,
+                gl.UNSIGNED_SHORT,
+                0,
+                3 // 3개의 인스턴스 렌더링
+            );
         }
 
         draw();
