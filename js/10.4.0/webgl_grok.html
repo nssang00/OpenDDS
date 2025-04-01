@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebGL Thick LineString with Enhanced Features</title>
+    <style>
+        canvas { border: 1px solid black; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="400" height="400"></canvas>
+    <div>
+        <label>Thickness: <input type="range" id="thickness" min="0.01" max="0.1" step="0.01" value="0.05"></label>
+    </div>
+    <script>
+        // 캔버스와 WebGL 컨텍스트 설정
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl');
+        if (!gl) {
+            alert('WebGL이 지원되지 않습니다.');
+            throw new Error('WebGL not supported');
+        }
+
+        // 버텍스 셰이더
+        const vertexShaderSource = `
+        attribute vec2 a_position;
+        attribute vec3 a_color;
+        varying vec3 v_color;
+
+        void main() {
+            gl_Position = vec4(a_position, 0.0, 1.0);
+            v_color = a_color;
+        }
+        `;
+
+        // 프래그먼트 셰이더
+        const fragmentShaderSource = `
+        precision mediump float;
+        varying vec3 v_color;
+
+        void main() {
+            gl_FragColor = vec4(v_color, 1.0);
+        }
+        `;
+
+        // 셰이더 생성 함수
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        function createProgram(gl, vertexShader, fragmentShader) {
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error(gl.getProgramInfoLog(program));
+                gl.deleteProgram(program);
+                return null;
+            }
+            return program;
+        }
+
+        // 셰이더 컴파일 및 프로그램 생성
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+        const program = createProgram(gl, vertexShader, fragmentShader);
+
+        // 초기 점 데이터
+        let points = [
+            [-0.8,  0.4],
+            [-0.4, -0.2],
+            [ 0.0,  0.3],
+            [ 0.4, -0.1],
+            [ 0.8,  0.5]
+        ];
+        let thickness = parseFloat(document.getElementById('thickness').value);
+
+        // 법선 벡터와 정점 계산 함수 (미터 길이 제한, 라운드 조인 포함)
+        function calculateNormalsAndVertices(points, thickness) {
+            const vertices = [];
+            const indices = [];
+            const normals = [];
+            const miterLimit = 0.1; // 미터 길이 제한
+            const roundSegments = 8; // 라운드 조인 세그먼트 수
+
+            // 법선 계산
+            for (let i = 0; i < points.length; i++) {
+                let prev = points[Math.max(0, i - 1)];
+                let curr = points[i];
+                let next = points[Math.min(points.length - 1, i + 1)];
+
+                let dx1 = curr[0] - prev[0];
+                let dy1 = curr[1] - prev[1];
+                let dx2 = next[0] - curr[0];
+                let dy2 = next[1] - curr[1];
+
+                let len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+                let len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+                let nx1 = dy1 / len1 * thickness;
+                let ny1 = -dx1 / len1 * thickness;
+                let nx2 = dy2 / len2 * thickness;
+                let ny2 = -dx2 / len2 * thickness;
+
+                let nx = (nx1 + nx2) / 2;
+                let ny = (ny1 + ny2) / 2;
+                let miterLen = Math.sqrt(nx * nx + ny * ny);
+                if (miterLen > miterLimit) { // 미터 길이 제한
+                    nx *= miterLimit / miterLen;
+                    ny *= miterLimit / miterLen;
+                }
+                if (i === 0) { nx = nx1; ny = ny1; }
+                if (i === points.length - 1) { nx = nx2; ny = ny2; }
+
+                normals.push([nx, ny]);
+            }
+
+            // 정점 생성 (라운드 조인 포함)
+            for (let i = 0; i < points.length; i++) {
+                const [x, y] = points[i];
+                const [nx, ny] = normals[i];
+                const t = i / (points.length - 1);
+
+                if (i > 0 && i < points.length - 1) { // 중간 점: 라운드 조인
+                    const prevNormal = normals[i - 1];
+                    for (let j = 0; j <= roundSegments; j++) {
+                        const angle = Math.PI * j / roundSegments;
+                        const nxBlend = prevNormal[0] * Math.cos(angle) - nx * Math.sin(angle);
+                        const nyBlend = prevNormal[1] * Math.cos(angle) - ny * Math.sin(angle);
+                        vertices.push(x + nxBlend, y + nyBlend, t, 0.0, 1.0 - t);
+                    }
+                } else { // 시작점과 끝점: 기본 정점
+                    vertices.push(x - nx, y - ny, t, 0.0, 1.0 - t); // 위쪽
+                    vertices.push(x + nx, y + ny, t, 0.0, 1.0 - t); // 아래쪽
+                }
+            }
+
+            // 인덱스 생성
+            let vertexOffset = 0;
+            for (let i = 0; i < points.length - 1; i++) {
+                const start = i === 0 ? 0 : vertexOffset - roundSegments - 1;
+                const end = i === points.length - 2 ? vertices.length / 5 - 2 : vertexOffset + roundSegments + 2;
+
+                if (i > 0) { // 라운드 조인 삼각형 팬
+                    for (let j = 0; j < roundSegments; j++) {
+                        indices.push(vertexOffset, vertexOffset + j + 1, vertexOffset + j + 2);
+                    }
+                    vertexOffset += roundSegments + 1;
+                }
+
+                // 선분 삼각형
+                indices.push(start, start + 1, end);
+                indices.push(start + 1, end + 1, end);
+                if (i === 0) vertexOffset += 2;
+            }
+
+            return { vertices: new Float32Array(vertices), indices: new Uint16Array(indices) };
+        }
+
+        // 렌더링 함수
+        function render() {
+            const { vertices, indices } = calculateNormalsAndVertices(points, thickness);
+
+            const vertexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+            const indexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+            const positionLocation = gl.getAttribLocation(program, 'a_position');
+            const colorLocation = gl.getAttribLocation(program, 'a_color');
+
+            const stride = 5 * Float32Array.BYTES_PER_ELEMENT;
+            const positionOffset = 0;
+            const colorOffset = 2 * Float32Array.BYTES_PER_ELEMENT;
+
+            gl.enableVertexAttribArray(positionLocation);
+            gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, stride, positionOffset);
+
+            gl.enableVertexAttribArray(colorLocation);
+            gl.vertexAttribPointer(colorLocation, 3, gl.FLOAT, false, stride, colorOffset);
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.useProgram(program);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+            gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+        }
+
+        // 초기 렌더링
+        render();
+
+        // 동적 조정: 두께 변경
+        document.getElementById('thickness').addEventListener('input', (e) => {
+            thickness = parseFloat(e.target.value);
+            render();
+        });
+
+        // 동적 조정: 점 추가
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / canvas.width * 2 - 1;
+            const y = -(e.clientY - rect.top) / canvas.height * 2 + 1;
+            points.push([x, y]);
+            render();
+        });
+    </script>
+</body>
+</html>
