@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>WebGL GIS LineString Rendering</title>
+    <title>WebGL GIS LineString Rendering (Fixed)</title>
     <style>
         canvas { border: 1px solid black; }
     </style>
@@ -17,10 +17,10 @@
             throw new Error('WebGL not supported');
         }
 
+        // Shader 코드 (변경 없음)
         const vertexShaderSource = `
         attribute vec2 a_position;
         uniform vec3 u_color;
-        uniform float u_thickness;
         varying vec3 v_color;
 
         void main() {
@@ -38,6 +38,7 @@
         }
         `;
 
+        // Shader 및 프로그램 생성 함수 (변경 없음)
         function createShader(gl, type, source) {
             const shader = gl.createShader(type);
             gl.shaderSource(shader, source);
@@ -63,114 +64,84 @@
             return program;
         }
 
-        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-        const program = createProgram(gl, vertexShader, fragmentShader);
+        // 벡터 정규화 함수 추가
+        function normalize(v) {
+            const length = Math.sqrt(v[0]*v[0] + v[1]*v[1]);
+            return length > 0 ? [v[0]/length, v[1]/length] : [0, 0];
+        }
 
-        // GIS LineString 좌표
-        const coordinates = [[10, 75], [90, 100], [130, 50], [150, 100], [160, 50], [170, 100], [180, 50]];
-        // 픽셀 단위 두께를 WebGL 좌표로 변환
-const thicknessInPixels = 5; // 원하는 픽셀 두께
-const thickness = thicknessInPixels / (canvas.width/2); // WebGL 좌표계로 변환
-        const color = [1.0, 0.0, 0.0]; // 빨간색
+        // 개선된 법선 계산 함수
+        function calculateNormalsAndVertices(points, thickness) {
+            const vertices = [];
+            const indices = [];
+            const normals = [];
 
-        // 좌표를 WebGL 좌표계로 변환
+            for (let i = 0; i < points.length; i++) {
+                const prev = points[Math.max(0, i - 1)];
+                const curr = points[i];
+                const next = points[Math.min(points.length - 1, i + 1)];
+
+                // 방향 벡터 계산
+                const dirPrev = [curr[0] - prev[0], curr[1] - prev[1]];
+                const dirNext = [next[0] - curr[0], next[1] - curr[1]];
+
+                // 수직 벡터 계산
+                const normalPrev = normalize([dirPrev[1], -dirPrev[0]]);
+                const normalNext = normalize([dirNext[1], -dirNext[0]]);
+
+                // 조인 처리 (Miter)
+                let normal;
+                if(i === 0) { // 첫 번째 점
+                    normal = normalNext;
+                } else if(i === points.length-1) { // 마지막 점
+                    normal = normalPrev;
+                } else { // 중간 점
+                    const tangent = normalize([
+                        normalPrev[0] + normalNext[0],
+                        normalPrev[1] + normalNext[1]
+                    ]);
+                    const miterLength = 1 / Math.max(Math.sqrt(
+                        tangent[0]*tangent[0] + tangent[1]*tangent[1]
+                    ), 0.001);
+                    normal = [tangent[0] * miterLength, tangent[1] * miterLength];
+                }
+
+                normals.push([
+                    normal[0] * thickness,
+                    normal[1] * thickness
+                ]);
+            }
+
+            // 정점 생성
+            for (let i = 0; i < points.length; i++) {
+                const [x, y] = points[i];
+                const [nx, ny] = normals[i];
+                vertices.push(
+                    x - nx, y - ny, // 왼쪽 정점
+                    x + nx, y + ny  // 오른쪽 정점
+                );
+            }
+
+            // 인덱스 생성
+            for (let i = 0; i < points.length - 1; i++) {
+                const base = i * 2;
+                indices.push(
+                    base, base+1, base+2,
+                    base+1, base+3, base+2
+                );
+            }
+
+            return {
+                vertices: new Float32Array(vertices),
+                indices: new Uint16Array(indices)
+            };
+        }
+
+        // 좌표 정규화 함수 (변경 없음)
         function normalizeCoordinates(coords, canvasWidth, canvasHeight) {
-            // 좌표 범위 찾기
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             coords.forEach(([x, y]) => {
                 minX = Math.min(minX, x);
                 maxX = Math.max(maxX, x);
                 minY = Math.min(minY, y);
-                maxY = Math.max(maxY, y);
-            });
-
-            const rangeX = maxX - minX || 1; // 0 방지
-            const rangeY = maxY - minY || 1;
-            const scale = Math.min(canvasWidth / rangeX, canvasHeight / rangeY) * 0.9; // 90% 크기로 맞춤
-
-            // 캔버스 중심에 맞추기 위한 오프셋
-            const offsetX = (canvasWidth - rangeX * scale) / 2;
-            const offsetY = (canvasHeight - rangeY * scale) / 2;
-
-            return coords.map(([x, y]) => {
-                // WebGL 좌표계 (-1 ~ 1)로 변환
-                const nx = ((x - minX) * scale + offsetX) / (canvasWidth / 2) - 1;
-                const ny = ((y - minY) * scale + offsetY) / (canvasHeight / 2) - 1;
-                return [nx, ny];
-            });
-        }
-
-function calculateNormalsAndVertices(points, thickness) {
-    const vertices = [];
-    const indices = [];
-    const normals = [];
-
-    for (let i = 0; i < points.length; i++) {
-        let prev = points[Math.max(0, i - 1)];
-        let curr = points[i];
-        let next = points[Math.min(points.length - 1, i + 1)];
-
-        // 현재 선분과 이전 선분의 방향 벡터
-        let dirPrev = [curr[0] - prev[0], curr[1] - prev[1]];
-        let dirNext = [next[0] - curr[0], next[1] - curr[1]];
-        
-        // 수직 벡터 계산 (정규화 후 두께 적용)
-        const normalPrev = normalize([dirPrev[1], -dirPrev[0]]);
-        const normalNext = normalize([dirNext[1], -dirNext[0]]);
-
-        // 조인 방향 계산 (miter)
-        const tangent = normalize([
-            normalPrev[0] + normalNext[0],
-            normalPrev[1] + normalNext[1]
-        ]);
-        
-        // miter length 계산
-        const miterLength = 1 / Math.max(Math.sqrt(tangent[0]*tangent[0] + tangent[1]*tangent[1]), 0.001);
-        const normal = [tangent[0] * miterLength, tangent[1] * miterLength];
-        
-        normals.push([
-            normal[0] * thickness,
-            normal[1] * thickness
-        ]);
-    }
-
-    // 나머지 정점 생성 로직은 유지...
-}
-
-function normalize(v) {
-    const length = Math.sqrt(v[0]*v[0] + v[1]*v[1]);
-    return [v[0]/length, v[1]/length];
-}
-
-        // 정규화된 좌표 계산
-        const normalizedPoints = normalizeCoordinates(coordinates, canvas.width, canvas.height);
-        const { vertices, indices } = calculateNormalsAndVertices(normalizedPoints, thickness);
-
-        const vertexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-        const indexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-
-        const positionLocation = gl.getAttribLocation(program, 'a_position');
-        const colorLocation = gl.getUniformLocation(program, 'u_color');
-        const thicknessLocation = gl.getUniformLocation(program, 'u_thickness');
-
-        gl.enableVertexAttribArray(positionLocation);
-        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 2 * Float32Array.BYTES_PER_ELEMENT, 0);
-
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.useProgram(program);
-        
-        gl.uniform3fv(colorLocation, color);
-        gl.uniform1f(thicknessLocation, thickness);
-
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-        gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-    </script>
-</body>
-</html>
+                max
