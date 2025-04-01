@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebGL2 Lines with LineCap</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl2');
+        
+        if (!gl) {
+            alert('WebGL2 not supported!');
+            throw new Error('WebGL2 not supported');
+        }
+
+        const vertexShaderSource = `#version 300 es
+        in vec2 in_position;
+        in vec2 in_startPos;
+        in vec2 in_endPos;
+        in vec2 in_prevPos;
+        in vec2 in_nextPos;
+        in float in_lineWidth;
+
+        out vec2 v_startPos;
+        out vec2 v_endPos;
+        out vec2 v_startMiterVec;
+        out vec2 v_endMiterVec;
+        out float v_lineWidth;
+
+        uniform vec2 u_resolution;
+
+        mat3 getTransformMatrix(vec2 startPos, vec2 endPos, float lineWidth) {
+            vec2 centerPos = (startPos + endPos) / 2.;
+            vec2 delta = endPos - startPos;
+            float len = length(delta);
+            float phi = atan(delta.y / delta.x);
+            
+            mat3 scale = mat3(
+                len, 0, 0,
+                0, lineWidth, 0,
+                0, 0, 1
+            );
+
+            mat3 rotate = mat3(
+                cos(phi), sin(phi), 0,
+                -sin(phi), cos(phi), 0,
+                0, 0, 1
+            );
+            
+            mat3 translate = mat3(
+                1, 0, 0,
+                0, 1, 0,
+                centerPos.x, centerPos.y, 1
+            );
+            
+            return translate * rotate * scale;
+        }
+
+        vec2 getOffsetVec(vec2 pos, vec2 prev, vec2 next) {
+            if (pos == prev || pos == next) {
+                return vec2(0., 0.);
+            }
+            vec2 line1 = pos - prev;
+            vec2 normal1 = normalize(vec2(-line1.y, line1.x));
+            vec2 line2 = next - pos;
+            vec2 normal2 = normalize(vec2(-line2.y, line2.x));
+            vec2 normal = normalize(normal1 + normal2);
+            vec2 vec = normal * 1. / abs(dot(normal, normal1));
+            return -vec;
+        }
+
+        void main() {
+            vec2 v1 = getOffsetVec(in_startPos, in_prevPos, in_endPos) * in_lineWidth / 2.;
+            vec2 v2 = getOffsetVec(in_endPos, in_startPos, in_nextPos) * in_lineWidth / 2.;
+            vec2 dir = normalize(in_endPos - in_startPos);
+            vec2 startOffset = (v1 == vec2(0., 0.) ? -in_lineWidth / 2. : dot(v1, dir)) * dir;
+            vec2 endOffset = (v2 == vec2(0., 0.) ? in_lineWidth / 2. : dot(v2, dir)) * dir;
+            mat3 transformMatrix = getTransformMatrix(in_startPos + startOffset, in_endPos + endOffset, in_lineWidth);
+            vec2 pos = (transformMatrix * vec3(in_position, 1.)).xy;
+
+            vec2 zeroToOne = pos.xy / u_resolution;
+            vec2 zeroToTwo = zeroToOne * 2.0;
+            vec2 clipSpace = zeroToTwo - 1.0;
+
+            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1); // Y축 반전 추가
+
+            v_startPos = in_startPos;
+            v_endPos = in_endPos;
+            v_startMiterVec = v1;
+            v_endMiterVec = v2;
+            v_lineWidth = in_lineWidth;
+        }`;
+
+        const fragmentShaderSource = `#version 300 es
+        precision highp float;
+
+        in vec2 v_startPos;
+        in vec2 v_endPos;
+        in vec2 v_startMiterVec;
+        in vec2 v_endMiterVec;
+        in float v_lineWidth;
+
+        out vec4 fragColor;
+
+        uniform float u_lineJoin;
+        uniform float u_lineCap;
+
+        void main() {
+            vec2 p = gl_FragCoord.xy;
+            
+            if (v_startMiterVec == vec2(0., 0.)) {
+                bool outStartMainLine = dot((p - v_startPos), (v_endPos - v_startPos)) < 0.;
+                if (u_lineCap == 0.) {
+                    if (outStartMainLine) discard;
+                } else if (u_lineCap == 2.) {
+                    if (outStartMainLine && distance(p, v_startPos) > v_lineWidth / 2.) discard;
+                }
+            }
+
+            if (v_endMiterVec == vec2(0., 0.)) {
+                bool outEndMainLine = dot((p - v_endPos), (v_startPos - v_endPos)) < 0.;
+                if (u_lineCap == 0.) {
+                    if (outEndMainLine) discard;
+                } else if (u_lineCap == 2.) {
+                    if (outEndMainLine && distance(p, v_endPos) > v_lineWidth / 2.) discard;
+                }
+            }
+
+            vec2 miterNormal1 = vec2(-v_startMiterVec.y, v_startMiterVec.x);
+            vec2 miterNormal2 = vec2(-v_endMiterVec.y, v_endMiterVec.x);
+            bool outside = dot((p - v_startPos), miterNormal1) < 0. || dot((p - v_endPos), miterNormal2) > 0.;
+            if (outside) discard;
+
+            fragColor = vec4(0., 0., 0., 1.);
+        }`;
+
+        function createShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        function createProgram(gl, vsSource, fsSource) {
+            const program = gl.createProgram();
+            const vs = createShader(gl, vsSource, gl.VERTEX_SHADER);
+            const fs = createShader(gl, fsSource, gl.FRAGMENT_SHADER);
+            
+            if (!vs || !fs) {
+                return null;
+            }
+
+            gl.attachShader(program, vs);
+            gl.attachShader(program, fs);
+            gl.linkProgram(program);
+            
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('Program link error:', gl.getProgramInfoLog(program));
+                gl.deleteProgram(program);
+                return null;
+            }
+            return program;
+        }
+
+        function createBuffer(gl, data, target = gl.ARRAY_BUFFER) {
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(target, buffer);
+            gl.bufferData(target, new Float32Array(data), gl.STATIC_DRAW);
+            return buffer;
+        }
+
+        function createIndexBuffer(gl, indices) {
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+            return buffer;
+        }
+
+        const program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
+        if (!program) {
+            throw new Error('Failed to create program');
+        }
+        gl.useProgram(program);
+
+        const shapeData = {
+            positions: [-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5],
+            indices: [0, 1, 2, 1, 3, 2]
+        };
+
+        const data = {
+            startPos: [200, 500, 200, 500, 400, 100],  // 3개의 시작점
+            endPos: [0, 0, 400, 100, 600, 500],        // 3개의 끝점
+            prevPos: [200, 500, 0, 0, 200, 500],       // 3개의 이전 점
+            nextPos: [0, 0, 400, 100, 600, 500],       // 3개의 다음 점
+            lineWidth: [100, 100, 100]                  // 3개의 선분 폭
+        };
+
+        const shapePosBuffer = createBuffer(gl, shapeData.positions);
+        const startPosBuffer = createBuffer(gl, data.startPos);
+        const endPosBuffer = createBuffer(gl, data.endPos);
+        const prevPosBuffer = createBuffer(gl, data.prevPos);
+        const nextPosBuffer = createBuffer(gl, data.nextPos);
+        const lineWidthBuffer = createBuffer(gl, data.lineWidth);
+        const ebo = createIndexBuffer(gl, shapeData.indices);
+
+        const attributeLocations = {
+            position: gl.getAttribLocation(program, "in_position"),
+            startPos: gl.getAttribLocation(program, "in_startPos"),
+            endPos: gl.getAttribLocation(program, "in_endPos"),
+            prevPos: gl.getAttribLocation(program, "in_prevPos"),
+            nextPos: gl.getAttribLocation(program, "in_nextPos"),
+            lineWidth: gl.getAttribLocation(program, "in_lineWidth")
+        };
+
+        const uniformLocations = {
+            resolution: gl.getUniformLocation(program, "u_resolution"),
+            lineJoin: gl.getUniformLocation(program, "u_lineJoin"),
+            lineCap: gl.getUniformLocation(program, "u_lineCap")
+        };
+
+        // Attribute 설정
+        const setupAttribute = (buffer, location, size) => {
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.enableVertexAttribArray(location);
+            gl.vertexAttribPointer(location, size, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(location, 1); // 인스턴싱을 위해 추가
+        };
+
+        setupAttribute(shapePosBuffer, attributeLocations.position, 2);
+        setupAttribute(startPosBuffer, attributeLocations.startPos, 2);
+        setupAttribute(endPosBuffer, attributeLocations.endPos, 2);
+        setupAttribute(prevPosBuffer, attributeLocations.prevPos, 2);
+        setupAttribute(nextPosBuffer, attributeLocations.nextPos, 2);
+        setupAttribute(lineWidthBuffer, attributeLocations.lineWidth, 1);
+
+        gl.uniform2f(uniformLocations.resolution, canvas.width, canvas.height);
+        gl.uniform1f(uniformLocations.lineJoin, 1.0); // bevel
+        gl.uniform1f(uniformLocations.lineCap, 2.0);  // round
+
+        function draw() {
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(1.0, 1.0, 1.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+            gl.drawElementsInstanced(gl.TRIANGLES, shapeData.indices.length, gl.UNSIGNED_SHORT, 0, 3); // 3개의 인스턴스
+        }
+
+        draw();
+    </script>
+</body>
+</html>
