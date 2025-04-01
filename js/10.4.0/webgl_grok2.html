@@ -69,7 +69,9 @@
 
         // GIS LineString 좌표
         const coordinates = [[10, 75], [90, 100], [130, 50], [150, 100], [160, 50], [170, 100], [180, 50]];
-        const thickness = 0.05; // WebGL 좌표계에서의 두께
+        // 픽셀 단위 두께를 WebGL 좌표로 변환
+const thicknessInPixels = 5; // 원하는 픽셀 두께
+const thickness = thicknessInPixels / (canvas.width/2); // WebGL 좌표계로 변환
         const color = [1.0, 0.0, 0.0]; // 빨간색
 
         // 좌표를 WebGL 좌표계로 변환
