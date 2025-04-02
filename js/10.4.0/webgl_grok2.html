@@ -1,219 +1,291 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>WebGL Thick LineString with Miter Joints (Uniform Thickness)</title>
+  <meta charset="UTF-8" />
+  <title>WebGL Thick Line (Uniform Thickness in Screen Space)</title>
   <style>
     canvas { border: 1px solid black; }
   </style>
 </head>
 <body>
-  <canvas id="canvas" width="400" height="400"></canvas>
-  <script>
-    const canvas = document.getElementById('canvas');
-    const gl = canvas.getContext('webgl');
-    if (!gl) {
-      alert('WebGL이 지원되지 않습니다.');
-      throw new Error('WebGL not supported');
+<canvas id="canvas" width="400" height="400"></canvas>
+<script>
+const canvas = document.getElementById('canvas');
+const gl = canvas.getContext('webgl');
+if (!gl) {
+  alert('WebGL not supported');
+  throw new Error('WebGL not supported');
+}
+
+// ------------------ Vertex & Fragment Shaders ------------------
+const vertexShaderSource = `
+  attribute vec2 a_position;   // in pixel space
+  uniform vec2 u_resolution;   // (canvas.width, canvas.height)
+  uniform vec3 u_color;
+  varying vec3 v_color;
+  void main() {
+    // Convert from pixel coords to clip space coords:
+    //   x_clip = (x_pixel / width)  * 2.0 - 1.0
+    //   y_clip = (y_pixel / height) * 2.0 - 1.0
+    vec2 clip = (a_position / u_resolution) * 2.0 - 1.0;
+    gl_Position = vec4(clip, 0.0, 1.0);
+    v_color = u_color;
+  }
+`;
+
+const fragmentShaderSource = `
+  precision mediump float;
+  varying vec3 v_color;
+  void main() {
+    gl_FragColor = vec4(v_color, 1.0);
+  }
+`;
+
+// ------------------ Compile and Link Shaders ------------------
+function createShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  return shader;
+}
+
+function createProgram(gl, vs, fs) {
+  const program = gl.createProgram();
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
+    return null;
+  }
+  return program;
+}
+
+const vShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+const fShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+const program = createProgram(gl, vShader, fShader);
+
+// ------------------ Example Path(s) in Pixel Coordinates ------------------
+const paths = [
+  // e.g., [[10,75], [90,100], [130,50], [150,100], [160,50], [170,100], [180,50]]
+  [[10,75],[90,100],[130,50],[150,100],[160,50],[170,100],[180,50]]
+];
+
+// This thickness means "total thickness in pixels" on the screen.
+// If you prefer, you can treat it as "half-thickness" below – just be consistent.
+const totalThickness = 8.0;   // 8 px thick line
+// We'll treat `halfThickness = totalThickness / 2`.
+const halfT = totalThickness * 0.5;
+
+// ------------------ Polyline Expansion (CPU) ------------------
+/**
+ * Returns an object { vertices, indices } that defines the expanded triangles.
+ * All coordinates remain in pixel space. We'll do the clip-space transform in the vertex shader.
+ */
+function buildThickLineGeometry(points, halfThickness) {
+  const verts = [];
+  const indices = [];
+  
+  // Precompute forward tangents (normalized) and normals for each segment
+  const tangents = [];
+  const normals = [];
+  
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i+1];
+    let dx = p1[0] - p0[0];
+    let dy = p1[1] - p0[1];
+    const segLen = Math.sqrt(dx*dx + dy*dy) || 1e-6;
+    dx /= segLen;   // tangent (unit)
+    dy /= segLen;
+    tangents.push([dx, dy]);
+    // Normal is (-dy, dx) to the left or right; pick one consistently.
+    normals.push([-dy, dx]);
+  }
+  
+  // For each vertex i, we figure out the "offset normal" that pushes the line outward
+  // by halfThickness in the correct direction (miter join).
+  // We'll build 2 vertices at each polyline vertex: ( +offset, -offset ).
+  const offsetVectors = [];
+  
+  for (let i = 0; i < points.length; i++) {
+    if (i === 0) {
+      // Start vertex: just use the normal of the first segment
+      const n = normals[0];
+      offsetVectors.push([n[0], n[1]]);
     }
-    
-    // 버텍스 셰이더
-    const vertexShaderSource = `
-      attribute vec2 a_position;
-      uniform vec3 u_color;
-      uniform float u_thickness;
-      varying vec3 v_color;
-      void main() {
-        gl_Position = vec4(a_position, 0.0, 1.0);
-        v_color = u_color;
-      }
-    `;
-    
-    // 프래그먼트 셰이더
-    const fragmentShaderSource = `
-      precision mediump float;
-      varying vec3 v_color;
-      void main() {
-        gl_FragColor = vec4(v_color, 1.0);
-      }
-    `;
-    
-    function createShader(gl, type, source) {
-      const shader = gl.createShader(type);
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-      }
-      return shader;
+    else if (i === points.length - 1) {
+      // End vertex: just use the normal of the last segment
+      const n = normals[normals.length - 1];
+      offsetVectors.push([n[0], n[1]]);
     }
-    
-    function createProgram(gl, vertexShader, fragmentShader) {
-      const program = gl.createProgram();
-      gl.attachShader(program, vertexShader);
-      gl.attachShader(program, fragmentShader);
-      gl.linkProgram(program);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error(gl.getProgramInfoLog(program));
-        gl.deleteProgram(program);
-        return null;
-      }
-      return program;
-    }
-    
-    const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-    const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-    const program = createProgram(gl, vertexShader, fragmentShader);
-    
-    // GIS Linestring 경로 (픽셀 좌표)
-    const paths = [
-      [[10,75], [90,100], [130,50], [150,100], [160,50], [170,100], [180,50]]
-    ];
-    
-    // 캔버스 픽셀 좌표를 클립 공간(-1 ~ 1)으로 변환 (캔버스 좌측 하단을 (0,0)으로 가정)
-    function toClipSpace(point) {
-      const x = point[0] / canvas.width * 2 - 1;
-      const y = point[1] / canvas.height * 2 - 1;
-      return [x, y];
-    }
-    
-    // miter 조인을 사용하여 일정한 두께를 유지하기 위해 각 점의 오프셋을 계산합니다.
-    function calculateNormalsAndVertices(points, thickness) {
-      const vertices = [];
-      const indices = [];
-      const offsets = [];
+    else {
+      // Interior vertex: compute the "miter" of the two adjacent normals
+      const n0 = normals[i - 1];
+      const n1 = normals[i];
+      // n0, n1 are each presumably unit length, but let's ensure that:
+      const lenN0 = Math.sqrt(n0[0]*n0[0] + n0[1]*n0[1]) || 1e-6;
+      const lenN1 = Math.sqrt(n1[0]*n1[0] + n1[1]*n1[1]) || 1e-6;
+      const u0 = [n0[0]/lenN0, n0[1]/lenN0];
+      const u1 = [n1[0]/lenN1, n1[1]/lenN1];
       
-      for (let i = 0; i < points.length; i++) {
-        const curr = points[i];
-        let offset;
-        if (i === 0) {
-          // 시작점: 다음 점을 기준으로 단순 노멀 계산
-          const next = points[i + 1];
-          let dx = next[0] - curr[0];
-          let dy = next[1] - curr[1];
-          const len = Math.sqrt(dx * dx + dy * dy);
-          if (len === 0) { dx = 0; dy = 0; }
-          else { dx /= len; dy /= len; }
-          offset = [-dy * thickness, dx * thickness];
-        } else if (i === points.length - 1) {
-          // 끝점: 이전 점을 기준으로 단순 노멀 계산
-          const prev = points[i - 1];
-          let dx = curr[0] - prev[0];
-          let dy = curr[1] - prev[1];
-          const len = Math.sqrt(dx * dx + dy * dy);
-          if (len === 0) { dx = 0; dy = 0; }
-          else { dx /= len; dy /= len; }
-          offset = [-dy * thickness, dx * thickness];
-        } else {
-          // 내부 점: miter 조인을 계산합니다.
-          const prev = points[i - 1];
-          const next = points[i + 1];
-          
-          // 이전 선분과 다음 선분의 단위 벡터
-          let dx0 = curr[0] - prev[0];
-          let dy0 = curr[1] - prev[1];
-          let len0 = Math.sqrt(dx0 * dx0 + dy0 * dy0);
-          if (len0 === 0) { dx0 = 0; dy0 = 0; }
-          else { dx0 /= len0; dy0 /= len0; }
-          
-          let dx1 = next[0] - curr[0];
-          let dy1 = next[1] - curr[1];
-          let len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
-          if (len1 === 0) { dx1 = 0; dy1 = 0; }
-          else { dx1 /= len1; dy1 /= len1; }
-          
-          // 각 선분의 오른쪽 노멀
-          const n0 = [-dy0, dx0];
-          const n1 = [-dy1, dx1];
-          
-          // miter 벡터: 두 노멀의 합을 정규화
-          let miterX = n0[0] + n1[0];
-          let miterY = n0[1] + n1[1];
-          let miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
-          if (miterLen < 0.0001) {
-            miterX = n0[0];
-            miterY = n0[1];
-            miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
-          } else {
-            miterX /= miterLen;
-            miterY /= miterLen;
-          }
-          
-          // miter 스케일 보정: 두께가 일정하도록 함  
-          // (miter와 n0 간의 내적이 두께 적용에 필요한 스케일을 제공합니다)
-          const dot = miterX * n0[0] + miterY * n0[1];
-          const scale = thickness / dot;
-          offset = [miterX * scale, miterY * scale];
-        }
-        offsets.push(offset);
+      // Raw miter direction is the sum:
+      let mx = u0[0] + u1[0];
+      let my = u0[1] + u1[1];
+      let mLen = Math.sqrt(mx*mx + my*my);
+      if (mLen < 1e-6) {
+        // Degenerate (nearly 180-degree turn). Fall back to one normal:
+        mx = u0[0];
+        my = u0[1];
+        mLen = Math.sqrt(mx*mx + my*my);
       }
+      mx /= mLen;
+      my /= mLen;
       
-      // 각 점마다 두 개의 버텍스 생성: 오프셋을 더한 버텍스와 뺀 버텍스
-      for (let i = 0; i < points.length; i++) {
-        const p = points[i];
-        const off = offsets[i];
-        vertices.push(p[0] + off[0], p[1] + off[1]);
-        vertices.push(p[0] - off[0], p[1] - off[1]);
-      }
+      // The scale factor needed so that the offset is halfThickness in the direction perpendicular
+      // to the line. Typically it's: halfThickness / dot(miter, n0).
+      // Because dot(miter, n0) tells us how much miter is "tilted" relative to a pure normal.
+      const dot = mx*u0[0] + my*u0[1];  // dot(miter, normal0)
+      // If dot is too close to 0 (extremely sharp angle), the line would blow up:
+      // so we can clamp it if we want.
+      const MAX_MITER = 4.0; // for example
+      const miterScale = halfThickness / Math.max(dot, 0.001);
+      // If you want to clamp extremes:
+      // const miterScaleClamped = Math.min(miterScale, MAX_MITER);
       
-      // 인접한 두 점을 연결하여 삼각형 인덱스 생성
-      for (let i = 0; i < points.length - 1; i++) {
-        const base = i * 2;
-        indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
-      }
-      
-      return { vertices: new Float32Array(vertices), indices: new Uint16Array(indices) };
+      offsetVectors.push([mx, my, miterScale]);
+    }
+  }
+  
+  // Now create the actual vertex positions:
+  // Each polyline vertex i -> 2 expanded-geometry vertices:
+  //    i_top = p[i] + miterOffset * halfT
+  //    i_bot = p[i] - miterOffset * halfT
+  // Indices connect them into triangles along the line.
+  
+  // We'll store them as (xTop, yTop), (xBot, yBot) for each original vertex i.
+  // So the final array is size = points.length * 4 floats.
+  
+  const expandedVerts = [];
+  
+  for (let i = 0; i < points.length; i++) {
+    const [px, py] = points[i];
+    let ox, oy, scaleVal = halfT; // default
+    
+    if (offsetVectors[i].length === 3) {
+      // interior vertex with computed miter & scale
+      ox = offsetVectors[i][0];
+      oy = offsetVectors[i][1];
+      scaleVal = offsetVectors[i][2];
+    } else {
+      // just normal
+      ox = offsetVectors[i][0];
+      oy = offsetVectors[i][1];
     }
     
-    // 두께 (클립 공간 단위) 및 색상 설정
-    const thickness = 0.05;
-    const color = [1.0, 0.0, 0.0]; // 빨간색
+    // final offset vector = (ox, oy) * scaleVal
+    const finalOx = ox * scaleVal;
+    const finalOy = oy * scaleVal;
     
-    // 여러 경로의 버텍스와 인덱스를 결합합니다.
-    let combinedVertices = [];
-    let combinedIndices = [];
-    let vertexOffset = 0;
-    for (let path of paths) {
-      // 픽셀 좌표를 클립 공간 좌표로 변환
-      const clipPoints = path.map(pt => toClipSpace(pt));
-      const { vertices, indices } = calculateNormalsAndVertices(clipPoints, thickness);
-      combinedVertices.push(...vertices);
-      for (let idx of indices) {
-        combinedIndices.push(idx + vertexOffset);
-      }
-      vertexOffset += clipPoints.length * 2;
-    }
+    // top and bottom
+    const topX = px + finalOx;
+    const topY = py + finalOy;
+    const botX = px - finalOx;
+    const botY = py - finalOy;
     
-    // 버텍스 버퍼 생성 및 데이터 전송
-    const vertexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(combinedVertices), gl.STATIC_DRAW);
-    
-    // 인덱스 버퍼 생성 및 데이터 전송
-    const indexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(combinedIndices), gl.STATIC_DRAW);
-    
-    // attribute 및 uniform 위치 가져오기
-    const positionLocation = gl.getAttribLocation(program, 'a_position');
-    const colorLocation = gl.getUniformLocation(program, 'u_color');
-    const thicknessLocation = gl.getUniformLocation(program, 'u_thickness');
-    
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 2 * Float32Array.BYTES_PER_ELEMENT, 0);
-    
-    // 렌더링
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.useProgram(program);
-    
-    gl.uniform3fv(colorLocation, color);
-    gl.uniform1f(thicknessLocation, thickness);
-    
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-    gl.drawElements(gl.TRIANGLES, combinedIndices.length, gl.UNSIGNED_SHORT, 0);
-  </script>
+    expandedVerts.push(topX, topY, botX, botY);
+  }
+  
+  // Build triangle indices. For each segment i to i+1:
+  //    top(i)   = i*2
+  //    bot(i)   = i*2 + 1
+  //    top(i+1) = (i+1)*2
+  //    bot(i+1) = (i+1)*2 + 1
+  // We form two triangles: (top(i), bot(i), top(i+1)) and (bot(i), bot(i+1), top(i+1))
+  
+  for (let i = 0; i < points.length - 1; i++) {
+    const iTop    = i * 2;
+    const iBot    = i * 2 + 1;
+    const iTopNext= (i+1)*2;
+    const iBotNext= (i+1)*2 + 1;
+    indices.push(
+      iTop, iBot, iTopNext,
+      iBot, iBotNext, iTopNext
+    );
+  }
+  
+  return {
+    vertices: new Float32Array(expandedVerts),
+    indices: new Uint16Array(indices),
+  };
+}
+
+
+// ------------------ Combine All Paths into One Buffer ------------------
+let combinedVertices = [];
+let combinedIndices = [];
+let vertexOffset = 0;
+
+for (const path of paths) {
+  // Build expanded geometry for this path
+  const geom = buildThickLineGeometry(path, halfT);
+  // Merge
+  for (let i = 0; i < geom.vertices.length; i++) {
+    combinedVertices.push(geom.vertices[i]);
+  }
+  for (let i = 0; i < geom.indices.length; i++) {
+    combinedIndices.push(geom.indices[i] + vertexOffset);
+  }
+  // Each original point adds 2 expanded vertices:
+  //   so if path.length = N, we have N*2 final vertices
+  vertexOffset += (path.length * 2);
+}
+
+// ------------------ Create Buffers ------------------
+const vertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(combinedVertices), gl.STATIC_DRAW);
+
+const indexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(combinedIndices), gl.STATIC_DRAW);
+
+// ------------------ Set up Program and Attributes ------------------
+gl.useProgram(program);
+
+const positionLoc = gl.getAttribLocation(program, 'a_position');
+gl.enableVertexAttribArray(positionLoc);
+gl.vertexAttribPointer(
+  positionLoc,
+  2,
+  gl.FLOAT,
+  false,
+  0,
+  0
+);
+
+// Uniforms
+const resolutionLoc = gl.getUniformLocation(program, 'u_resolution');
+const colorLoc      = gl.getUniformLocation(program, 'u_color');
+
+// Set the resolution (width, height) in the shader
+gl.uniform2f(resolutionLoc, canvas.width, canvas.height);
+
+// Choose a color
+gl.uniform3f(colorLoc, 1.0, 0.0, 0.0); // red
+
+// ------------------ Render ------------------
+gl.clearColor(0, 0, 0, 1);
+gl.clear(gl.COLOR_BUFFER_BIT);
+
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+gl.drawElements(gl.TRIANGLES, combinedIndices.length, gl.UNSIGNED_SHORT, 0);
+</script>
 </body>
 </html>
