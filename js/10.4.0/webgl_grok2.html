@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>WebGL Thick LineString with Miter Joints (GIS Linestring)</title>
+  <title>WebGL Thick LineString with Miter Joints (Uniform Thickness)</title>
   <style>
     canvas { border: 1px solid black; }
   </style>
@@ -16,7 +16,7 @@
       alert('WebGL이 지원되지 않습니다.');
       throw new Error('WebGL not supported');
     }
-
+    
     // 버텍스 셰이더
     const vertexShaderSource = `
       attribute vec2 a_position;
@@ -28,7 +28,7 @@
         v_color = u_color;
       }
     `;
-
+    
     // 프래그먼트 셰이더
     const fragmentShaderSource = `
       precision mediump float;
@@ -37,7 +37,7 @@
         gl_FragColor = vec4(v_color, 1.0);
       }
     `;
-
+    
     function createShader(gl, type, source) {
       const shader = gl.createShader(type);
       gl.shaderSource(shader, source);
@@ -49,7 +49,7 @@
       }
       return shader;
     }
-
+    
     function createProgram(gl, vertexShader, fragmentShader) {
       const program = gl.createProgram();
       gl.attachShader(program, vertexShader);
@@ -62,88 +62,121 @@
       }
       return program;
     }
-
+    
     const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
     const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
     const program = createProgram(gl, vertexShader, fragmentShader);
-
-    // GIS Linestring 경로 (여러 개의 경로가 있을 수 있음)
+    
+    // GIS Linestring 경로 (픽셀 좌표)
     const paths = [
       [[10,75], [90,100], [130,50], [150,100], [160,50], [170,100], [180,50]]
     ];
-
-    // 캔버스 픽셀 좌표를 클립 공간(-1 ~ 1)으로 변환하는 함수
-    // 여기서는 GIS 좌표가 바닥 기준(좌측 하단이 (0,0))이라고 가정합니다.
+    
+    // 캔버스 픽셀 좌표를 클립 공간(-1 ~ 1)으로 변환 (캔버스 좌측 하단을 (0,0)으로 가정)
     function toClipSpace(point) {
       const x = point[0] / canvas.width * 2 - 1;
       const y = point[1] / canvas.height * 2 - 1;
       return [x, y];
     }
-
-    // 두께 및 색상 설정 (두께는 클립 공간 단위, 예: 0.05)
-    const thickness = 0.05;
-    const color = [1.0, 0.0, 0.0]; // 빨간색
-
-    // 주어진 점 배열과 두께를 이용하여 법선 및 버텍스, 인덱스를 계산하는 함수
+    
+    // miter 조인을 사용하여 일정한 두께를 유지하기 위해 각 점의 오프셋을 계산합니다.
     function calculateNormalsAndVertices(points, thickness) {
       const vertices = [];
       const indices = [];
-      const normals = [];
-
+      const offsets = [];
+      
       for (let i = 0; i < points.length; i++) {
-        let prev = points[Math.max(0, i - 1)];
-        let curr = points[i];
-        let next = points[Math.min(points.length - 1, i + 1)];
-
-        let dx1 = curr[0] - prev[0];
-        let dy1 = curr[1] - prev[1];
-        let dx2 = next[0] - curr[0];
-        let dy2 = next[1] - curr[1];
-
-        let len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
-        let len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-
-        let nx1 = (len1 !== 0 ? dy1 / len1 : 0) * thickness;
-        let ny1 = (len1 !== 0 ? -dx1 / len1 : 0) * thickness;
-        let nx2 = (len2 !== 0 ? dy2 / len2 : 0) * thickness;
-        let ny2 = (len2 !== 0 ? -dx2 / len2 : 0) * thickness;
-
-        let nx = (nx1 + nx2) / 2;
-        let ny = (ny1 + ny2) / 2;
-        if (i === 0) { nx = nx1; ny = ny1; }
-        if (i === points.length - 1) { nx = nx2; ny = ny2; }
-
-        normals.push([nx, ny]);
+        const curr = points[i];
+        let offset;
+        if (i === 0) {
+          // 시작점: 다음 점을 기준으로 단순 노멀 계산
+          const next = points[i + 1];
+          let dx = next[0] - curr[0];
+          let dy = next[1] - curr[1];
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len === 0) { dx = 0; dy = 0; }
+          else { dx /= len; dy /= len; }
+          offset = [-dy * thickness, dx * thickness];
+        } else if (i === points.length - 1) {
+          // 끝점: 이전 점을 기준으로 단순 노멀 계산
+          const prev = points[i - 1];
+          let dx = curr[0] - prev[0];
+          let dy = curr[1] - prev[1];
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len === 0) { dx = 0; dy = 0; }
+          else { dx /= len; dy /= len; }
+          offset = [-dy * thickness, dx * thickness];
+        } else {
+          // 내부 점: miter 조인을 계산합니다.
+          const prev = points[i - 1];
+          const next = points[i + 1];
+          
+          // 이전 선분과 다음 선분의 단위 벡터
+          let dx0 = curr[0] - prev[0];
+          let dy0 = curr[1] - prev[1];
+          let len0 = Math.sqrt(dx0 * dx0 + dy0 * dy0);
+          if (len0 === 0) { dx0 = 0; dy0 = 0; }
+          else { dx0 /= len0; dy0 /= len0; }
+          
+          let dx1 = next[0] - curr[0];
+          let dy1 = next[1] - curr[1];
+          let len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+          if (len1 === 0) { dx1 = 0; dy1 = 0; }
+          else { dx1 /= len1; dy1 /= len1; }
+          
+          // 각 선분의 오른쪽 노멀
+          const n0 = [-dy0, dx0];
+          const n1 = [-dy1, dx1];
+          
+          // miter 벡터: 두 노멀의 합을 정규화
+          let miterX = n0[0] + n1[0];
+          let miterY = n0[1] + n1[1];
+          let miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
+          if (miterLen < 0.0001) {
+            miterX = n0[0];
+            miterY = n0[1];
+            miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
+          } else {
+            miterX /= miterLen;
+            miterY /= miterLen;
+          }
+          
+          // miter 스케일 보정: 두께가 일정하도록 함  
+          // (miter와 n0 간의 내적이 두께 적용에 필요한 스케일을 제공합니다)
+          const dot = miterX * n0[0] + miterY * n0[1];
+          const scale = thickness / dot;
+          offset = [miterX * scale, miterY * scale];
+        }
+        offsets.push(offset);
       }
-
-      // 각 점에서 좌우 두 버텍스를 생성합니다.
+      
+      // 각 점마다 두 개의 버텍스 생성: 오프셋을 더한 버텍스와 뺀 버텍스
       for (let i = 0; i < points.length; i++) {
-        const [x, y] = points[i];
-        const [nx, ny] = normals[i];
-        vertices.push(
-          x - nx, y - ny, // 한쪽 버텍스
-          x + nx, y + ny  // 반대쪽 버텍스
-        );
+        const p = points[i];
+        const off = offsets[i];
+        vertices.push(p[0] + off[0], p[1] + off[1]);
+        vertices.push(p[0] - off[0], p[1] - off[1]);
       }
-
-      // 인덱스를 생성하여 삼각형 두 개로 구성
+      
+      // 인접한 두 점을 연결하여 삼각형 인덱스 생성
       for (let i = 0; i < points.length - 1; i++) {
-        const baseIndex = i * 2;
-        indices.push(
-          baseIndex, baseIndex + 1, baseIndex + 2,
-          baseIndex + 1, baseIndex + 3, baseIndex + 2
-        );
+        const base = i * 2;
+        indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
       }
-
+      
       return { vertices: new Float32Array(vertices), indices: new Uint16Array(indices) };
     }
-
+    
+    // 두께 (클립 공간 단위) 및 색상 설정
+    const thickness = 0.05;
+    const color = [1.0, 0.0, 0.0]; // 빨간색
+    
     // 여러 경로의 버텍스와 인덱스를 결합합니다.
     let combinedVertices = [];
     let combinedIndices = [];
     let vertexOffset = 0;
     for (let path of paths) {
-      // 각 경로의 픽셀 좌표를 클립 공간 좌표로 변환
+      // 픽셀 좌표를 클립 공간 좌표로 변환
       const clipPoints = path.map(pt => toClipSpace(pt));
       const { vertices, indices } = calculateNormalsAndVertices(clipPoints, thickness);
       combinedVertices.push(...vertices);
@@ -152,35 +185,33 @@
       }
       vertexOffset += clipPoints.length * 2;
     }
-
+    
     // 버텍스 버퍼 생성 및 데이터 전송
     const vertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(combinedVertices), gl.STATIC_DRAW);
-
+    
     // 인덱스 버퍼 생성 및 데이터 전송
     const indexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(combinedIndices), gl.STATIC_DRAW);
-
+    
     // attribute 및 uniform 위치 가져오기
     const positionLocation = gl.getAttribLocation(program, 'a_position');
     const colorLocation = gl.getUniformLocation(program, 'u_color');
     const thicknessLocation = gl.getUniformLocation(program, 'u_thickness');
-
-    // attribute 설정 (각 버텍스는 2개의 요소: x, y)
+    
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 2 * Float32Array.BYTES_PER_ELEMENT, 0);
-
-    // 렌더링 설정
+    
+    // 렌더링
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(program);
-
-    // uniform 값 설정
+    
     gl.uniform3fv(colorLocation, color);
     gl.uniform1f(thicknessLocation, thickness);
-
+    
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.drawElements(gl.TRIANGLES, combinedIndices.length, gl.UNSIGNED_SHORT, 0);
   </script>
