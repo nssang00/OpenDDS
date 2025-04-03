@@ -2,127 +2,117 @@ using System;
 
 public class ByteBuffer
 {
-    private byte[] buffer;
-    private int position;
-    private bool bigEndian;
+    private byte[] _buffer;
+    private int _position;
+    private bool _bigEndian;
 
     public ByteBuffer(int capacity, bool bigEndian = true)
     {
-        buffer = new byte[capacity];
-        this.bigEndian = bigEndian;
-        this.position = 0;
+        _buffer = new byte[capacity];
+        _bigEndian = bigEndian;
+        _position = 0;
     }
 
     public ByteBuffer SetEndian(bool bigEndian)
     {
-        this.bigEndian = bigEndian;
+        _bigEndian = bigEndian;
         return this;
     }
 
     public ByteBuffer Rewind()
     {
-        position = 0;
+        _position = 0;
         return this;
     }
 
     public int Position()
     {
-        return position;
+        return _position;
     }
 
     public ByteBuffer Position(int newPosition)
     {
-        position = newPosition;
+        _position = newPosition;
         return this;
     }
 
     public byte[] ToArray()
     {
-        return buffer;
+        return _buffer;
+    }
+
+    // ----- Common Internal Helpers -----
+
+    private ByteBuffer WriteBytes(ulong value, int byteCount)
+    {
+        for (int i = 0; i < byteCount; i++)
+        {
+            int shift = _bigEndian ? (byteCount - 1 - i) * 8 : i * 8;
+            _buffer[_position + i] = (byte)(value >> shift);
+        }
+        _position += byteCount;
+        return this;
+    }
+
+    private ulong ReadBytes(int byteCount)
+    {
+        ulong result = 0;
+        for (int i = 0; i < byteCount; i++)
+        {
+            int shift = _bigEndian ? (byteCount - 1 - i) * 8 : i * 8;
+            result |= ((ulong)_buffer[_position + i]) << shift;
+        }
+        _position += byteCount;
+        return result;
+    }
+
+    private ByteBuffer PutRawBytes(byte[] bytes)
+    {
+        if (BitConverter.IsLittleEndian != !_bigEndian)
+        {
+            Array.Reverse(bytes);
+        }
+        Array.Copy(bytes, 0, _buffer, _position, bytes.Length);
+        _position += bytes.Length;
+        return this;
     }
 
     // ----- Put Methods -----
 
     public ByteBuffer Put(byte value)
     {
-        buffer[position++] = value;
+        _buffer[_position++] = value;
         return this;
     }
 
     public ByteBuffer PutShort(short value)
     {
-        if (bigEndian)
-        {
-            buffer[position] = (byte)(value >> 8);
-            buffer[position + 1] = (byte)value;
-        }
-        else
-        {
-            buffer[position] = (byte)value;
-            buffer[position + 1] = (byte)(value >> 8);
-        }
-        position += 2;
-        return this;
+        return PutUShort((ushort)value);
     }
 
     public ByteBuffer PutUShort(ushort value)
     {
-        if (bigEndian)
-        {
-            buffer[position] = (byte)(value >> 8);
-            buffer[position + 1] = (byte)value;
-        }
-        else
-        {
-            buffer[position] = (byte)value;
-            buffer[position + 1] = (byte)(value >> 8);
-        }
-        position += 2;
-        return this;
+        return WriteBytes(value, 2);
     }
 
     public ByteBuffer PutInt(int value)
     {
-        for (int i = 0; i < 4; i++)
-        {
-            int shift = bigEndian ? (3 - i) * 8 : i * 8;
-            buffer[position + i] = (byte)(value >> shift);
-        }
-        position += 4;
-        return this;
+        return PutUInt((uint)value);
     }
 
     public ByteBuffer PutUInt(uint value)
     {
-        for (int i = 0; i < 4; i++)
-        {
-            int shift = bigEndian ? (3 - i) * 8 : i * 8;
-            buffer[position + i] = (byte)(value >> shift);
-        }
-        position += 4;
-        return this;
+        return WriteBytes(value, 4);
     }
 
     public ByteBuffer PutLong(long value)
     {
-        for (int i = 0; i < 8; i++)
-        {
-            int shift = bigEndian ? (7 - i) * 8 : i * 8;
-            buffer[position + i] = (byte)(value >> shift);
-        }
-        position += 8;
-        return this;
+        return PutULong((ulong)value);
     }
 
     public ByteBuffer PutULong(ulong value)
     {
-        for (int i = 0; i < 8; i++)
-        {
-            int shift = bigEndian ? (7 - i) * 8 : i * 8;
-            buffer[position + i] = (byte)(value >> shift);
-        }
-        position += 8;
-        return this;
+        return WriteBytes(value, 8);
     }
 
     public ByteBuffer PutFloat(float value)
@@ -137,123 +127,64 @@ public class ByteBuffer
         return PutRawBytes(bytes);
     }
 
-    private ByteBuffer PutRawBytes(byte[] bytes)
-    {
-        if (BitConverter.IsLittleEndian != !bigEndian)
-        {
-            Array.Reverse(bytes);
-        }
-        Array.Copy(bytes, 0, buffer, position, bytes.Length);
-        position += bytes.Length;
-        return this;
-    }
-
     // ----- Get Methods -----
 
     public byte Get()
     {
-        return buffer[position++];
+        return _buffer[_position++];
     }
 
     public short GetShort()
     {
-        short result;
-        if (bigEndian)
-        {
-            result = (short)((buffer[position] << 8) | buffer[position + 1]);
-        }
-        else
-        {
-            result = (short)((buffer[position + 1] << 8) | buffer[position]);
-        }
-        position += 2;
-        return result;
+        return (short)GetUShort();
     }
 
     public ushort GetUShort()
     {
-        ushort result;
-        if (bigEndian)
-        {
-            result = (ushort)((buffer[position] << 8) | buffer[position + 1]);
-        }
-        else
-        {
-            result = (ushort)((buffer[position + 1] << 8) | buffer[position]);
-        }
-        position += 2;
-        return result;
+        return (ushort)ReadBytes(2);
     }
 
     public int GetInt()
     {
-        int result = 0;
-        for (int i = 0; i < 4; i++)
-        {
-            int shift = bigEndian ? (3 - i) * 8 : i * 8;
-            result |= buffer[position + i] << shift;
-        }
-        position += 4;
-        return result;
+        return (int)GetUInt();
     }
 
     public uint GetUInt()
     {
-        uint result = 0;
-        for (int i = 0; i < 4; i++)
-        {
-            int shift = bigEndian ? (3 - i) * 8 : i * 8;
-            result |= ((uint)buffer[position + i]) << shift;
-        }
-        position += 4;
-        return result;
+        return (uint)ReadBytes(4);
     }
 
     public long GetLong()
     {
-        long result = 0;
-        for (int i = 0; i < 8; i++)
-        {
-            int shift = bigEndian ? (7 - i) * 8 : i * 8;
-            result |= ((long)buffer[position + i]) << shift;
-        }
-        position += 8;
-        return result;
+        return (long)GetULong();
     }
 
     public ulong GetULong()
     {
-        ulong result = 0;
-        for (int i = 0; i < 8; i++)
-        {
-            int shift = bigEndian ? (7 - i) * 8 : i * 8;
-            result |= ((ulong)buffer[position + i]) << shift;
-        }
-        position += 8;
-        return result;
+        return ReadBytes(8);
     }
 
     public float GetFloat()
     {
         byte[] bytes = new byte[4];
-        Array.Copy(buffer, position, bytes, 0, 4);
-        if (BitConverter.IsLittleEndian != !bigEndian)
+        Array.Copy(_buffer, _position, bytes, 0, 4);
+        if (BitConverter.IsLittleEndian != !_bigEndian)
         {
             Array.Reverse(bytes);
         }
-        position += 4;
+        _position += 4;
         return BitConverter.ToSingle(bytes, 0);
     }
 
     public double GetDouble()
     {
         byte[] bytes = new byte[8];
-        Array.Copy(buffer, position, bytes, 0, 8);
-        if (BitConverter.IsLittleEndian != !bigEndian)
+        Array.Copy(_buffer, _position, bytes, 0, 8);
+        if (BitConverter.IsLittleEndian != !_bigEndian)
         {
             Array.Reverse(bytes);
         }
-        position += 8;
+        _position += 8;
         return BitConverter.ToDouble(bytes, 0);
     }
 }
