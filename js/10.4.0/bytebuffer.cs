@@ -41,6 +41,8 @@ public class ByteBuffer
         return buffer;
     }
 
+    // ----- Put Methods -----
+
     public ByteBuffer Put(byte value)
     {
         buffer[position++] = value;
@@ -121,5 +123,90 @@ public class ByteBuffer
         Array.Copy(bytes, 0, buffer, position, bytes.Length);
         position += bytes.Length;
         return this;
+    }
+
+    // ----- Get Methods -----
+
+    public byte Get()
+    {
+        return buffer[position++];
+    }
+
+    public short GetShort()
+    {
+        short result;
+        if (bigEndian)
+        {
+            result = (short)((buffer[position] << 8) | buffer[position + 1]);
+        }
+        else
+        {
+            result = (short)((buffer[position + 1] << 8) | buffer[position]);
+        }
+        position += 2;
+        return result;
+    }
+
+    public ushort GetUShort()
+    {
+        return (ushort)GetShort();
+    }
+
+    public int GetInt()
+    {
+        int result = 0;
+        for (int i = 0; i < 4; i++)
+        {
+            int shift = bigEndian ? (3 - i) * 8 : i * 8;
+            result |= buffer[position + i] << shift;
+        }
+        position += 4;
+        return result;
+    }
+
+    public uint GetUInt()
+    {
+        return (uint)GetInt();
+    }
+
+    public long GetLong()
+    {
+        long result = 0;
+        for (int i = 0; i < 8; i++)
+        {
+            int shift = bigEndian ? (7 - i) * 8 : i * 8;
+            result |= ((long)buffer[position + i]) << shift;
+        }
+        position += 8;
+        return result;
+    }
+
+    public ulong GetULong()
+    {
+        return (ulong)GetLong();
+    }
+
+    public float GetFloat()
+    {
+        byte[] bytes = new byte[4];
+        Array.Copy(buffer, position, bytes, 0, 4);
+        if (BitConverter.IsLittleEndian != !bigEndian)
+        {
+            Array.Reverse(bytes);
+        }
+        position += 4;
+        return BitConverter.ToSingle(bytes, 0);
+    }
+
+    public double GetDouble()
+    {
+        byte[] bytes = new byte[8];
+        Array.Copy(buffer, position, bytes, 0, 8);
+        if (BitConverter.IsLittleEndian != !bigEndian)
+        {
+            Array.Reverse(bytes);
+        }
+        position += 8;
+        return BitConverter.ToDouble(bytes, 0);
     }
 }
