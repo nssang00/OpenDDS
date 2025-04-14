@@ -2,57 +2,57 @@ using System;
 
 public class ByteBuffer
 {
-    private byte[] buffer;
-    private int position = 0;
-    private bool isLittleEndian;
+    private byte[] _buffer;
+    private int _position = 0;
+    private bool bigEndian;
 
-    public ByteBuffer(int capacity, bool littleEndian = false)
+    public ByteBuffer(int capacity, bool bigEndian = false)
     {
-        buffer = new byte[capacity];
-        isLittleEndian = littleEndian;
+        _buffer = new byte[capacity];
+        this.bigEndian = bigEndian;
     }
 
     public ByteBuffer PutFloat(float value)
     {
         byte[] bytes = BitConverter.GetBytes(value);
-        if (BitConverter.IsLittleEndian != isLittleEndian)
+        if (BitConverter.IsLittleEndian == bigEndian)
             Array.Reverse(bytes);
-        Buffer.BlockCopy(bytes, 0, buffer, position, 4);
-        position += 4;
+        Buffer.BlockCopy(bytes, 0, _buffer, _position, 4);
+        _position += 4;
         return this;
     }
 
     public ByteBuffer PutDouble(double value)
     {
         byte[] bytes = BitConverter.GetBytes(value);
-        if (BitConverter.IsLittleEndian != isLittleEndian)
+        if (BitConverter.IsLittleEndian == bigEndian)
             Array.Reverse(bytes);
-        Buffer.BlockCopy(bytes, 0, buffer, position, 8);
-        position += 8;
+        Buffer.BlockCopy(bytes, 0, _buffer, _position, 8);
+        _position += 8;
         return this;
     }
 
     public float GetFloat()
     {
         byte[] bytes = new byte[4];
-        Buffer.BlockCopy(buffer, position, bytes, 0, 4);
-        if (BitConverter.IsLittleEndian != isLittleEndian)
+        Buffer.BlockCopy(_buffer, _position, bytes, 0, 4);
+        if (BitConverter.IsLittleEndian == bigEndian)
             Array.Reverse(bytes);
-        position += 4;
+        _position += 4;
         return BitConverter.ToSingle(bytes, 0);
     }
 
     public double GetDouble()
     {
         byte[] bytes = new byte[8];
-        Buffer.BlockCopy(buffer, position, bytes, 0, 8);
-        if (BitConverter.IsLittleEndian != isLittleEndian)
+        Buffer.BlockCopy(_buffer, _position, bytes, 0, 8);
+        if (BitConverter.IsLittleEndian == bigEndian)
             Array.Reverse(bytes);
-        position += 8;
+        _position += 8;
         return BitConverter.ToDouble(bytes, 0);
     }
 
-    public void Rewind() => position = 0;
-    public byte[] ToArray() => buffer;
-    public int Position => position;
+    public void Rewind() => _position = 0;
+    public byte[] ToArray() => _buffer;
+    public int Position => _position;
 }
