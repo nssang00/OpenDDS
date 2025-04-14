@@ -1,3 +1,27 @@
+public ByteBuffer PutFloat(float value)
+{
+    uint bits = (uint)BitConverter.SingleToInt32Bits(value);
+    return WriteBytes(bits, 4);
+}
+
+public ByteBuffer PutDouble(double value)
+{
+    ulong bits = (ulong)BitConverter.DoubleToInt64Bits(value);
+    return WriteBytes(bits, 8);
+}
+
+public float GetFloat()
+{
+    uint bits = (uint)ReadBytes(4);
+    return BitConverter.Int32BitsToSingle((int)bits);
+}
+
+public double GetDouble()
+{
+    ulong bits = ReadBytes(8);
+    return BitConverter.Int64BitsToDouble((long)bits);
+}
+///////
 using System;
 
 public class ByteBuffer
