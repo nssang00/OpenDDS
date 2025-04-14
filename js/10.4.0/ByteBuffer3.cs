@@ -1,31 +1,26 @@
+// float -> 4바이트로 변환
 public ByteBuffer PutFloat(float value)
 {
-    return PutRawBytes(BitConverter.GetBytes(value));
-}
-
-public ByteBuffer PutDouble(double value)
-{
-    return PutRawBytes(BitConverter.GetBytes(value));
+    uint bits = BitConverter.ToUInt32(BitConverter.GetBytes(value), 0);
+    return WriteBytes(bits, 4);
 }
 
 public float GetFloat()
 {
-    byte[] bytes = new byte[4];
-    Array.Copy(_buffer, _position, bytes, 0, 4);
-    if (BitConverter.IsLittleEndian != !_bigEndian)
-        Array.Reverse(bytes);
-    _position += 4;
-    return BitConverter.ToSingle(bytes, 0);
+    uint bits = (uint)ReadBytes(4);
+    return BitConverter.ToSingle(BitConverter.GetBytes(bits), 0);
+}
+
+public ByteBuffer PutDouble(double value)
+{
+    ulong bits = BitConverter.ToUInt64(BitConverter.GetBytes(value), 0);
+    return WriteBytes(bits, 8);
 }
 
 public double GetDouble()
 {
-    byte[] bytes = new byte[8];
-    Array.Copy(_buffer, _position, bytes, 0, 8);
-    if (BitConverter.IsLittleEndian != !_bigEndian)
-        Array.Reverse(bytes);
-    _position += 8;
-    return BitConverter.ToDouble(bytes, 0);
+    ulong bits = ReadBytes(8);
+    return BitConverter.ToDouble(BitConverter.GetBytes(bits), 0);
 }
 
 ////
