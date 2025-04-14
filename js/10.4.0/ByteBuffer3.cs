@@ -1,5 +1,41 @@
 public ByteBuffer PutFloat(float value)
 {
+    byte[] bytes = BitConverter.GetBytes(value);
+    if (BitConverter.IsLittleEndian != !_bigEndian)
+        Array.Reverse(bytes);
+    return PutRawBytes(bytes);
+}
+
+public ByteBuffer PutDouble(double value)
+{
+    byte[] bytes = BitConverter.GetBytes(value);
+    if (BitConverter.IsLittleEndian != !_bigEndian)
+        Array.Reverse(bytes);
+    return PutRawBytes(bytes);
+}
+
+public float GetFloat()
+{
+    byte[] bytes = new byte[4];
+    Array.Copy(_buffer, _position, bytes, 0, 4);
+    if (BitConverter.IsLittleEndian != !_bigEndian)
+        Array.Reverse(bytes);
+    _position += 4;
+    return BitConverter.ToSingle(bytes, 0);
+}
+
+public double GetDouble()
+{
+    byte[] bytes = new byte[8];
+    Array.Copy(_buffer, _position, bytes, 0, 8);
+    if (BitConverter.IsLittleEndian != !_bigEndian)
+        Array.Reverse(bytes);
+    _position += 8;
+    return BitConverter.ToDouble(bytes, 0);
+}
+/////
+public ByteBuffer PutFloat(float value)
+{
     uint bits = (uint)BitConverter.SingleToInt32Bits(value);
     return WriteBytes(bits, 4);
 }
