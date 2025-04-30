@@ -32,6 +32,29 @@ public:
     };
 %}
 
+%define DEFINE_TUPLE_WRAPPER3(NAME, T1, T2, T3, CS1, CS2, CS3)
+  // C#용 프로퍼티 정의
+  %typemap(cscode) tuple_wrapper<T1, T2, T3> %{
+    public CS1 Item1 {
+      get { return get_Item1(); }
+      set { set_Item1(value); }
+    }
+    public CS2 Item2 {
+      get { return get_Item2(); }
+      set { set_Item2(value); }
+    }
+    public CS3 Item3 {
+      get { return get_Item3(); }
+      set { set_Item3(value); }
+    }
+  %}
+
+  // typedef 및 template 지정
+  %ignore NAME;
+  %typedef tuple_wrapper<T1, T2, T3> NAME;
+  %template(NAME) tuple_wrapper<T1, T2, T3>;
+%enddef
+
 %include "example.h"
 
 %typemap(cscode) tuple_wrapper<int, double, std::string> %{
@@ -58,3 +81,5 @@ public:
 %typedef tuple_wrapper<int,double,std::string> MyTuple3;
 %template(MyTuple3) tuple_wrapper<int, double, std::string>;
 
+DEFINE_TUPLE_WRAPPER3(MyTuple3, int, double, std::string, int, double, string)
+DEFINE_TUPLE_WRAPPER3(MyTupleString, std::string, std::string, int, string, string, int)
