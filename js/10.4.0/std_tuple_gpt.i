@@ -1,63 +1,68 @@
-/* ---------------------------------------------------------------------------
- *  std_tuple.i     ―  std::tuple<T1,T2,T3>  ↔  System.Tuple<T1,T2,T3>
- *                    (3-원소 전용, C# 타깃)
+/* -----------------------------------------------------------------------------
+ *  std_tuple.i ― std::tuple<T1,T2,T3>  ↔  System.Tuple<T1,T2,T3>
  *
- *  사용 예
+ *  ‣ 3-원소 전용.  (T1,T2,T3 고정 길이)
+ *  ‣ C# 쪽 래퍼는  System.Tuple<…> 를 상속하므로 런타임 오버헤드 없음.
+ *
+ *  사용법
  *  -------
  *    %include "std_tuple.i"
  *    %template(MyTuple)  std::tuple<int,double,std::string>;
  *    %template(MyTuple2) std::tuple<short,int,double>;
  *
- *    // C++ 코드에서 std::tuple<int,double,std::string> 을 사용하든,
- *    // typedef  ObjectInfo = std::tuple<int,double,std::string>;
- *    // 로 쓰든, C# 측 시그니처는 전부 MyTuple 로 보입니다.
- * ------------------------------------------------------------------------- */
+ *  참고:  %template 를 선언하지 않은 튜플 타입은 포인터 식별자(SWIGTYPE_…)
+ *        로만 노출되니, 필요한 모든 조합을 반드시 %template 해 주세요.
+ * --------------------------------------------------------------------------- */
 
 %{
-#include <tuple>      /* native 헤더: SWIG wrapper 쪽에서 필요             */
+#include <tuple>
 %}
 
-%include <typemaps.i> /* SWIG 표준 typemap – 이미 포함돼 있으면 생략 가능 */
+/* ---------------------------------------------------------------------------
+ *  내부 매크로  (T1, T2, T3 는 자리표시자)
+ * ------------------------------------------------------------------------- */
+%define SWIG_STD_TUPLE3_INTERNAL(T1, T2, T3)
 
-/* ────────────────────────────────────────────────────────────────────────── */
-/*  아래 typemap들은 “템플릿 패턴”으로 정의됩니다.                          */
-/*  std::tuple< T1 , T2 , T3 > 형태라면 T1~T3 가 무엇이든 자동 적용됩니다.  */
-/* ────────────────────────────────────────────────────────────────────────── */
+%typemap(csinterfaces) std::tuple< T1, T2, T3 > \
+"global::System.IDisposable"
 
-/* 1) C# 쪽 타입 이름 (메서드 시그니처)  */
-%typemap(cstype) std::tuple< T1, T2, T3 >                       \
+%typemap(csbase)       std::tuple< T1, T2, T3 > \
 "System.Tuple<$typemap(cstype,T1), $typemap(cstype,T2), $typemap(cstype,T3)>"
 
-/* 2) C# → C++ 파라미터(값) 전달용 – 시그니처에 그대로 튜플 클래스를 사용 */
-%typemap(csin)   std::tuple< T1, T2, T3 >                       \
+%typemap(cstype)       std::tuple< T1, T2, T3 > \
+"System.Tuple<$typemap(cstype,T1), $typemap(cstype,T2), $typemap(cstype,T3)>"
+
+%typemap(csin)         std::tuple< T1, T2, T3 > \
 "System.Tuple<$typemap(cstype,T1), $typemap(cstype,T2), $typemap(cstype,T3)> $csinput"
 
-/* 3) C# → C++ 실제 변환 (Tuple → std::tuple) */
-%typemap(in)     std::tuple< T1, T2, T3 > {
-  if (!$input) {
+/* C# → C++ 변환 */
+%typemap(in)           std::tuple< T1, T2, T3 > {
+  if (!$input)
     SWIG_exception_fail(SWIG_ValueError, "System.Tuple argument is null");
-  }
   $1 = std::make_tuple($input->Item1, $input->Item2, $input->Item3);
 }
 
-/* 4) C++ → C# 반환값 변환 (std::tuple → Tuple) */
-%typemap(csout)  std::tuple< T1, T2, T3 >                       \
+/* C++ → C# 변환 */
+%typemap(csout)        std::tuple< T1, T2, T3 > \
 "new System.Tuple<$typemap(cstype,T1), $typemap(cstype,T2), $typemap(cstype,T3)>($imcall.get<0>(), $imcall.get<1>(), $imcall.get<2>())"
 
-/* 5) 래핑 클래스가 상속할 .NET 기반 클래스 지정                            */
-%typemap(csbase) std::tuple< T1, T2, T3 >                       \
-"System.Tuple<$typemap(cstype,T1), $typemap(cstype,T2), $typemap(cstype,T3)>"
-
-/* 6) 래핑 클래스 본문에 기본 생성자 추가 (값 전달만)                        */
-%typemap(csbody) std::tuple< T1, T2, T3 > %{
+/* 래퍼 클래스(프록시) 몸체 – 편의 생성자 하나만 추가                     */
+%typemap(csbody)       std::tuple< T1, T2, T3 > %{
   public $csclassname($typemap(cstype,T1) item1,
                       $typemap(cstype,T2) item2,
                       $typemap(cstype,T3) item3)
-        : base(item1, item2, item3) { }
+          : base(item1, item2, item3) { }
 %}
 
-/* 7) 디렉터용 – 별도 변환 없이 그대로 전달                                   */
-%typemap(csdirectorin)  std::tuple< T1, T2, T3 > "$input"
-%typemap(csdirectorout) std::tuple< T1, T2, T3 > "$input"
+%enddef   /* ── SWIG_STD_TUPLE3_INTERNAL ─────────────────────────────────── */
 
-/* 끝 --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+ *  “디폴트 구현”   (std_unordered_map.i 와 동일한 패턴)
+ *    → 실제 STL std::tuple 과는 이름 충돌 없이 SWIG 안에서만 사용
+ * ------------------------------------------------------------------------- */
+namespace std {
+  template <class T1, class T2, class T3>
+  class tuple {
+    SWIG_STD_TUPLE3_INTERNAL(T1, T2, T3)
+  };
+}
