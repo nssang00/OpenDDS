@@ -75,3 +75,15 @@ public class NativeWindowHost : HwndHost
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyWindow(IntPtr hWnd);
 }
+
+
+//////
+<Window x:Class="MyApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:native="clr-namespace:Wpf;assembly=SmartGISharp"
+        Title="NativeWindowHost Demo" Height="300" Width="400">
+    <Grid>
+        <native:NativeWindowHost />
+    </Grid>
+</Window>
