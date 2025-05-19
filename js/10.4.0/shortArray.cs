@@ -1,19 +1,24 @@
-void WriteShortArray(Array value, int length)
+// 내부 헬퍼 함수
+private void WriteArray<T>(Array value, int length, Action<T> writeElement)
 {
-    if (value.Rank == 1)
+    if (value is T[] array1D)
     {
-        var arr = (short[])value;
-        for (int i = 0; i < arr.Length; ++i)
-            WriteShort(arr[i]);
+        for (int i = 0; i < length; ++i)
+        {
+            writeElement(array1D[i]);
+        }
     }
-    else if (value.Rank == 2)
+    else if (value is T[,] array2D)
     {
-        var arr = (short[,])value;
-        int dim0 = arr.GetLength(0);
-        int dim1 = arr.GetLength(1);
+        int dim0 = array2D.GetLength(0);
+        int dim1 = array2D.GetLength(1);
         for (int i = 0; i < dim0; ++i)
+        {
             for (int j = 0; j < dim1; ++j)
-                WriteShort(arr[i, j]);
+            {
+                writeElement(array2D[i, j]);
+            }
+        }
     }
     else
     {
@@ -21,25 +26,109 @@ void WriteShortArray(Array value, int length)
     }
 }
 
-void ReadShortArray(Array value, int length)
+public void WriteShortArray(Array value, int length)
 {
-    if (value.Rank == 1)
+    WriteArray<short>(value, length, WriteShort);
+}
+
+public void WriteIntArray(Array value, int length)
+{
+    WriteArray<int>(value, length, WriteInt);
+}
+
+public void WriteLongArray(Array value, int length)
+{
+    WriteArray<long>(value, length, WriteInt);
+}
+
+public void WriteFloatArray(Array value, int length)
+{
+    WriteArray<float>(value, length, WriteFloat);
+}
+
+public void WriteDoubleArray(Array value, int length)
+{
+    WriteArray<double>(value, length, WriteDouble);
+}
+
+public void WriteUShortArray(Array value, int length)
+{
+    WriteArray<ushort>(value, length, WriteShort);
+}
+
+public void WriteUIntArray(Array value, int length)
+{
+    WriteArray<uint>(value, length, WriteInt);
+}
+
+public void WriteULongArray(Array value, int length)
+{
+    WriteArray<ulong>(value, length, WriteInt);
+}
+
+private void ReadArray<T>(Array value, int length, Func<T> readElement)
+{
+    if (value is T[] array1D)
     {
-        var arr = (short[])value;
-        for (int i = 0; i < arr.Length; ++i)
-            arr[i] = ReadShort();
+        for (int i = 0; i < length; ++i)
+        {
+            array1D[i] = readElement();
+        }
     }
-    else if (value.Rank == 2)
+    else if (value is T[,] array2D)
     {
-        var arr = (short[,])value;
-        int dim0 = arr.GetLength(0);
-        int dim1 = arr.GetLength(1);
+        int dim0 = array2D.GetLength(0);
+        int dim1 = array2D.GetLength(1);
         for (int i = 0; i < dim0; ++i)
+        {
             for (int j = 0; j < dim1; ++j)
-                arr[i, j] = ReadShort();
+            {
+                array2D[i, j] = readElement();
+            }
+        }
     }
     else
     {
         throw new NotSupportedException("Arrays with rank greater than 2 are not supported.");
     }
+}
+
+public void ReadShortArray(Array value, int length)
+{
+    ReadArray<short>(value, length, ReadShort);
+}
+
+public void ReadIntArray(Array value, int length)
+{
+    ReadArray<int>(value, length, ReadInt);
+}
+
+public void ReadLongArray(Array value, int length)
+{
+    ReadArray<long>(value, length, ReadInt);
+}
+
+public void ReadFloatArray(Array value, int length)
+{
+    ReadArray<float>(value, length, ReadFloat);
+}
+
+public void ReadDoubleArray(Array value, int length)
+{
+    ReadArray<double>(value, length, ReadDouble);
+}
+
+public void ReadUShortArray(Array value, int length)
+{
+    ReadArray<ushort>(value, length, ReadShort);
+}
+
+public void ReadUIntArray(Array value, int length)
+{
+    ReadArray<uint>(value, length, ReadInt);
+}
+
+public void ReadULongArray(Array value, int length)
+{
+    ReadArray<ulong>(value, length, ReadInt);
 }
