@@ -4,21 +4,15 @@ private void WriteArray<T>(Array value, int length, Action<T> writeElement)
     if (value is T[] array1D)
     {
         for (int i = 0; i < length; ++i)
-        {
             writeElement(array1D[i]);
-        }
     }
     else if (value is T[,] array2D)
     {
         int dim0 = array2D.GetLength(0);
         int dim1 = array2D.GetLength(1);
         for (int i = 0; i < dim0; ++i)
-        {
             for (int j = 0; j < dim1; ++j)
-            {
                 writeElement(array2D[i, j]);
-            }
-        }
     }
     else
     {
@@ -38,7 +32,7 @@ public void WriteIntArray(Array value, int length)
 
 public void WriteLongArray(Array value, int length)
 {
-    WriteArray<long>(value, length, WriteInt);
+    WriteArray<long>(value, length, WriteLong);
 }
 
 public void WriteFloatArray(Array value, int length)
@@ -53,17 +47,17 @@ public void WriteDoubleArray(Array value, int length)
 
 public void WriteUShortArray(Array value, int length)
 {
-    WriteArray<ushort>(value, length, WriteShort);
+    WriteArray<ushort>(value, length, WriteUShort);
 }
 
 public void WriteUIntArray(Array value, int length)
 {
-    WriteArray<uint>(value, length, WriteInt);
+    WriteArray<uint>(value, length, WriteUInt);
 }
 
 public void WriteULongArray(Array value, int length)
 {
-    WriteArray<ulong>(value, length, WriteInt);
+    WriteArray<ulong>(value, length, WriteULong);
 }
 
 private void ReadArray<T>(Array value, int length, Func<T> readElement)
@@ -71,21 +65,15 @@ private void ReadArray<T>(Array value, int length, Func<T> readElement)
     if (value is T[] array1D)
     {
         for (int i = 0; i < length; ++i)
-        {
             array1D[i] = readElement();
-        }
     }
     else if (value is T[,] array2D)
     {
         int dim0 = array2D.GetLength(0);
         int dim1 = array2D.GetLength(1);
         for (int i = 0; i < dim0; ++i)
-        {
             for (int j = 0; j < dim1; ++j)
-            {
                 array2D[i, j] = readElement();
-            }
-        }
     }
     else
     {
@@ -105,7 +93,7 @@ public void ReadIntArray(Array value, int length)
 
 public void ReadLongArray(Array value, int length)
 {
-    ReadArray<long>(value, length, ReadInt);
+    ReadArray<long>(value, length, ReadLong);
 }
 
 public void ReadFloatArray(Array value, int length)
@@ -120,15 +108,15 @@ public void ReadDoubleArray(Array value, int length)
 
 public void ReadUShortArray(Array value, int length)
 {
-    ReadArray<ushort>(value, length, ReadShort);
+    ReadArray<ushort>(value, length, ReadUShort);
 }
 
 public void ReadUIntArray(Array value, int length)
 {
-    ReadArray<uint>(value, length, ReadInt);
+    ReadArray<uint>(value, length, ReadUInt);
 }
 
 public void ReadULongArray(Array value, int length)
 {
-    ReadArray<ulong>(value, length, ReadInt);
+    ReadArray<ulong>(value, length, ReadULong);
 }
