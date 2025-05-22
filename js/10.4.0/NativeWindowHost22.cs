@@ -1,8 +1,7 @@
 using System;
-using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Windows;
 using System.Windows.Interop;
+using System.Windows;
 
 namespace SmartGISharp.Wpf
 {
