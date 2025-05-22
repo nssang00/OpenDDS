@@ -13,12 +13,17 @@ namespace SmartGISharp.Wpf
         private const int SWP_NOZORDER   = 0x0004;
         private const int SWP_NOACTIVATE = 0x0010;
 
-        #region P/Invoke
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern IntPtr CreateWindowExW(
-            int exStyle, string className, string windowName, int style,
-            int x, int y, int w, int h, IntPtr parent, IntPtr menu,
-            IntPtr hInstance, IntPtr param);
+        private static extern IntPtr CreateWindowEx(int dwExStyle,
+                                                    string lpszClassName,
+                                                    string lpszWindowName,
+                                                    int style,
+                                                    int x, int y,
+                                                    int width, int height,
+                                                    IntPtr hwndParent,
+                                                    IntPtr hMenu,
+                                                    IntPtr hInst,
+                                                    IntPtr param);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyWindow(IntPtr hWnd);
@@ -26,9 +31,7 @@ namespace SmartGISharp.Wpf
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(
             IntPtr hWnd, IntPtr insertAfter, int x, int y, int w, int h, int flags);
-        #endregion
 
-        /* Url DP -------------------------------------------------------------- */
         public static readonly DependencyProperty UrlProperty =
             DependencyProperty.Register(
                 nameof(Url), typeof(string), typeof(NativeWindowHost),
@@ -40,19 +43,16 @@ namespace SmartGISharp.Wpf
             set => SetValue(UrlProperty, value);
         }
 
-        private IntPtr _hostHwnd = IntPtr.Zero;
-        public  IntPtr WindowHandle => _hostHwnd;
-
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
-            _hostHwnd = CreateWindowExW(
-                0, "STATIC", null, WS_CHILD | WS_VISIBLE,
-                0, 0, (int)Math.Max(ActualWidth,  1), (int)Math.Max(ActualHeight, 1),
-                hwndParent.Handle, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-
-            if (_hostHwnd == IntPtr.Zero)
-                throw new Win32Exception(Marshal.GetLastWin32Error(),
-                                         "HWND create fail!!");
+            IntPtr hwnd = CreateWindowEx(0, "static", "",
+                WS_CHILD | WS_VISIBLE,
+                0, 0,
+                (int)ActualWidth, (int)ActualHeight,
+                hwndParent.Handle,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                IntPtr.Zero);
 
             return new HandleRef(this, _hostHwnd);
         }
@@ -60,10 +60,8 @@ namespace SmartGISharp.Wpf
         protected override void DestroyWindowCore(HandleRef hwnd)
         {
             DestroyWindow(hwnd.Handle);
-            _hostHwnd = IntPtr.Zero;
         }
 
-        /* 현재 HwndHost 가 차지하는 영역이 바뀔 때마다 HWND 리사이즈 --------- */
         protected override void OnWindowPositionChanged(Rect rc)
         {
             base.OnWindowPositionChanged(rc);
@@ -110,3 +108,16 @@ namespace SmartGISharp.Demo
         }
     }
 }
+
+//////////
+windowInfo.SetAsChild(nativeWindowHost.Handle, ...);
+
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+    CefWindowInfo window;
+    _windowInfo->SetAsChild(hwnd, rect);
+
+
+    VideoHwndHost? _videoHwndHost
+    _videoHwndHost.Handle;
+
