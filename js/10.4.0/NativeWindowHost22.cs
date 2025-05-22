@@ -108,6 +108,24 @@ namespace SmartGISharp.Demo
     }
 }
 
+
+//////
+<Window x:Class="SmartGisApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:smartgis="clr-namespace:SmartGIS.CSharp.Wpf;assembly=SmartGIS.CSharp"
+        Title="MainWindow"
+        Height="450"
+        Width="800">
+    <Grid>
+        <!-- NativeViewHost는 HWND만 생성하며 외부 CEF, OpenGL, VLC 등이 올라갈 수 있는 자리입니다 -->
+        <smartgis:NativeViewHost x:Name="nativeView"
+                                 Width="640"
+                                 Height="360"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"/>
+    </Grid>
+</Window>
 //////////
 windowInfo.SetAsChild(nativeWindowHost.Handle, ...);
 
