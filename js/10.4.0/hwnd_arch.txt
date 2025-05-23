@@ -1,0 +1,24 @@
+[ WPF Window ]
+     │
+     ├── [XAML / CodeBehind Layout]
+     │        │
+     │        ├── Grid / StackPanel / Other Panels
+     │        │       │
+     │        │       └── [HwndHost (UIElement)]
+     │        │               └── calls BuildWindowCore()
+     │        │                      │
+     │        │                      └── CreateWindowEx(...)
+     │        │                              ↓
+     │        │                         [HWND - Native Window]
+     │        │                              ↓
+     │        │                    (OpenGL / CEF / VLC / GDI Control)
+     │        │
+     │        └── WPF Controls (Button, TextBox...)
+     │
+     └── Dispatcher & Layout Manager
+               │
+               └── Handles Input → RoutedEvent System
+                          │
+                          ├─ Routed to WPF Controls
+                          └─ NOT Routed into HWND content directly
+                                   (native HWND receives WM_XXX messages)
