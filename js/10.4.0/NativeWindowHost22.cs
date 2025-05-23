@@ -5,8 +5,10 @@ using System.Windows;
 
 namespace SmartGISharp.Wpf
 {
-    public class NativeWindowHost : HwndHost
+    public class NativeViewHost : HwndHost
     {
+        private IntPtr _hwnd;
+        public IntPtr Handle => _hwnd;
         private const int WS_CHILD       = 0x40000000;
         private const int WS_VISIBLE     = 0x10000000;
         private const int SWP_NOZORDER   = 0x0004;
@@ -30,10 +32,10 @@ namespace SmartGISharp.Wpf
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(
             IntPtr hWnd, IntPtr insertAfter, int x, int y, int w, int h, int flags);
-
+/*
         public static readonly DependencyProperty UrlProperty =
             DependencyProperty.Register(
-                nameof(Url), typeof(string), typeof(NativeWindowHost),
+                nameof(Url), typeof(string), typeof(NativeViewHost),
                 new PropertyMetadata(null));
 
         public string? Url
@@ -41,7 +43,7 @@ namespace SmartGISharp.Wpf
             get => (string?)GetValue(UrlProperty);
             set => SetValue(UrlProperty, value);
         }
-
+*/
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
             IntPtr hwnd = CreateWindowEx(0, "static", "",
@@ -61,13 +63,13 @@ namespace SmartGISharp.Wpf
             DestroyWindow(hwnd.Handle);
         }
 
-        protected override void OnWindowPositionChanged(Rect rc)
+        protected override void OnWindowPositionChanged(Rect rcBoundingBox)
         {
-            base.OnWindowPositionChanged(rc);
-            if (_hostHwnd != IntPtr.Zero)
+            base.OnWindowPositionChanged(rcBoundingBox);
+            if (_hwnd != IntPtr.Zero)
             {
-                SetWindowPos(_hostHwnd, IntPtr.Zero, 0, 0,
-                             (int)rc.Width, (int)rc.Height,
+                SetWindowPos(_hostHwnd, IntPtr.Zero, (int)rcBoundingBox.X, (int)rcBoundingBox.Y,
+                             (int)rcBoundingBox.Width, (int)rcBoundingBox.Height,
                              SWP_NOZORDER | SWP_NOACTIVATE);
             }
         }
