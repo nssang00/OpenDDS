@@ -1,3 +1,6 @@
+typedef void *HWND;
+typedef void *HINSTANCE;
+
 %module MyModule
 %{
 #include <windows.h>
