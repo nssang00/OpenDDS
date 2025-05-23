@@ -7,9 +7,6 @@ namespace SmartGISharp.Wpf
 {
     public class NativeViewHost : HwndHost
     {
-        private IntPtr _hwnd = IntPtr.Zero;
-        public IntPtr Handle => _hwnd;
-
         private const int WS_CHILD       = 0x40000000;
         private const int WS_VISIBLE     = 0x10000000;
         private const int SWP_NOZORDER   = 0x0004;
@@ -27,18 +24,7 @@ namespace SmartGISharp.Wpf
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(
             IntPtr hWnd, IntPtr insertAfter, int x, int y, int w, int h, int flags);
-/*
-        public static readonly DependencyProperty UrlProperty =
-            DependencyProperty.Register(
-                nameof(Url), typeof(string), typeof(NativeViewHost),
-                new PropertyMetadata(null));
 
-        public string? Url
-        {
-            get => (string?)GetValue(UrlProperty);
-            set => SetValue(UrlProperty, value);
-        }
-*/
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
             IntPtr hwnd = CreateWindowEx(0, "static", "",
@@ -50,7 +36,7 @@ namespace SmartGISharp.Wpf
                 IntPtr.Zero,
                 IntPtr.Zero);
 
-            return new HandleRef(this, _hostHwnd);
+            return new HandleRef(this, hwnd);
         }
 
         protected override void DestroyWindowCore(HandleRef hwnd)
@@ -61,9 +47,9 @@ namespace SmartGISharp.Wpf
         protected override void OnWindowPositionChanged(Rect rcBoundingBox)
         {
             base.OnWindowPositionChanged(rcBoundingBox);
-            if (_hwnd != IntPtr.Zero)
+            if (Handle != IntPtr.Zero)
             {
-                SetWindowPos(_hostHwnd, IntPtr.Zero, 
+                SetWindowPos(Handle, IntPtr.Zero, 
                     (int)rcBoundingBox.X, (int)rcBoundingBox.Y,
                     (int)rcBoundingBox.Width, (int)rcBoundingBox.Height,
                     SWP_NOZORDER | SWP_NOACTIVATE);
