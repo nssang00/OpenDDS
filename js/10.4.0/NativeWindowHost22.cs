@@ -1,3 +1,31 @@
+// draw.cpp  (빌드:  /LD … user32.lib gdi32.lib)
+#include <windows.h>
+
+// 단순 데모 : 흰 배경 → 빨간 사각형 + 텍스트
+extern "C" __declspec(dllexport)
+void DrawDemo(HWND hwnd)
+{
+    if (!::IsWindow(hwnd)) return;
+
+    HDC hdc = ::GetDC(hwnd);
+    if (!hdc) return;
+
+    RECT rc; ::GetClientRect(hwnd, &rc);
+    ::FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+
+    HPEN pen = ::CreatePen(PS_SOLID, 3, RGB(200, 40, 40));
+    HGDIOBJ old = ::SelectObject(hdc, pen);
+    ::Rectangle(hdc, 20, 20, 180, 100);
+    ::SelectObject(hdc, old);  ::DeleteObject(pen);
+
+    ::TextOutW(hdc, 30, 50, L"C++ GDI", 7);
+
+    ::ReleaseDC(hwnd, hdc);
+}
+//////
+// NativeViewHost는 WPF HwndHost 파생 클래스 (Handle 보유)
+var hwnd = nativeViewHost.Handle;          // System.IntPtr
+SmartGI.Native.DrawDemo(hwnd);             // SWIG가 만든 P/Invoke 호출
 
 /////////
 <Window x:Class="SmartGISharp.Demo.MainWindow"
