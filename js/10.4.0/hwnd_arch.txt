@@ -22,3 +22,26 @@
                           ├─ Routed to WPF Controls
                           └─ NOT Routed into HWND content directly
                                    (native HWND receives WM_XXX messages)
+
+
+/////////
+Object
+ └─ DispatcherObject
+     └─ DependencyObject
+         └─ Visual
+             └─ UIElement
+                 ├─ FrameworkElement
+                 │    ├─ Control
+                 │    │    ├─ Button
+                 │    │    ├─ TextBox
+                 │    │    ├─ ListBox
+                 │    │    └─ ...
+                 │    ├─ Panel
+                 │    │    ├─ StackPanel
+                 │    │    ├─ Grid
+                 │    │    └─ ...
+                 │    ├─ UserControl
+                 │    └─ Page / Window / etc.
+                 │
+                 └─ HwndHost   ← Win32 호스팅 전용 특수 UIElement
+                      └─ 사용자 정의 클래스 (예: OpenGLHost, CefHost 등)
