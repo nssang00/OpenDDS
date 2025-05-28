@@ -1,37 +1,20 @@
 %module example
 
-
-%typemap(cstype)            char *UTF8        "string"
-%typemap(cstype)            const char *UTF8  "string"
-%typemap(csin, noblock=1)   char *UTF8
-%{
-    if ($csinput == null) {
-        $1 = System.IntPtr.Zero;
-    } else {
-        byte[] utf8Bytes = System.Text.Encoding.UTF8.GetBytes($csinput);
-        System.IntPtr buf  = System.Runtime.InteropServices.Marshal.AllocHGlobal(utf8Bytes.Length + 1);
-
-        System.Runtime.InteropServices.Marshal.Copy(utf8Bytes, 0, buf, utf8Bytes.Length);
-        System.Runtime.InteropServices.Marshal.WriteByte(buf, utf8Bytes.Length, 0); 
-
-        $1 = (char*)buf.ToPointer();   /* C 함수에 넘길 포인터 */
-    }
+// UTF-8 변환을 위한 csin/csfreearg 타입맵
+%typemap(csin) char* %{
+  // C# 문자열 -> UTF-8 바이트 배열 변환 (Null 종료 포함)
+  byte[] utf8Bytes$csinput = System.Text.Encoding.UTF8.GetBytes($csinput + "\0");
+  global::System.IntPtr ptr$csinput = global::System.Runtime.InteropServices.Marshal.AllocHGlobal(utf8Bytes$csinput.Length);
+  global::System.Runtime.InteropServices.Marshal.Copy(utf8Bytes$csinput, 0, ptr$csinput, utf8Bytes$csinput.Length);
+  ptr$csinput
 %}
 
-%typemap(csfreearg)         char *UTF8
-%{
-    if ($1 != System.IntPtr.Zero) {
-        System.Runtime.InteropServices.Marshal.FreeHGlobal($1);
-    }
+%typemap(csfreearg) char* %{
+  // 할당된 메모리 해제
+  if (ptr$csinput != global::System.IntPtr.Zero) {
+    global::System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr$csinput);
+  }
 %}
 
-%apply char *UTF8 { char *text, const char *text };
-
-/************************************************************
- * C++ API 선언 (예시)
- ************************************************************/
-%inline %{
-void setText(const char *text) {
-    /* text 는 UTF-8, null-terminated */
-}
-%}
+// C++ 함수 선언
+void setText(char* text);
