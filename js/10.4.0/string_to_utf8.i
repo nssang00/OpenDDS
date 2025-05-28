@@ -1,3 +1,26 @@
+using System;
+
+class Program
+{
+    public static uint RGBA(byte r, byte g, byte b, byte a)
+    {
+        return (uint)(
+            ((int)r) |
+            ((int)g << 8) |
+            ((int)b << 16) |
+            ((int)a << 24)
+        );
+    }
+
+    static void Main()
+    {
+        uint color = RGBA(255, 128, 64, 200);
+        Console.WriteLine($"{color:X8}"); // C84080FF 출력
+    }
+}
+
+///////
+
 %module example
 
 /* ───────────── 입력 전용 UTF-8 typemap (pre/post 활용) ───────────── */
