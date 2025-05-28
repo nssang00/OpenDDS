@@ -1,0 +1,61 @@
+CefRuntimePackage/
+├── CefRuntimePackage.csproj
+├── runtimes/
+│   └── win-x64/
+│       └── native/
+│           ├── libcef.dll
+│           ├── chrome_elf.dll
+│           ├── d3dcompiler_47.dll
+│           ├── icudtl.dat
+│           ├── cef.pak
+│           ├── cef_100_percent.pak
+│           ├── cef_200_percent.pak
+│           ├── resources.pak
+│           ├── snapshot_blob.bin
+│           ├── v8_context_snapshot.bin
+│           ├── locales/
+│           │   └── en-US.pak
+│           └── swiftshader/
+│               ├── libEGL.dll
+│               └── libGLESv2.dll
+//////////
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>Cef.Runtime.Win64</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>YourName</Authors>
+    <Description>CEF Runtime Native Binaries for Windows x64</Description>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IncludeSymbols>false</IncludeSymbols>
+    <IncludeSource>false</IncludeSource>
+    <PackageOutputPath>./nupkg</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="runtimes\win-x64\native\**\*.*"
+          Pack="true"
+          PackagePath="runtimes/win-x64/native" />
+  </ItemGroup>
+
+</Project>
+///////////////
+cd CefRuntimePackage
+dotnet pack
+////////////
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0-windows</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SmartGISharp" Version="1.0.0" />
+    <!-- SmartGISharp가 SmartGISharp.Native에 대한 의존성을 갖고 있으면 이 줄은 생략 가능 -->
+    <PackageReference Include="SmartGISharp.Native" Version="1.0.0" />
+  </ItemGroup>
+
+</Project>
+
