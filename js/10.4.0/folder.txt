@@ -1,13 +1,13 @@
 SmartGISharp_Distribution/
 │
-├─ /include/                          # C++ 헤더
+├─ /include/
 │   ├─ map2D.h
 │   └─ layer.h
 │
-├─ /lib/                              # 네이티브 라이브러리
+├─ /lib/
 │   └─ MapEngine.lib
 │
-├─ /csharp/                           # C#/WPF + SWIG + .NET 패키지
+├─ /csharp/
 │   ├─ /lib/
 │   │   ├─ netstandard2.0/
 │   │   │   └─ SmartGISharp.dll
@@ -22,11 +22,15 @@ SmartGISharp_Distribution/
 │   │   └─ smartgis_csharp.dll
 │
 │   ├─ /samples/
-│   │   └─ SmartGISharp.Wpf.Sample/   # 샘플 WPF 앱
+│   │   └─ SmartGISharp.Wpf.Sample/
 │
-│   ├─ /src/                           # SWIG 관련 정의, C# 출력 대상 등
-│   │   ├─ SmartGISharp.i
-│   │   └─ std_tuple.i
+│   ├─ /src/
+│   │   ├─ smartgis_wrap.cpp             # SWIG C++ wrapper
+│   │   ├─ smartgis_wrap.h               # SWIG header
+│   │   ├─ /SmartGISharp/                # C# core 바인딩 결과 또는 수동 소스
+│   │   └─ /SmartGISharp.Wpf/            # WPF 관련 C# 소스
 │
-│   ├─ gen_swig.bat                   # SWIG 바인딩 생성
-│   └─ build.bat                      # 전체 빌드 스크립트
+│   ├─ SmartGISharp.i
+│   ├─ std_tuple.i
+│   ├─ gen_swig.bat
+│   └─ build.bat
