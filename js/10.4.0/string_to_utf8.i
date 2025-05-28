@@ -1,20 +1,34 @@
 %module example
 
-// UTF-8 변환을 위한 csin/csfreearg 타입맵
-%typemap(csin) char* %{
-  // C# 문자열 -> UTF-8 바이트 배열 변환 (Null 종료 포함)
-  byte[] utf8Bytes$csinput = System.Text.Encoding.UTF8.GetBytes($csinput + "\0");
-  global::System.IntPtr ptr$csinput = global::System.Runtime.InteropServices.Marshal.AllocHGlobal(utf8Bytes$csinput.Length);
-  global::System.Runtime.InteropServices.Marshal.Copy(utf8Bytes$csinput, 0, ptr$csinput, utf8Bytes$csinput.Length);
-  ptr$csinput
+/* ───────────── 입력 전용 UTF-8 typemap (pre/post 활용) ───────────── */
+%typemap(cstype) char *UTF8        "string"
+%typemap(cstype) const char *UTF8  "string"
+
+/* pre: 래퍼 메서드 맨 위에서 실행 ─ 변수 선언용
+ * body: 인코딩‧할당 및 C 쪽 인자 값 설정
+ * post: 네이티브 함수 호출 **직후** 실행 ─ 버퍼 해제
+ */
+%typemap(csin,
+         pre="System.IntPtr ptr$argnum = System.IntPtr.Zero;",
+         post="if (ptr$argnum != System.IntPtr.Zero) System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr$argnum);")
+         char *UTF8
+%{
+    if ($csinput != null) {
+        byte[] utf8Bytes = System.Text.Encoding.UTF8.GetBytes($csinput);
+        ptr$argnum = System.Runtime.InteropServices.Marshal.AllocHGlobal(utf8Bytes.Length + 1);
+
+        System.Runtime.InteropServices.Marshal.Copy(utf8Bytes, 0, ptr$argnum, utf8Bytes.Length);
+        System.Runtime.InteropServices.Marshal.WriteByte(ptr$argnum, utf8Bytes.Length, 0);  /* null 종료 */
+        $1 = (char*)ptr$argnum.ToPointer();
+    } else {
+        $1 = (char*)System.IntPtr.Zero.ToPointer();
+    }
 %}
 
-%typemap(csfreearg) char* %{
-  // 할당된 메모리 해제
-  if (ptr$csinput != global::System.IntPtr.Zero) {
-    global::System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr$csinput);
-  }
-%}
+/* 적용 */
+%apply char *UTF8 { char *text, const char *text };
 
-// C++ 함수 선언
-void setText(char* text);
+/* C++ 함수 예시 */
+%inline %{
+void setText(const char *text) { /* … */ }
+%}
