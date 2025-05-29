@@ -8,10 +8,15 @@ SmartGISharp.Wpf.Sample.exe                 ← C# GIS 샘플 애플리케이션
                     |
                     |--> MapEngine.dll     ← 실제 GIS 엔진 로직이 구현된 C++ 라이브러리
                             |
-                            |--> WebEngineView.dll  ← CEF 기반 렌더링 및 브라우저 뷰 연동
+                            |--> WebEngineView.dll  ← 렌더링 및 브라우저 통합 (HWND, CEF 연동)
+                            |       |
+                            |       |--> libcef.dll             ← Chromium Embedded Framework
+                            |       |--> chrome_elf.dll         ← CEF 보조 라이브러리
+                            |       |--> d3dcompiler_47.dll     ← Direct3D 셰이더 컴파일러
+                            |       |--> libEGL.dll, libGLESv2.dll ← GPU 렌더링용 DLL
+                            |       |--> icudtl.dat, *.pak 등   ← CEF 리소스 파일
+                            |
                             |--> gdal307.dll        ← GDAL 기반 래스터/벡터 데이터 처리
-                            |--> libcef.dll         ← Chromium Embedded Framework (렌더링 엔진)
-
 MainWindow.xaml
 <Window x:Class="CefMapDemo.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
