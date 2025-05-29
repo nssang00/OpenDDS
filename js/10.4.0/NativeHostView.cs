@@ -1,13 +1,16 @@
-SmartGISharp.Wpf.Sample.exe       ← GIS 샘플 실행 파일 (WPF 기반 애플리케이션 진입점)
- ├─ SmartGISharp.Wpf.dll          ← WPF 전용 UI 계층 (.NET UserControl, ViewModel 등 포함)
- └─ SmartGISharp.dll              ← .NET 핵심 로직 및 SWIG 바인딩 API (.cs로 자동 생성)
-      └─ [P/Invoke] smartgis_csharp.dll    ← SWIG로 생성된 C++/CLI 네이티브 래퍼 (DllImport 대상)
-            └─ MapEngine.dll              ← C++로 작성된 GIS 엔진 라이브러리 (주요 기능 구현)
-                 ├─ WebEngineView.dll     ← CEF 기반 렌더링 및 지도 뷰 처리 (네이티브 HWND 렌더링)
-                 ├─ gdal307.dll           ← GDAL 라이브러리 (GeoTIFF, DEM 등 GIS 데이터 I/O 처리)
-                 └─ libcef.dll            ← Chromium Embedded Framework (브라우저 및 UI 렌더링 백엔드)
-
-
+SmartGISharp.Wpf.Sample.exe                 ← C# GIS 샘플 애플리케이션 (WPF 기반 실행 파일)
+    |
+    |--> SmartGISharp.Wpf.dll              ← WPF UI용 .NET 바인딩 어셈블리
+    |
+    |--> SmartGISharp.dll                  ← SWIG로 생성된 .NET 바인딩, 핵심 API 및 P/Invoke 포함
+            |
+            |--> smartgis_csharp.dll       ← SWIG C++ 래퍼 DLL (smartgis_wrap.cpp 빌드 결과)
+                    |
+                    |--> MapEngine.dll     ← 실제 GIS 엔진 로직이 구현된 C++ 라이브러리
+                            |
+                            |--> WebEngineView.dll  ← CEF 기반 렌더링 및 브라우저 뷰 연동
+                            |--> gdal307.dll        ← GDAL 기반 래스터/벡터 데이터 처리
+                            |--> libcef.dll         ← Chromium Embedded Framework (렌더링 엔진)
 
 MainWindow.xaml
 <Window x:Class="CefMapDemo.MainWindow"
