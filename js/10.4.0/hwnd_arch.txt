@@ -1,3 +1,18 @@
+App.Startup
+ └─ new MainWindow()                ← MainWindow 생성
+      ├─ (선택) NativeViewHost.ShowDebugConsole = true   ← 플래그 설정
+      ├─ InitializeComponent()      ← XAML → 객체 트리만 “메모리”에 생성
+      └─ MainWindow 생성자 종료
+ └─ Window.Show() → 내부 Win32 창 생성
+      ├─ MainWindow.OnSourceInitialized
+      ├─ 첫 레이아웃 패스 (Measure/Arrange)
+      │    └─ HwndHost.EnsureHandle()
+      │         └─ NativeViewHost.BuildWindowCore()  ← **여기서 AllocConsole() 실행**
+      ├─ Loaded 이벤트들
+      └─ ContentRendered
+
+///////
+
 [ WPF Window ]
      │
      ├── [XAML / CodeBehind Layout]
