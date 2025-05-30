@@ -7,6 +7,13 @@ namespace SmartGISharp.Wpf
 {
     public class NativeViewHost : HwndHost
     {
+#if DEBUG
+        public static bool ShowDebugConsole = true;
+#else
+        public static bool ShowDebugConsole = false;  
+#endif
+        private static bool _consoleAllocated;
+
         private const int WS_CHILD       = 0x40000000;
         private const int WS_VISIBLE     = 0x10000000;
         private const int SWP_NOZORDER   = 0x0004;
@@ -25,8 +32,17 @@ namespace SmartGISharp.Wpf
         private static extern bool SetWindowPos(
             IntPtr hWnd, IntPtr insertAfter, int x, int y, int w, int h, int flags);
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool AllocConsole();            
+
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
+            if (ShowDebugConsole && !_consoleAllocated)
+            {
+                AllocConsole();
+                _consoleAllocated = true;
+            }
+
             IntPtr hwnd = CreateWindowEx(0, "static", "",
                 WS_CHILD | WS_VISIBLE,
                 0, 0,
