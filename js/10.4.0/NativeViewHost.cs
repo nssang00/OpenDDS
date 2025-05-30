@@ -8,9 +8,9 @@ namespace SmartGISharp.Wpf
     public class NativeViewHost : HwndHost
     {
 #if DEBUG
-    public static bool ShowDebugConsole { get; set; } = true;
+    public static bool UseDebugConsole { get; set; } = true;
 #else
-    public static bool ShowDebugConsole { get; set; } = false;
+    public static bool UseDebugConsole { get; set; } = false;
 #endif
         private static bool _consoleAllocated;
 
@@ -37,7 +37,7 @@ namespace SmartGISharp.Wpf
 
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
-            if (ShowDebugConsole && !_consoleAllocated)
+            if (UseDebugConsole && !_consoleAllocated)
             {
                 AllocConsole();
                 _consoleAllocated = true;
