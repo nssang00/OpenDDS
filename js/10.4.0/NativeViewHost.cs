@@ -8,9 +8,9 @@ namespace SmartGISharp.Wpf
     public class NativeViewHost : HwndHost
     {
 #if DEBUG
-        public static bool ShowDebugConsole = true;
+    public static bool ShowDebugConsole { get; set; } = true;
 #else
-        public static bool ShowDebugConsole = false;  
+    public static bool ShowDebugConsole { get; set; } = false;
 #endif
         private static bool _consoleAllocated;
 
