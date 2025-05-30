@@ -1,4 +1,24 @@
 App.Startup
+│
+└─ new MainWindow()                 ← MainWindow 인스턴스 생성
+     ├─ [생성자] NativeViewHost.ShowDebugConsole = true   ← 디버그 플래그 설정
+     ├─ [생성자] InitializeComponent()  ← XAML 파싱/객체 생성 (메모리 상)
+     │    ├─ XAML에 선언된 NativeViewHost 인스턴스화
+     │    └─ UI 객체 트리 구성 (실제 Win32 창 생성 X)
+     └─ [생성자] 종료
+│
+└─ Window.Show()                    ← 창 표시 명령
+     ├─ MainWindow.OnSourceInitialized() ← Win32 창 핸들(hwnd) 사용 가능
+     ├─ 첫 레이아웃 패스 시작 (Measure → Arrange)
+     │    └─ NativeViewHost 측정/배치 시도
+     │         └─ HwndHost.EnsureHandle() 호출
+     │              └─ NativeViewHost.BuildWindowCore() 실행  ← 핵심!
+     │                   ├─ AllocConsole() ← 콘솔 생성
+     │                   └─ CreateWindowEx() ← Win32 창 생성
+     ├─ Loaded 이벤트 발생
+     └─ ContentRendered 이벤트 발생 ← 최종 렌더링 완료
+
+App.Startup
  └─ new MainWindow()                ← MainWindow 생성
       ├─ (선택) NativeViewHost.ShowDebugConsole = true   ← 플래그 설정
       ├─ InitializeComponent()      ← XAML → 객체 트리만 “메모리”에 생성
