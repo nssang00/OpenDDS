@@ -37,12 +37,6 @@ namespace SmartGISharp.Wpf
 
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
-            if (UseDebugConsole && !_consoleAllocated)
-            {
-                AllocConsole();
-                _consoleAllocated = true;
-            }
-
             IntPtr hwnd = CreateWindowEx(0, "static", "",
                 WS_CHILD | WS_VISIBLE,
                 0, 0,
@@ -52,6 +46,14 @@ namespace SmartGISharp.Wpf
                 IntPtr.Zero,
                 IntPtr.Zero);
 
+            if (UseDebugConsole && !_consoleAllocated)
+            {
+                AllocConsole();
+                _consoleAllocated = true;
+
+                Console.WriteLine($"[NativeViewHost] HWND: 0x{hwnd.ToInt64():X}");
+            }
+
             return new HandleRef(this, hwnd);
         }
 
@@ -60,6 +62,8 @@ namespace SmartGISharp.Wpf
             DestroyWindow(hwnd.Handle);
         }
 
+        private Rect _prevRect = Rect.Empty;
+        
         protected override void OnWindowPositionChanged(Rect rcBoundingBox)
         {
             base.OnWindowPositionChanged(rcBoundingBox);
@@ -69,6 +73,12 @@ namespace SmartGISharp.Wpf
                     (int)rcBoundingBox.X, (int)rcBoundingBox.Y,
                     (int)rcBoundingBox.Width, (int)rcBoundingBox.Height,
                     SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            
+            if (!rcBoundingBox.Size.Equals(_prevRect.Size) && _consoleAllocated)
+            {
+                _prevRect = rcBoundingBox;
+                Console.WriteLine($"[NativeViewHost] Resize: {(int)rcBoundingBox.Width}×{(int)rcBoundingBox.Height}");
             }
         }
     }
