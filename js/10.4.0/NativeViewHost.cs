@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Interop;
 using System.Windows;
 
@@ -8,10 +10,12 @@ namespace SmartGISharp.Wpf
     public class NativeViewHost : HwndHost
     {
 #if DEBUG
-    public static bool UseDebugConsole { get; set; } = true;
+        public static bool UseDebugConsole { get; set; } = false;
 #else
-    public static bool UseDebugConsole { get; set; } = false;
+        public static bool UseDebugConsole { get; set; } = false;
 #endif
+        public static bool EnableFileOutput { get; set; } = false;
+
         private static bool _consoleAllocated;
 
         private const int WS_CHILD       = 0x40000000;
@@ -49,6 +53,8 @@ namespace SmartGISharp.Wpf
             if (UseDebugConsole && !_consoleAllocated)
             {
                 AllocConsole();
+                if (EnableFileOutput)
+                    Console.SetOut(new ConsoleFileWriter("console.log"));
                 _consoleAllocated = true;
 
                 Console.WriteLine($"[NativeViewHost] HWND: 0x{hwnd.ToInt64():X}");
@@ -79,6 +85,41 @@ namespace SmartGISharp.Wpf
             {
                 _prevRect = rcBoundingBox;
                 Console.WriteLine($"[NativeViewHost] Resize: {(int)rcBoundingBox.Width}×{(int)rcBoundingBox.Height}");
+            }
+        }
+
+        private class ConsoleFileWriter : TextWriter
+        {
+            private readonly TextWriter _consoleWriter;
+            private readonly StreamWriter _fileWriter;
+
+            public override Encoding Encoding => Encoding.UTF8;
+
+            public ConsoleFileWriter(string filePath)
+            {
+                _consoleWriter = Console.Out;
+                _fileWriter = new StreamWriter(filePath, false, Encoding.UTF8) 
+                { 
+                    AutoFlush = true 
+                };
+            }
+
+            public override void Write(char value)
+            {
+                _consoleWriter.Write(value);
+                _fileWriter.Write(value);
+            }
+
+            public override void Write(string value)
+            {
+                _consoleWriter.Write(value);
+                _fileWriter.Write(value);
+            }
+
+            public override void WriteLine(string value)
+            {
+                _consoleWriter.WriteLine(value);
+                _fileWriter.WriteLine(value);
             }
         }
     }
