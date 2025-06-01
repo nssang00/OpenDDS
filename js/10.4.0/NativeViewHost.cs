@@ -17,6 +17,7 @@ namespace SmartGISharp.Wpf
         public static bool EnableFileOutput { get; set; } = false;
 
         private static bool _consoleAllocated;
+        private static readonly object _sync = new object();
 
         private const int WS_CHILD       = 0x40000000;
         private const int WS_VISIBLE     = 0x10000000;
@@ -50,15 +51,18 @@ namespace SmartGISharp.Wpf
                 IntPtr.Zero,
                 IntPtr.Zero);
 
-            if (UseDebugConsole && !_consoleAllocated)
+            lock (_sync)
             {
-                AllocConsole();
-                if (EnableFileOutput)
-                    Console.SetOut(new ConsoleFileWriter("console.log"));
-                _consoleAllocated = true;
+                if (UseDebugConsole && !_consoleAllocated)
+                {
+                    AllocConsole();
+                    _consoleAllocated = true;
+                }
 
-                Console.WriteLine($"[NativeViewHost] HWND: 0x{hwnd.ToInt64():X}");
+                if (EnableFileOutput && !(Console.Out is ConsoleFileWriter))
+                    Console.SetOut(new ConsoleFileWriter("console.log"));
             }
+            Console.WriteLine($"[NativeViewHost] HWND: 0x{hwnd.ToInt64():X}");
 
             return new HandleRef(this, hwnd);
         }
