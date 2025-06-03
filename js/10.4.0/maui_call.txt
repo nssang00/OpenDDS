@@ -1,0 +1,39 @@
+MainPage.xaml
+└─ <Button Text="Click Me" Clicked="OnButtonClicked" />
+
+XAML 파서
+└─ CreateHandler() ─► ButtonHandler
+    ├─ static ButtonMapper : PropertyMapper<IButton, NativeButton>
+    │   ├─ MapText            ↔ platformView.Text
+    │   ├─ MapBackground      ↔ platformView.Background
+    │   ├─ MapImageSource     ↔ platformView.Image
+    │   └─ MapCommand         ↔ Click → Command.Execute
+    │
+    ├─ SetVirtualView(IView view)
+    │   ├─ this.VirtualView = view
+    │   ├─ ApplyDefaults()                 ← 초기 플랫폼 속성 지정
+    │   └─ ButtonMapper.UpdateProperties() ← 모든 매핑 일괄 적용
+    │
+    ├─ CreatePlatformView() ─► NativeButton
+    │   └─ (플랫폼별 구현)
+    │       ├─ Windows : Microsoft.UI.Xaml.Controls.Button
+    │       ├─ Android : AppCompatButton
+    │       └─ iOS     : UIButton
+    │
+    ├─ ConnectHandler(NativeButton platformView)
+    │   ├─ base.ConnectHandler(platformView)
+    │   └─ platformView.Click += OnClick   ← 네이티브 이벤트 연결
+    │
+    ├─ SetupContainer()                    ← 레이아웃/부모 컨테이너 준비
+    └─ Handler 활성화 완료
+
+런타임
+└─ 사용자 탭/클릭
+    └─ NativeButton → Click 이벤트 발생
+        └─ ButtonHandler.OnClick()
+            └─ VirtualView.Clicked() 호출
+                └─ (예) OnButtonClicked(object sender, EventArgs e)
+
+뷰 해제
+└─ DisconnectHandler()
+    └─ platformView.Click -= OnClick
