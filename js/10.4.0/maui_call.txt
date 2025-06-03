@@ -37,3 +37,15 @@ XAML 파서
 뷰 해제
 └─ DisconnectHandler()
     └─ platformView.Click -= OnClick
+
+
+
+XamlLoader.Load()           // XAML → VirtualView 트리
+ └─ ElementExtensions.ToPlatform()  ← Window/Page/Layout 등이 호출
+      └─ ElementExtensions.ToHandler()      // (핵심)
+           └─ IElement.Handler ??           // 없으면
+                MauiContext.Handlers.CreateHandler(element)   ← **여기서 Handler 생성**
+                     └─ IMauiHandlersFactory.GetHandler<T>()  // 매핑 테이블 조회
+                          ↳ ButtonHandler, LabelHandler …     // 실제 Handler 인스턴스 반환
+           ├─ handler.SetVirtualView(element)
+           └─ handler.SetMauiContext(context)
