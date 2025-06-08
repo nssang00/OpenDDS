@@ -5,7 +5,7 @@ class BlobWrapperPlugin {
   apply(compiler) {
     compiler.hooks.afterEmit.tap('BlobWrapperPlugin', (compilation) => {
       const workerContent = require('fs').readFileSync(
-        path.resolve(__dirname, 'webgl.worker.js'),
+        path.resolve(__dirname, 'worker.bundle.js'),
         'utf8'
       );
       const blobWrappedContent = `
@@ -27,11 +27,12 @@ class BlobWrapperPlugin {
 
 module.exports = {
   mode: process.env.NODE_ENV === 'development' ? 'development' : 'production',
-  entry: './node_modules/ol/worker/webgl.worker.js',
+  //target: 'webworker',
+  entry: './worker.webgl.js',
   //devtool: 'source-map',
   output: {
     path: __dirname,
-    filename: './webgl.worker.js'
+    filename: './worker.bundle.js'//'worker.bundle.js',
   },
   plugins: [new BlobWrapperPlugin()]
 };
