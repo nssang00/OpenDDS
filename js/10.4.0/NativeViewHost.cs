@@ -16,7 +16,7 @@ namespace SmartGISharp.Wpf
 #endif
         public static bool EnableFileOutput { get; set; } = false;
 
-        public event Action<int, IntPtr, IntPtr>? OnPostMessage;        
+        public event Action<int, IntPtr, IntPtr> OnPostMessage;        
 
         private static bool _consoleAllocated;
         private static readonly object _sync = new object();
@@ -99,7 +99,8 @@ namespace SmartGISharp.Wpf
             const int WM_USER = 0x0400;
             if (msg >= WM_USER)
             {
-                OnPostMessage?.Invoke(msg, wParam, lParam);
+                if(OnPostMessage != null)
+                    OnPostMessage(msg, wParam, lParam);
             }
             return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
         }        
