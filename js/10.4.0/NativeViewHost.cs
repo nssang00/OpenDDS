@@ -16,6 +16,8 @@ namespace SmartGISharp.Wpf
 #endif
         public static bool EnableFileOutput { get; set; } = false;
 
+        public event Action<int, IntPtr, IntPtr>? OnPostMessage;        
+
         private static bool _consoleAllocated;
         private static readonly object _sync = new object();
 
@@ -91,6 +93,16 @@ namespace SmartGISharp.Wpf
                 Console.WriteLine($"[NativeViewHost] Resize: {(int)rcBoundingBox.Width}×{(int)rcBoundingBox.Height}");
             }
         }
+
+        protected override IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_USER = 0x0400;
+            if (msg >= WM_USER)
+            {
+                OnPostMessage?.Invoke(msg, wParam, lParam);
+            }
+            return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
+        }        
 
         private class ConsoleFileWriter : TextWriter
         {
