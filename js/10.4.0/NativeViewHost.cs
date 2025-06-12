@@ -101,6 +101,8 @@ namespace SmartGISharp.Wpf
             {
                 if(NativeMessageReceived != null)
                     NativeMessageReceived(msg, wParam, lParam);
+                handled = true;
+                return IntPtr.Zero;
             }
             return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
         }        
