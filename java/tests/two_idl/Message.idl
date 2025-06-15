@@ -1,7 +1,0 @@
-#include "Common.idl"
-
-@topic
-struct Message {
-    @key long id;
-    Quote payload;
-};
