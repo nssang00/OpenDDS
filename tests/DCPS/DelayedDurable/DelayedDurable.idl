@@ -1,8 +1,0 @@
-#include <tao/OctetSeq.pidl>
-
-@topic
-struct Property {
-  @key long key;
-  long value;
-  sequence<octet> extra;
-};

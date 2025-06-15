@@ -1,6 +1,0 @@
-module M3 {
-  struct MyStruct {
-    octet o;
-    long l;
-  };
-};

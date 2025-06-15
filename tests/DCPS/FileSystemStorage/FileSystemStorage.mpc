@@ -1,3 +1,0 @@
-project: dcps_test {
-  requires += no_opendds_safety_profile
-}

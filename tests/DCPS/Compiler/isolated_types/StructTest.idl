@@ -1,3 +1,0 @@
-struct StructTest {
-  long foo;
-};

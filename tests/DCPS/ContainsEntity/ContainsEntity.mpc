@@ -1,7 +1,0 @@
-project(DDS*) : dcpsexe, dcps_test, dcps_cm, dcps_transports_for_test {
-  exename = containsentity
-
-  Source_Files {
-    containsentity.cpp
-  }
-}

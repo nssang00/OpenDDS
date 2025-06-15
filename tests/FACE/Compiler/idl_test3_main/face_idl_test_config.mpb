@@ -1,3 +1,0 @@
-feature (!opendds_test_wstring) {
-  macros += NO_TEST_WSTRING
-}

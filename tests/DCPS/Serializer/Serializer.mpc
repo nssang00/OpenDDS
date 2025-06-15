@@ -1,3 +1,0 @@
-project(SerializerTest): dcpsexe, dcps_test {
-  exename = SerializerTest
-}

@@ -1,2 +1,0 @@
-project(DDS*): dcps_cm, dcps_rtps_udp {
-}

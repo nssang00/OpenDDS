@@ -1,7 +1,0 @@
-module Messenger {
-  @topic
-  struct Message {
-    @key long key;
-    unsigned long long ull;
-  };
-};

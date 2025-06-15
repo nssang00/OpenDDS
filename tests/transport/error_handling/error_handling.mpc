@@ -1,3 +1,0 @@
-project: dcpsexe, dcps_test, dcps_tcp {
-  requires += no_opendds_safety_profile
-}
