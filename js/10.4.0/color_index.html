@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>WebGL 팔레트 색상 인덱스 예제</title>
+  <style>
+    body { margin: 0; background: #181818; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+<canvas id="glcanvas" width="800" height="600"></canvas>
+<script type="text/javascript">
+const gl = document.getElementById('glcanvas').getContext('webgl');
+
+// --- 셰이더 소스 ---
+const vsSource = `
+attribute vec2 a_position;
+attribute float a_colorIndex;
+varying float v_colorIndex;
+void main() {
+    gl_Position = vec4(a_position, 0, 1);
+    v_colorIndex = a_colorIndex;
+}
+`;
+
+const fsSource = `
+precision mediump float;
+uniform vec3 u_palette[3];
+varying float v_colorIndex;
+void main() {
+    int idx = int(v_colorIndex + 0.5);
+    gl_FragColor = vec4(u_palette[idx], 1.0);
+}
+`;
+
+// --- 셰이더 유틸 ---
+function compileShader(type, source) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, source);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        alert(gl.getShaderInfoLog(s));
+        gl.deleteShader(s);
+        throw "shader compile fail";
+    }
+    return s;
+}
+function createProgram(vs, fs) {
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        alert(gl.getProgramInfoLog(prog));
+        throw "program link fail";
+    }
+    return prog;
+}
+
+// --- 프로그램 생성 ---
+const vs = compileShader(gl.VERTEX_SHADER, vsSource);
+const fs = compileShader(gl.FRAGMENT_SHADER, fsSource);
+const program = createProgram(vs, fs);
+gl.useProgram(program);
+
+// --- 데이터 생성 ---
+// 정점 400개 (격자)
+const N = 400;
+const positions = new Float32Array(N * 2);
+const colorIndices = new Uint8Array(N);
+
+for (let i = 0; i < N; ++i) {
+    // -0.9 ~ 0.9 범위의 20x20 격자에 배치
+    const row = Math.floor(i / 20);
+    const col = i % 20;
+    positions[i * 2] = -0.9 + (col / 19) * 1.8;
+    positions[i * 2 + 1] = -0.9 + (row / 19) * 1.8;
+
+    // 색상 그룹: 0~199(빨), 200~299(초록), 300~399(파랑)
+    if (i < 200) colorIndices[i] = 0;
+    else if (i < 300) colorIndices[i] = 1;
+    else colorIndices[i] = 2;
+}
+
+// 팔레트 색상 (빨/초록/파랑)
+const palette = new Float32Array([
+    1, 0, 0,   // 빨강
+    0, 1, 0,   // 초록
+    0, 0, 1    // 파랑
+]);
+
+// --- 버퍼 올리기 ---
+// 위치
+const posBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+// 색상 인덱스
+const idxBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, idxBuf);
+gl.bufferData(gl.ARRAY_BUFFER, colorIndices, gl.STATIC_DRAW);
+
+// --- attribute 연결 ---
+const locPos = gl.getAttribLocation(program, 'a_position');
+gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+gl.enableVertexAttribArray(locPos);
+gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
+
+const locIdx = gl.getAttribLocation(program, 'a_colorIndex');
+gl.bindBuffer(gl.ARRAY_BUFFER, idxBuf);
+gl.enableVertexAttribArray(locIdx);
+gl.vertexAttribPointer(locIdx, 1, gl.UNSIGNED_BYTE, false, 0, 0);
+
+// --- uniform palette 연결 ---
+const locPalette = gl.getUniformLocation(program, 'u_palette');
+gl.uniform3fv(locPalette, palette);
+
+// --- 캔버스 세팅 및 그리기 ---
+gl.clearColor(0.1, 0.1, 0.1, 1);
+gl.clear(gl.COLOR_BUFFER_BIT);
+gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+gl.useProgram(program);
+gl.drawArrays(gl.POINTS, 0, N);
+</script>
+</body>
+</html>
