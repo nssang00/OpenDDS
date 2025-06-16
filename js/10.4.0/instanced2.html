@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>LineString – miter-limit bevel demo</title>
+<style>html,body{margin:0;height:100%;background:#111}canvas{display:block;width:100%;height:100%}</style>
+</head>
+<body>
+<canvas id="glc" width="960" height="640"></canvas>
+
+<!-- ──────────────── VERTEX (miter-limit 적용) ──────────────── -->
+<script id="line-vert" type="x-shader/x-vertex">
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+
+attribute float a_vertexNumber;
+attribute vec2  a_segmentStart,a_segmentEnd;
+attribute float a_measureStart,a_measureEnd;
+attribute float a_angleStart,a_angleEnd;
+attribute float a_angleTangentSum,a_distance;
+attribute vec4  a_hitColor;
+attribute float a_prop_layer;
+
+uniform mat4  u_projectionMatrix;
+uniform vec2  u_viewportSizePx;
+uniform float u_resolution;
+uniform float u_depth;
+uniform float u_lineWidthPx;
+uniform float u_miterLimit;          // ★ NEW ★
+
+varying vec4  v_hitColor;
+
+vec2 worldToPx(vec2 w){vec4 s=u_projectionMatrix*vec4(w,0.,1.);return(.5*s.xy+.5)*u_viewportSizePx;}
+vec4 pxToScreen(vec2 p){vec2 s=2.*p/u_viewportSizePx-1.;return vec4(s,u_depth,1.);}
+bool isCap(float a){return a<-0.1;}
+vec2 joinDir(vec2 n,float a){float h=a*.5,c=cos(h),s=sin(h);return vec2(s*n.x+c*n.y,-c*n.x+s*n.y)*(1./s);}
+vec2 offsetPt(vec2 pt,vec2 n,float a,float off){return (cos(a)>0.998||isCap(a))?pt-n*off:pt-joinDir(n,a)*off;}
+
+void main(void){
+  float vNum = a_vertexNumber;
+
+  vec2 p0 = worldToPx(a_segmentStart);
+  vec2 p1 = worldToPx(a_segmentEnd);
+  vec2 tg = normalize(p1 - p0);
+  vec2 n  = vec2(-tg.y, tg.x);
+
+  p0 = offsetPt(p0,n,a_angleStart,0.0);
+  p1 = offsetPt(p1,n,a_angleEnd  ,0.0);
+
+  float nDir = (vNum==0.0||vNum==3.0)? 1.0 : -1.0;
+  float tDir = (vNum<2.0)           ? 1.0 : -1.0;
+  float ang  = (vNum<2.0) ? a_angleStart : a_angleEnd;
+
+  /* ── ① miter 시도 ───────────────────────── */
+  vec2 joinMiter = joinDir(n*nDir, ang);
+  float mLen = length(joinMiter);
+  float limit = u_lineWidthPx*0.5*u_miterLimit;
+  bool bevel = isCap(ang) || mLen > limit;
+
+  /* ── ② bevel 대체 또는 miter 유지 ────────── */
+  vec2 join = bevel ? n*nDir - tg*tDir
+                    : joinMiter;
+
+  vec2 posPx = (vNum<2.0? p0 : p1) + join*(u_lineWidthPx*0.5 + 1.0);
+  gl_Position = pxToScreen(posPx);
+  v_hitColor  = a_hitColor;
+}
+</script>
+
+<script id="line-frag" type="x-shader/x-fragment">
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec4 v_hitColor;
+void main(){ gl_FragColor = v_hitColor; }
+</script>
+
+<!-- ──────────────── JS (miter-limit 설정만 추가) ──────────────── -->
+<script>
+(() => {
+  const LINE_WIDTH_PX = 40.0;   // 굵기
+  const MITER_LIMIT   = 2.0;    // ★ 이 값만 변경해도 효과 확인 ★
+
+  const cvs = document.getElementById('glc');
+  const gl  = cvs.getContext('webgl2') || cvs.getContext('webgl');
+  if(!gl){ alert('WebGL 미지원'); return; }
+  const isGL2 = gl instanceof WebGL2RenderingContext;
+  const inst  = isGL2 ? null : gl.getExtension('ANGLE_instanced_arrays');
+  if(!isGL2 && !inst){ alert('instancing 확장 없음'); return; }
+
+  /* ── 셰이더 -- 생략(동일) ────────────────────────── */
+  function sh(id,t){const s=gl.createShader(t);gl.shaderSource(s,document.getElementById(id).textContent);gl.compileShader(s);return s;}
+  const prog=gl.createProgram();gl.attachShader(prog,sh('line-vert',gl.VERTEX_SHADER));gl.attachShader(prog,sh('line-frag',gl.FRAGMENT_SHADER));gl.linkProgram(prog);gl.useProgram(prog);
+
+  /* ── 정적 코너 + 인덱스 VBO (동일) ─────────────── */
+  const vCorner=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vCorner);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,1,2,3]),gl.STATIC_DRAW);
+  const ibo=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array([0,1,2,0,2,3]),gl.STATIC_DRAW);
+
+  /* ── 인스턴스 버퍼 (간단히 2 세그먼트만) ─────────── */
+  const instData=new Float32Array([
+    // p0         p1          measures  angles tan dist color        layer
+    -0.9,-0.7,    0.9,-0.2,   0,1,      -1,-1,  0, 0,   1,0.2,0.2,1, 0,
+    -0.8, 0.6,    0.8, 0.2,   0,1,      -1,-1,  0, 0,   0.2,0.6,1,1, 0
+  ]);
+  const instStride = 15*4;
+  const vInst=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vInst);gl.bufferData(gl.ARRAY_BUFFER,instData,gl.STATIC_DRAW);
+
+  /* ── VAO 설정(핵심만) ───────────────────────────── */
+  const loc=gl.getAttribLocation.bind(gl,prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER,vCorner);
+  gl.vertexAttribPointer(loc('a_vertexNumber'),1,gl.FLOAT,false,0,0);
+  gl.enableVertexAttribArray(loc('a_vertexNumber'));
+
+  function instAttr(name,size,off){
+    const l=loc(name);if(l<0)return;
+    gl.bindBuffer(gl.ARRAY_BUFFER,vInst);
+    gl.vertexAttribPointer(l,size,gl.FLOAT,false,instStride,off);
+    gl.enableVertexAttribArray(l);
+    if(isGL2)gl.vertexAttribDivisor(l,1);else inst.vertexAttribDivisorANGLE(l,1);
+  }
+  let o=0;
+  instAttr('a_segmentStart',2,o); o+=8;
+  instAttr('a_segmentEnd',2,o);   o+=8;
+  instAttr('a_measureStart',1,o); instAttr('a_measureEnd',1,o+=4);   o+=4;
+  instAttr('a_angleStart',1,o);   instAttr('a_angleEnd',1,o+=4);     o+=4;
+  instAttr('a_angleTangentSum',1,o); o+=4;
+  instAttr('a_distance',1,o); o+=4;
+  instAttr('a_hitColor',4,o); o+=16;
+  instAttr('a_prop_layer',1,o);
+
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);
+
+  /* ── 유니폼 설정 (miter-limit 추가) ─────────────── */
+  gl.uniformMatrix4fv(gl.getUniformLocation(prog,'u_projectionMatrix'),false,new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]));
+  gl.uniform2f(gl.getUniformLocation(prog,'u_viewportSizePx'),cvs.width,cvs.height);
+  gl.uniform1f(gl.getUniformLocation(prog,'u_resolution'),1.0);
+  gl.uniform1f(gl.getUniformLocation(prog,'u_depth'),0.0);
+  gl.uniform1f(gl.getUniformLocation(prog,'u_lineWidthPx'),LINE_WIDTH_PX);
+  gl.uniform1f(gl.getUniformLocation(prog,'u_miterLimit'), MITER_LIMIT);   // ★
+
+  /* ── 상태 & 렌더링 ─────────────────────────────── */
+  gl.viewport(0,0,cvs.width,cvs.height);
+  gl.clearColor(0,0,0,1);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  const segCnt=instData.length/15;
+  if(isGL2)gl.drawElementsInstanced(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0,segCnt);
+  else     inst.drawElementsInstancedANGLE(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0,segCnt);
+})();
+</script>
+</body>
+</html>
