@@ -1,176 +1,146 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>WebGL2 두께있는 라인스트링 Instanced</title>
-  <style>body{margin:0;}canvas{display:block;width:100vw;height:100vh;}</style>
+<meta charset="utf-8">
+<title>Instanced Line – attribute/varying 버전</title>
+<style>html,body{margin:0;height:100%}canvas{width:100%;height:100%}</style>
 </head>
 <body>
-<canvas id="glcanvas" width="800" height="600"></canvas>
+<canvas id="glc" width="960" height="640"></canvas>
 <script type="text/javascript">
-const gl = document.getElementById('glcanvas').getContext('webgl2');
-if (!gl) { alert('WebGL2를 지원하는 브라우저에서 실행하세요!'); throw 'No WebGL2'; }
+/* ───────── 1. 좌표 100개 (예시) ───────── */
+const pts = [];
+for (let i = 0; i < 100; ++i) {
+  const t = i / 99;
+  const x = -0.95 + 1.9 * t;
+  const y = Math.sin(x * 4.0) * 0.45 + (Math.random() - 0.5) * 0.08;
+  pts.push([x, y]);
+}
+const segCnt = pts.length - 1;
 
-// 예제: 여러 개의 점을 이은 LineString
-const points = [
-  [-0.7, -0.5],
-  [-0.2,  0.4],
-  [ 0.1, -0.1],
-  [ 0.6,  0.5]
-];
-// 각 세그먼트 개수
-const segCount = points.length - 1;
-
-// (1) 정적 쿼드(사각형) 정점 -2개(좌/우) * 2(시작/끝) = 4개
-// 2D 정점: [-1, -1], [1, -1], [1, 1], [-1, 1] 이런 식(여기선 [-1],[1])
-const quadVertices = new Float32Array([
-  -1, -1,  // v0 (시작-왼쪽)
-   1, -1,  // v1 (시작-오른쪽)
-   1,  1,  // v2 (끝-오른쪽)
-  -1,  1   // v3 (끝-왼쪽)
-]);
-// 인덱스(삼각형 2개)
-const quadIndices = new Uint16Array([
-  0, 1, 2,
-  2, 3, 0
-]);
-
-// (2) 세그먼트(인스턴스) 데이터: a_start, a_end
-const segStarts = new Float32Array(segCount * 2);
-const segEnds   = new Float32Array(segCount * 2);
-for (let i = 0; i < segCount; ++i) {
-  segStarts[i * 2] = points[i][0];
-  segStarts[i * 2 + 1] = points[i][1];
-  segEnds[i * 2] = points[i + 1][0];
-  segEnds[i * 2 + 1] = points[i + 1][1];
+/* ───────── 세그먼트 VBO(start,end,n0,n1) ───────── */
+const STRIDE_F = 8;
+const segBufData = new Float32Array(segCnt * STRIDE_F);
+const norm = ([x,y]) => { const l=Math.hypot(x,y)||1; return [x/l,y/l]; };
+const perp = ([x,y]) => [-y, x];
+for (let i=0;i<segCnt;i++){
+  const p0=pts[i], p1=pts[i+1];
+  const d=norm([p1[0]-p0[0], p1[1]-p0[1]]);
+  const dPrev=i? norm([p0[0]-pts[i-1][0],p0[1]-pts[i-1][1]]) : d;
+  const dNext=(i<segCnt-1)? norm([pts[i+2][0]-p1[0],pts[i+2][1]-p1[1]]) : d;
+  const n0=perp(norm([dPrev[0]+d[0], dPrev[1]+d[1]]));
+  const n1=perp(norm([d[0]+dNext[0], d[1]+dNext[1]]));
+  segBufData.set([...p0,...p1,...n0,...n1], i*STRIDE_F);
 }
 
-// (3) 셰이더 코드
-const vsSource = `
-#version 300 es
+/* ───────── 색상 인덱스 (80/90 경계) ───────── */
+const breaks=[80,90,segCnt];
+const colorIdxs=new Uint8Array(segCnt);
+let cur=0, next=breaks[cur];
+for(let i=0;i<segCnt;i++){ if(i>next){cur++;next=breaks[cur];} colorIdxs[i]=cur; }
+
+/* ───────── 2. WebGL2 초기화 ───────── */
+const gl=document.getElementById('glc').getContext('webgl2');
+if(!gl){alert('WebGL2 필요');throw'no webgl2';}
+
+/* ───────── 3. GLSL ES 1.00 셰이더 ───────── */
+const vsSrc = `
+precision highp float;
+uniform vec2  u_resolution;
+uniform float u_lineWidth;
+uniform vec4  u_palette[8];
+
+attribute vec2  a_corner;    // (t, ±1)
+attribute vec2  a_start;
+attribute vec2  a_end;
+attribute vec2  a_n0;
+attribute vec2  a_n1;
+attribute float a_colorIdx;
+
+varying vec4 v_color;
+
+void main(){
+    float t = a_corner.x;
+    vec2 pos = mix(a_start, a_end, t);
+
+    /* pixel-space 변환 */
+    vec2 dirPix = (a_end - a_start) * u_resolution;
+    dirPix = normalize(dirPix);
+    vec2 nSeg = vec2(-dirPix.y, dirPix.x);
+    vec2 mPix = normalize(mix(a_n0, a_n1, t) * u_resolution);
+
+    float scalePx = 0.5 * u_lineWidth / max(dot(nSeg, mPix), 0.3);
+    vec2 px2c = vec2(2.0/u_resolution.x, 2.0/u_resolution.y);
+    vec2 offset = mPix * scalePx * px2c * a_corner.y;
+
+    gl_Position = vec4(pos + offset, 0.0, 1.0);
+    v_color = u_palette[int(a_colorIdx + 0.5)];
+}`;
+const fsSrc = `
 precision mediump float;
-attribute vec2 a_quad;     // [-1,-1]~[1,1] (직사각형 모양, 4개)
-attribute vec2 a_start;    // 세그먼트 시작점 (instanced)
-attribute vec2 a_end;      // 세그먼트 끝점 (instanced)
-attribute float a_thickness;
-varying vec2 v_uv;
+varying vec4 v_color;
+void main(){ gl_FragColor = v_color; }`;
 
-void main() {
-    // 선분 방향
-    vec2 dir = normalize(a_end - a_start);
-    // 수직벡터(법선)
-    vec2 normal = vec2(-dir.y, dir.x);
-    // thickness 단위: clip space (ex: 0.03)
-    float t = a_thickness * 0.5;
-    // quad의 x: 두께 방향, y: 선분 진행 방향
-    float along = (a_quad.y + 1.0) * 0.5; // -1(시작)~+1(끝) -> 0~1
-    float side = a_quad.x * t; // -1~1을 -t~+t로 변환
-
-    // 시작점~끝점 lerp + 두께만큼 normal 이동
-    vec2 pos = mix(a_start, a_end, along) + normal * side;
-    gl_Position = vec4(pos, 0, 1);
-
-    v_uv = a_quad;
+/* ───── 프로그램 컴파일 ───── */
+function compile(type,src){
+  const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s);
+  return s;
 }
-`;
+const prog=gl.createProgram();
+gl.attachShader(prog,compile(gl.VERTEX_SHADER,vsSrc));
+gl.attachShader(prog,compile(gl.FRAGMENT_SHADER,fsSrc));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) throw gl.getProgramInfoLog(prog);
+gl.useProgram(prog);
 
-const fsSource = `
-#version 300 es
-precision mediump float;
-varying vec2 v_uv;
-out vec4 outColor;
-void main() {
-    // 양끝 살짝 둥글게: quad.x^2로 mask(antialiasing은 안함)
-    float mask = smoothstep(1.0, 0.9, abs(v_uv.x));
-    outColor = mix(vec4(0.3, 1.0, 0.3, 1.0), vec4(0,0,0,0), mask);
+/* ───────── 4. 버퍼 생성 ───────── */
+const cornerBuf=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,cornerBuf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,-1,0,1,1,1,1,-1]),gl.STATIC_DRAW);
+
+const idxBuf=gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,idxBuf);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array([0,1,2,0,2,3]),gl.STATIC_DRAW);
+
+const segBuf=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,segBuf);
+gl.bufferData(gl.ARRAY_BUFFER,segBufData,gl.STATIC_DRAW);
+
+const colBuf=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,colBuf);
+gl.bufferData(gl.ARRAY_BUFFER,colorIdxs,gl.STATIC_DRAW);
+
+/* ───────── 5. attribute 바인딩 (이름으로) ───────── */
+function bind(buf,name,size,type,norm,stride,off,div){
+  const loc=gl.getAttribLocation(prog,name);
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc,size,type,norm,stride,off);
+  gl.vertexAttribDivisor(loc,div);
 }
-`;
+bind(cornerBuf,'a_corner',2,gl.FLOAT,false,0,0,0);
 
-// (4) 셰이더 빌드/링크 유틸
-function compileShader(gl, type, src) {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
-        throw gl.getShaderInfoLog(s);
-    return s;
-}
-function createProgram(gl, vs, fs) {
-    const p = gl.createProgram();
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS))
-        throw gl.getProgramInfoLog(p);
-    return p;
-}
-const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
-const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
-const program = createProgram(gl, vs, fs);
-gl.useProgram(program);
+const STRIDE_B=STRIDE_F*4;
+bind(segBuf,'a_start',2,gl.FLOAT,false,STRIDE_B,0,1);
+bind(segBuf,'a_end',  2,gl.FLOAT,false,STRIDE_B,8,1);
+bind(segBuf,'a_n0',   2,gl.FLOAT,false,STRIDE_B,16,1);
+bind(segBuf,'a_n1',   2,gl.FLOAT,false,STRIDE_B,24,1);
+bind(colBuf,'a_colorIdx',1,gl.UNSIGNED_BYTE,false,0,0,1);
 
-// (5) 버퍼/attribute 연결
-const vao = gl.createVertexArray();
-gl.bindVertexArray(vao);
+/* ───────── 6. uniform 설정 ───────── */
+gl.uniform2f(gl.getUniformLocation(prog,'u_resolution'),
+             gl.drawingBufferWidth, gl.drawingBufferHeight);
+gl.uniform1f(gl.getUniformLocation(prog,'u_lineWidth'),4.0);
+gl.uniform4fv(gl.getUniformLocation(prog,'u_palette[0]'),new Float32Array([
+  .10,.80,.30,1,  .90,.30,.20,1,  .20,.60,.90,1,  1,1,.30,1,
+  0,0,0,0,   0,0,0,0,   0,0,0,0,  0,0,0,0
+]));
 
-// 정적 쿼드
-const vboQuad = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
-gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
-const locQuad = gl.getAttribLocation(program, "a_quad");
-gl.enableVertexAttribArray(locQuad);
-gl.vertexAttribPointer(locQuad, 2, gl.FLOAT, false, 0, 0);
-gl.vertexAttribDivisor(locQuad, 0); // 0: 정점마다(즉, 4개 정점 재활용)
-
-// 시작점 a_start(instanced)
-const vboStart = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vboStart);
-gl.bufferData(gl.ARRAY_BUFFER, segStarts, gl.STATIC_DRAW);
-const locStart = gl.getAttribLocation(program, "a_start");
-gl.enableVertexAttribArray(locStart);
-gl.vertexAttribPointer(locStart, 2, gl.FLOAT, false, 0, 0);
-gl.vertexAttribDivisor(locStart, 1); // 1: 인스턴스마다
-
-// 끝점 a_end(instanced)
-const vboEnd = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vboEnd);
-gl.bufferData(gl.ARRAY_BUFFER, segEnds, gl.STATIC_DRAW);
-const locEnd = gl.getAttribLocation(program, "a_end");
-gl.enableVertexAttribArray(locEnd);
-gl.vertexAttribPointer(locEnd, 2, gl.FLOAT, false, 0, 0);
-gl.vertexAttribDivisor(locEnd, 1); // 1: 인스턴스마다
-
-// 두께
-const thicknessArr = new Float32Array(segCount);
-thicknessArr.fill(0.04); // 모두 같은 두께, 다양하게 하고 싶으면 seg마다 값 다르게
-const vboT = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vboT);
-gl.bufferData(gl.ARRAY_BUFFER, thicknessArr, gl.STATIC_DRAW);
-const locT = gl.getAttribLocation(program, "a_thickness");
-gl.enableVertexAttribArray(locT);
-gl.vertexAttribPointer(locT, 1, gl.FLOAT, false, 0, 0);
-gl.vertexAttribDivisor(locT, 1);
-
-// 인덱스 버퍼
-const ibo = gl.createBuffer();
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
-
-// (6) 드로우
-gl.clearColor(0.07, 0.07, 0.10, 1);
-gl.clear(gl.COLOR_BUFFER_BIT);
-gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-
-gl.useProgram(program);
-gl.bindVertexArray(vao);
-
-gl.drawElementsInstanced(
-    gl.TRIANGLES,
-    quadIndices.length,   // 6개(삼각형 2개)
-    gl.UNSIGNED_SHORT,
-    0,
-    segCount              // 인스턴스 = 세그먼트 수
-);
+/* ───────── 7. 렌더 ───────── */
+gl.viewport(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight);
+gl.clearColor(.07,.07,.10,1); gl.clear(gl.COLOR_BUFFER_BIT);
+gl.drawElementsInstanced(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0,segCnt);
 </script>
 </body>
 </html>
