@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>WebGL2 Instanced Quad Example</title>
+  <title>WebGL2 두께있는 라인스트링 Instanced</title>
   <style>body{margin:0;}canvas{display:block;width:100vw;height:100vh;}</style>
 </head>
 <body>
@@ -11,37 +11,88 @@
 const gl = document.getElementById('glcanvas').getContext('webgl2');
 if (!gl) { alert('WebGL2를 지원하는 브라우저에서 실행하세요!'); throw 'No WebGL2'; }
 
-// --- Vertex Shader ---
-const vsSource = `#version 300 es
-in vec2 a_position;           // 사각형 1개(정점 4개)
-in vec2 a_instanceOffset;     // 인스턴스마다 위치 (attribute divisor=1)
-in vec3 a_instanceColor;      // 인스턴스마다 색상 (attribute divisor=1)
-out vec3 v_color;
+// 예제: 여러 개의 점을 이은 LineString
+const points = [
+  [-0.7, -0.5],
+  [-0.2,  0.4],
+  [ 0.1, -0.1],
+  [ 0.6,  0.5]
+];
+// 각 세그먼트 개수
+const segCount = points.length - 1;
+
+// (1) 정적 쿼드(사각형) 정점 -2개(좌/우) * 2(시작/끝) = 4개
+// 2D 정점: [-1, -1], [1, -1], [1, 1], [-1, 1] 이런 식(여기선 [-1],[1])
+const quadVertices = new Float32Array([
+  -1, -1,  // v0 (시작-왼쪽)
+   1, -1,  // v1 (시작-오른쪽)
+   1,  1,  // v2 (끝-오른쪽)
+  -1,  1   // v3 (끝-왼쪽)
+]);
+// 인덱스(삼각형 2개)
+const quadIndices = new Uint16Array([
+  0, 1, 2,
+  2, 3, 0
+]);
+
+// (2) 세그먼트(인스턴스) 데이터: a_start, a_end
+const segStarts = new Float32Array(segCount * 2);
+const segEnds   = new Float32Array(segCount * 2);
+for (let i = 0; i < segCount; ++i) {
+  segStarts[i * 2] = points[i][0];
+  segStarts[i * 2 + 1] = points[i][1];
+  segEnds[i * 2] = points[i + 1][0];
+  segEnds[i * 2 + 1] = points[i + 1][1];
+}
+
+// (3) 셰이더 코드
+const vsSource = `
+#version 300 es
+precision mediump float;
+attribute vec2 a_quad;     // [-1,-1]~[1,1] (직사각형 모양, 4개)
+attribute vec2 a_start;    // 세그먼트 시작점 (instanced)
+attribute vec2 a_end;      // 세그먼트 끝점 (instanced)
+attribute float a_thickness;
+varying vec2 v_uv;
+
 void main() {
-    gl_Position = vec4(a_position + a_instanceOffset, 0.0, 1.0);
-    v_color = a_instanceColor;
+    // 선분 방향
+    vec2 dir = normalize(a_end - a_start);
+    // 수직벡터(법선)
+    vec2 normal = vec2(-dir.y, dir.x);
+    // thickness 단위: clip space (ex: 0.03)
+    float t = a_thickness * 0.5;
+    // quad의 x: 두께 방향, y: 선분 진행 방향
+    float along = (a_quad.y + 1.0) * 0.5; // -1(시작)~+1(끝) -> 0~1
+    float side = a_quad.x * t; // -1~1을 -t~+t로 변환
+
+    // 시작점~끝점 lerp + 두께만큼 normal 이동
+    vec2 pos = mix(a_start, a_end, along) + normal * side;
+    gl_Position = vec4(pos, 0, 1);
+
+    v_uv = a_quad;
 }
 `;
 
-// --- Fragment Shader ---
-const fsSource = `#version 300 es
+const fsSource = `
+#version 300 es
 precision mediump float;
-in vec3 v_color;
+varying vec2 v_uv;
 out vec4 outColor;
 void main() {
-    outColor = vec4(v_color, 1.0);
+    // 양끝 살짝 둥글게: quad.x^2로 mask(antialiasing은 안함)
+    float mask = smoothstep(1.0, 0.9, abs(v_uv.x));
+    outColor = mix(vec4(0.3, 1.0, 0.3, 1.0), vec4(0,0,0,0), mask);
 }
 `;
 
-// --- 셰이더 유틸 ---
-function compileShader(gl, type, source) {
+// (4) 셰이더 빌드/링크 유틸
+function compileShader(gl, type, src) {
     const s = gl.createShader(type);
-    gl.shaderSource(s, source);
+    gl.shaderSource(s, src);
     gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-        alert(gl.getShaderInfoLog(s));
-        throw 'shader compile error';
-    }
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+        throw gl.getShaderInfoLog(s);
     return s;
 }
 function createProgram(gl, vs, fs) {
@@ -49,88 +100,64 @@ function createProgram(gl, vs, fs) {
     gl.attachShader(p, vs);
     gl.attachShader(p, fs);
     gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-        alert(gl.getProgramInfoLog(p));
-        throw 'link error';
-    }
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS))
+        throw gl.getProgramInfoLog(p);
     return p;
 }
-
-// --- 프로그램 생성 ---
 const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
 const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
 const program = createProgram(gl, vs, fs);
 gl.useProgram(program);
 
-// --- 정점 데이터 (사각형 1개 = 정점 4개) ---
-const quadVertices = new Float32Array([
-    -0.1, -0.1, // 좌하
-     0.1, -0.1, // 우하
-     0.1,  0.1, // 우상
-    -0.1,  0.1  // 좌상
-]);
-// 인덱스(삼각형 2개)
-const quadIndices = new Uint16Array([
-    0, 1, 2,
-    2, 3, 0
-]);
-
-// --- 인스턴스 데이터 (위치와 색상) ---
-const instanceCount = 8;
-const instanceOffsets = new Float32Array(instanceCount * 2);
-const instanceColors = new Float32Array(instanceCount * 3);
-for (let i = 0; i < instanceCount; ++i) {
-    // 위치를 원형으로 배치
-    const angle = (i / instanceCount) * 2 * Math.PI;
-    instanceOffsets[i * 2] = 0.6 * Math.cos(angle);
-    instanceOffsets[i * 2 + 1] = 0.6 * Math.sin(angle);
-
-    // 각기 다른 색상 지정 (HSV -> RGB 간단 변환)
-    const h = i / instanceCount;
-    const r = Math.abs(Math.sin(Math.PI * h));
-    const g = Math.abs(Math.sin(Math.PI * (h + 0.33)));
-    const b = Math.abs(Math.sin(Math.PI * (h + 0.66)));
-    instanceColors.set([r, g, b], i * 3);
-}
-
-// --- 버퍼 생성/연결 ---
-// VAO로 묶음(추천)
+// (5) 버퍼/attribute 연결
 const vao = gl.createVertexArray();
 gl.bindVertexArray(vao);
 
-// (1) 정점버퍼
-const vbo = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+// 정적 쿼드
+const vboQuad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
 gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
-const locPos = gl.getAttribLocation(program, 'a_position');
-gl.enableVertexAttribArray(locPos);
-gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
+const locQuad = gl.getAttribLocation(program, "a_quad");
+gl.enableVertexAttribArray(locQuad);
+gl.vertexAttribPointer(locQuad, 2, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(locQuad, 0); // 0: 정점마다(즉, 4개 정점 재활용)
 
-// (2) 인스턴스 위치버퍼
-const vboOffset = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vboOffset);
-gl.bufferData(gl.ARRAY_BUFFER, instanceOffsets, gl.STATIC_DRAW);
-const locInstOffset = gl.getAttribLocation(program, 'a_instanceOffset');
-gl.enableVertexAttribArray(locInstOffset);
-gl.vertexAttribPointer(locInstOffset, 2, gl.FLOAT, false, 0, 0);
-gl.vertexAttribDivisor(locInstOffset, 1); // 인스턴스당 1번 사용
+// 시작점 a_start(instanced)
+const vboStart = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vboStart);
+gl.bufferData(gl.ARRAY_BUFFER, segStarts, gl.STATIC_DRAW);
+const locStart = gl.getAttribLocation(program, "a_start");
+gl.enableVertexAttribArray(locStart);
+gl.vertexAttribPointer(locStart, 2, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(locStart, 1); // 1: 인스턴스마다
 
-// (3) 인스턴스 색상버퍼
-const vboColor = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vboColor);
-gl.bufferData(gl.ARRAY_BUFFER, instanceColors, gl.STATIC_DRAW);
-const locInstColor = gl.getAttribLocation(program, 'a_instanceColor');
-gl.enableVertexAttribArray(locInstColor);
-gl.vertexAttribPointer(locInstColor, 3, gl.FLOAT, false, 0, 0);
-gl.vertexAttribDivisor(locInstColor, 1); // 인스턴스당 1번 사용
+// 끝점 a_end(instanced)
+const vboEnd = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vboEnd);
+gl.bufferData(gl.ARRAY_BUFFER, segEnds, gl.STATIC_DRAW);
+const locEnd = gl.getAttribLocation(program, "a_end");
+gl.enableVertexAttribArray(locEnd);
+gl.vertexAttribPointer(locEnd, 2, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(locEnd, 1); // 1: 인스턴스마다
 
-// (4) 인덱스 버퍼
+// 두께
+const thicknessArr = new Float32Array(segCount);
+thicknessArr.fill(0.04); // 모두 같은 두께, 다양하게 하고 싶으면 seg마다 값 다르게
+const vboT = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vboT);
+gl.bufferData(gl.ARRAY_BUFFER, thicknessArr, gl.STATIC_DRAW);
+const locT = gl.getAttribLocation(program, "a_thickness");
+gl.enableVertexAttribArray(locT);
+gl.vertexAttribPointer(locT, 1, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(locT, 1);
+
+// 인덱스 버퍼
 const ibo = gl.createBuffer();
 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
 
-// --- 드로우 ---
-gl.clearColor(0.08, 0.09, 0.12, 1);
+// (6) 드로우
+gl.clearColor(0.07, 0.07, 0.10, 1);
 gl.clear(gl.COLOR_BUFFER_BIT);
 gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
 
@@ -139,12 +166,11 @@ gl.bindVertexArray(vao);
 
 gl.drawElementsInstanced(
     gl.TRIANGLES,
-    quadIndices.length,
+    quadIndices.length,   // 6개(삼각형 2개)
     gl.UNSIGNED_SHORT,
     0,
-    instanceCount
+    segCount              // 인스턴스 = 세그먼트 수
 );
-
 </script>
 </body>
 </html>
