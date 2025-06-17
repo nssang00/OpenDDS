@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>WebGL2 Instanced Quad Example</title>
+  <style>body{margin:0;}canvas{display:block;width:100vw;height:100vh;}</style>
+</head>
+<body>
+<canvas id="glcanvas" width="800" height="600"></canvas>
+<script type="text/javascript">
+const gl = document.getElementById('glcanvas').getContext('webgl2');
+if (!gl) { alert('WebGL2를 지원하는 브라우저에서 실행하세요!'); throw 'No WebGL2'; }
+
+// --- Vertex Shader ---
+const vsSource = `#version 300 es
+in vec2 a_position;           // 사각형 1개(정점 4개)
+in vec2 a_instanceOffset;     // 인스턴스마다 위치 (attribute divisor=1)
+in vec3 a_instanceColor;      // 인스턴스마다 색상 (attribute divisor=1)
+out vec3 v_color;
+void main() {
+    gl_Position = vec4(a_position + a_instanceOffset, 0.0, 1.0);
+    v_color = a_instanceColor;
+}
+`;
+
+// --- Fragment Shader ---
+const fsSource = `#version 300 es
+precision mediump float;
+in vec3 v_color;
+out vec4 outColor;
+void main() {
+    outColor = vec4(v_color, 1.0);
+}
+`;
+
+// --- 셰이더 유틸 ---
+function compileShader(gl, type, source) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, source);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        alert(gl.getShaderInfoLog(s));
+        throw 'shader compile error';
+    }
+    return s;
+}
+function createProgram(gl, vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, vs);
+    gl.attachShader(p, fs);
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+        alert(gl.getProgramInfoLog(p));
+        throw 'link error';
+    }
+    return p;
+}
+
+// --- 프로그램 생성 ---
+const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
+const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
+const program = createProgram(gl, vs, fs);
+gl.useProgram(program);
+
+// --- 정점 데이터 (사각형 1개 = 정점 4개) ---
+const quadVertices = new Float32Array([
+    -0.1, -0.1, // 좌하
+     0.1, -0.1, // 우하
+     0.1,  0.1, // 우상
+    -0.1,  0.1  // 좌상
+]);
+// 인덱스(삼각형 2개)
+const quadIndices = new Uint16Array([
+    0, 1, 2,
+    2, 3, 0
+]);
+
+// --- 인스턴스 데이터 (위치와 색상) ---
+const instanceCount = 8;
+const instanceOffsets = new Float32Array(instanceCount * 2);
+const instanceColors = new Float32Array(instanceCount * 3);
+for (let i = 0; i < instanceCount; ++i) {
+    // 위치를 원형으로 배치
+    const angle = (i / instanceCount) * 2 * Math.PI;
+    instanceOffsets[i * 2] = 0.6 * Math.cos(angle);
+    instanceOffsets[i * 2 + 1] = 0.6 * Math.sin(angle);
+
+    // 각기 다른 색상 지정 (HSV -> RGB 간단 변환)
+    const h = i / instanceCount;
+    const r = Math.abs(Math.sin(Math.PI * h));
+    const g = Math.abs(Math.sin(Math.PI * (h + 0.33)));
+    const b = Math.abs(Math.sin(Math.PI * (h + 0.66)));
+    instanceColors.set([r, g, b], i * 3);
+}
+
+// --- 버퍼 생성/연결 ---
+// VAO로 묶음(추천)
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+
+// (1) 정점버퍼
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+const locPos = gl.getAttribLocation(program, 'a_position');
+gl.enableVertexAttribArray(locPos);
+gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
+
+// (2) 인스턴스 위치버퍼
+const vboOffset = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vboOffset);
+gl.bufferData(gl.ARRAY_BUFFER, instanceOffsets, gl.STATIC_DRAW);
+const locInstOffset = gl.getAttribLocation(program, 'a_instanceOffset');
+gl.enableVertexAttribArray(locInstOffset);
+gl.vertexAttribPointer(locInstOffset, 2, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(locInstOffset, 1); // 인스턴스당 1번 사용
+
+// (3) 인스턴스 색상버퍼
+const vboColor = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vboColor);
+gl.bufferData(gl.ARRAY_BUFFER, instanceColors, gl.STATIC_DRAW);
+const locInstColor = gl.getAttribLocation(program, 'a_instanceColor');
+gl.enableVertexAttribArray(locInstColor);
+gl.vertexAttribPointer(locInstColor, 3, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(locInstColor, 1); // 인스턴스당 1번 사용
+
+// (4) 인덱스 버퍼
+const ibo = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
+
+// --- 드로우 ---
+gl.clearColor(0.08, 0.09, 0.12, 1);
+gl.clear(gl.COLOR_BUFFER_BIT);
+gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+
+gl.useProgram(program);
+gl.bindVertexArray(vao);
+
+gl.drawElementsInstanced(
+    gl.TRIANGLES,
+    quadIndices.length,
+    gl.UNSIGNED_SHORT,
+    0,
+    instanceCount
+);
+
+</script>
+</body>
+</html>
