@@ -3,21 +3,31 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 
-MemoryStream emfStream = new MemoryStream();
-
-using (Graphics refGraphics = Graphics.FromHwnd(IntPtr.Zero))
+class Program
 {
-    IntPtr hdc = refGraphics.GetHdc();
-
-    // 메모리 기반 EMF 생성
-    using (Metafile metafile = new Metafile(emfStream, hdc))
+    static void Main()
     {
-        refGraphics.ReleaseHdc(hdc);
-
-        using (Graphics g = Graphics.FromImage(metafile))
+        using (var emfStream = new MemoryStream())
         {
-            g.DrawEllipse(Pens.Red, 10, 10, 100, 100);
-            g.DrawString("Hello EMF", new Font("Arial", 14), Brushes.Blue, new PointF(20, 60));
+            using (Graphics refGraphics = Graphics.FromHwnd(IntPtr.Zero))
+            {
+                IntPtr hdc = refGraphics.GetHdc();
+                using (var metafile = new Metafile(emfStream, hdc))
+                {
+                    refGraphics.ReleaseHdc(hdc);
+
+                    using (Graphics g = Graphics.FromImage(metafile))
+                    {
+                        g.Clear(Color.White);
+                        g.DrawEllipse(Pens.Blue, 10, 10, 100, 80);
+                        g.DrawString("Stream EMF", new Font("Arial", 12), Brushes.Black, 20, 50);
+                    }
+                }
+            }
+
+            // 저장
+            emfStream.Position = 0;
+            File.WriteAllBytes("saved.emf", emfStream.ToArray());
         }
     }
 }
