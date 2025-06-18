@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebGL Thick Dashed Line (Clean Cap Version)</title>
+    <style>
+      canvas {
+        border: 1px solid black;
+      }
+      .controls {
+        margin: 10px 0;
+      }
+      label {
+        margin-right: 15px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <label
+        >Dash Length:
+        <input type="range" id="dashLength" min="10" max="80" value="30"
+      /></label>
+      <label
+        >Gap Length:
+        <input type="range" id="gapLength" min="5" max="50" value="15"
+      /></label>
+      <label
+        >Line Thickness:
+        <input type="range" id="thickness" min="2" max="20" value="8"
+      /></label>
+    </div>
+    <canvas id="canvas" width="500" height="400"></canvas>
+    <script>
+      const canvas = document.getElementById("canvas");
+      const gl = canvas.getContext("webgl");
+      if (!gl) {
+        alert("WebGL not supported");
+        throw new Error("WebGL not supported");
+      }
+
+      // ====== Vertex/Fragment Shader (기존과 거의 같음) ======
+      const vertexShaderSource = `
+  attribute vec2 a_position;
+  uniform vec2 u_resolution;
+  void main() {
+    // Pixel to clipspace
+    vec2 clip = (a_position / u_resolution) * 2.0 - 1.0;
+    gl_Position = vec4(clip, 0, 1);
+  }
+`;
+      const fragmentShaderSource = `
+  precision mediump float;
+  uniform vec3 u_color;
+  void main() {
+    gl_FragColor = vec4(u_color, 1.0);
+  }
+`;
+
+      function createShader(gl, type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+          throw new Error(gl.getShaderInfoLog(s));
+        }
+        return s;
+      }
+      function createProgram(gl, vs, fs) {
+        const prog = gl.createProgram();
+        gl.attachShader(prog, vs);
+        gl.attachShader(prog, fs);
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+          throw new Error(gl.getProgramInfoLog(prog));
+        }
+        return prog;
+      }
+      const vShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+      const fShader = createShader(
+        gl,
+        gl.FRAGMENT_SHADER,
+        fragmentShaderSource
+      );
+      const program = createProgram(gl, vShader, fShader);
+
+      // ====== Polyline 데이터 ======
+      const paths = [
+        [
+          [20, 100],
+          [80, 120],
+          [140, 80],
+          [200, 150],
+          [250, 100],
+          [300, 180],
+          [350, 120],
+          [420, 160],
+        ],
+      ];
+
+      // ====== 유틸 ======
+      function lerp2(a, b, t) {
+        return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      }
+      function sub2(a, b) {
+        return [a[0] - b[0], a[1] - b[1]];
+      }
+      function length2(v) {
+        return Math.sqrt(v[0] * v[0] + v[1] * v[1]);
+      }
+      function normalize2(v) {
+        const len = length2(v);
+        return [v[0] / len, v[1] / len];
+      }
+
+      // ====== 핵심: 대시별로 geometry(quad) 생성 ======
+      function generateDashedThickLineGeometry(
+        points,
+        thickness,
+        dashLength,
+        gapLength
+      ) {
+        const vertices = [];
+        const indices = [];
+        let vertexIndex = 0;
+
+        // 1. 누적 거리 테이블 생성
+        const segmentLengths = [];
+        const cumulative = [0];
+        let totalLength = 0;
+        for (let i = 1; i < points.length; ++i) {
+          const dx = points[i][0] - points[i - 1][0];
+          const dy = points[i][1] - points[i - 1][1];
+          const len = Math.sqrt(dx * dx + dy * dy);
+          segmentLengths.push(len);
+          totalLength += len;
+          cumulative.push(totalLength);
+        }
+
+        const pattern = dashLength + gapLength;
+        let pos = 0;
+        while (pos < totalLength) {
+          // 대시 구간: [pos, pos+dashLength]
+          const dashStart = pos;
+          const dashEnd = Math.min(pos + dashLength, totalLength);
+          addDashQuad(dashStart, dashEnd);
+          pos += pattern;
+        }
+
+        // dash의 시작, 끝 누적길이 좌표에서 quad 생성
+        function addDashQuad(startDist, endDist) {
+          // polyline에서 해당 누적거리에 해당하는 점 구하기 (segment 기준 보간)
+          function getPointAt(dist) {
+            for (let i = 0; i < segmentLengths.length; ++i) {
+              if (cumulative[i + 1] >= dist) {
+                const segStart = points[i];
+                const segEnd = points[i + 1];
+                const segLen = segmentLengths[i];
+                const segDist = dist - cumulative[i];
+                const t = segLen === 0 ? 0 : segDist / segLen;
+                return lerp2(segStart, segEnd, t);
+              }
+            }
+            // 마지막 점 (shouldn't reach)
+            return points[points.length - 1];
+          }
+
+          // (1) 대시 시작/끝 좌표
+          let currDist = startDist;
+          let p0 = getPointAt(currDist);
+          let p1 = null;
+          while (currDist < endDist - 1e-5) {
+            // 대시가 여러 세그먼트에 걸칠 수 있으므로, 현 세그먼트에서 가능한 끝까지, 아니면 dashEnd까지
+            // 현 세그먼트 찾기
+            let segIdx = 0;
+            while (
+              segIdx < segmentLengths.length &&
+              cumulative[segIdx + 1] <= currDist + 1e-5
+            )
+              segIdx++;
+            if (segIdx >= segmentLengths.length) break;
+            const segStartDist = Math.max(currDist, cumulative[segIdx]);
+            const segEndDist = Math.min(endDist, cumulative[segIdx + 1]);
+            const segStart = getPointAt(segStartDist);
+            const segEnd = getPointAt(segEndDist);
+
+            // 두꺼운 선 양쪽 offset 벡터 (수직벡터)
+            const dir = sub2(segEnd, segStart);
+            const len = length2(dir);
+            if (len === 0) {
+              currDist = segEndDist;
+              continue;
+            }
+            const normal = [-dir[1] / len, dir[0] / len];
+            const off = [
+              normal[0] * (thickness / 2),
+              normal[1] * (thickness / 2),
+            ];
+
+            // 4개의 꼭지점 (시작+오프, 시작-오프, 끝+오프, 끝-오프)
+            const v0 = [segStart[0] + off[0], segStart[1] + off[1]];
+            const v1 = [segStart[0] - off[0], segStart[1] - off[1]];
+            const v2 = [segEnd[0] + off[0], segEnd[1] + off[1]];
+            const v3 = [segEnd[0] - off[0], segEnd[1] - off[1]];
+
+            vertices.push(...v0, ...v1, ...v2, ...v3);
+            indices.push(
+              vertexIndex,
+              vertexIndex + 1,
+              vertexIndex + 2,
+              vertexIndex + 1,
+              vertexIndex + 3,
+              vertexIndex + 2
+            );
+            vertexIndex += 4;
+
+            currDist = segEndDist;
+          }
+        }
+
+        return {
+          vertices: new Float32Array(vertices),
+          indices: new Uint16Array(indices),
+        };
+      }
+
+      // ====== Render ======
+      function render() {
+        const dashLength = parseFloat(
+          document.getElementById("dashLength").value
+        );
+        const gapLength = parseFloat(
+          document.getElementById("gapLength").value
+        );
+        const thickness = parseFloat(
+          document.getElementById("thickness").value
+        );
+
+        let allVertices = [];
+        let allIndices = [];
+        let indexOffset = 0;
+        for (const path of paths) {
+          const geom = generateDashedThickLineGeometry(
+            path,
+            thickness,
+            dashLength,
+            gapLength
+          );
+          allVertices.push(...geom.vertices);
+          for (let i = 0; i < geom.indices.length; ++i) {
+            allIndices.push(geom.indices[i] + indexOffset);
+          }
+          indexOffset += geom.vertices.length / 2;
+        }
+
+        // WebGL buffer
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(allVertices),
+          gl.STATIC_DRAW
+        );
+
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(
+          gl.ELEMENT_ARRAY_BUFFER,
+          new Uint16Array(allIndices),
+          gl.STATIC_DRAW
+        );
+
+        // Draw
+        gl.useProgram(program);
+        const positionLoc = gl.getAttribLocation(program, "a_position");
+        gl.enableVertexAttribArray(positionLoc);
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+
+        gl.uniform2f(
+          gl.getUniformLocation(program, "u_resolution"),
+          canvas.width,
+          canvas.height
+        );
+        gl.uniform3f(gl.getUniformLocation(program, "u_color"), 0.2, 0.7, 1.0);
+
+        gl.clearColor(0.1, 0.1, 0.1, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.drawElements(gl.TRIANGLES, allIndices.length, gl.UNSIGNED_SHORT, 0);
+      }
+
+      // 이벤트 핸들러
+      document.getElementById("dashLength").addEventListener("input", render);
+      document.getElementById("gapLength").addEventListener("input", render);
+      document.getElementById("thickness").addEventListener("input", render);
+      render();
+    </script>
+  </body>
+</html>
