@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebGL Thick Dashed Line</title>
+  <style>
+    body { margin: 0; padding: 20px; background: #1a1a2e; color: #e6e6e6; font-family: Arial, sans-serif; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; color: #4cc9f0; margin-bottom: 10px; }
+    .subtitle { text-align: center; margin-bottom: 20px; color: #a0a0a0; }
+    .canvas-container { display: flex; justify-content: center; margin: 20px 0; }
+    canvas { border: 1px solid #4cc9f0; background: #16213e; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    .controls { background: #16213e; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #0f3460; }
+    .control-group { margin-bottom: 15px; }
+    label { display: inline-block; width: 150px; margin-right: 10px; color: #4cc9f0; }
+    input[type="range"] { width: 250px; vertical-align: middle; }
+    .value { display: inline-block; width: 50px; text-align: right; }
+    .explanation { background: #16213e; padding: 15px; border-radius: 8px; margin-top: 20px; border: 1px solid #0f3460; }
+    .explanation h3 { color: #4cc9f0; margin-top: 0; }
+    .code { background: #0f3460; padding: 15px; border-radius: 5px; font-family: monospace; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WebGL Thick Dashed Line</h1>
+    <div class="subtitle">Uniform Thickness in Screen Space with Dash Pattern</div>
+    
+    <div class="canvas-container">
+      <canvas id="canvas" width="600" height="400"></canvas>
+    </div>
+    
+    <div class="controls">
+      <div class="control-group">
+        <label for="thickness">Line Thickness:</label>
+        <input type="range" id="thickness" min="2" max="20" value="8" step="0.5">
+        <span class="value" id="thicknessValue">8px</span>
+      </div>
+      
+      <div class="control-group">
+        <label for="dashLength">Dash Length:</label>
+        <input type="range" id="dashLength" min="10" max="100" value="30" step="1">
+        <span class="value" id="dashLengthValue">30px</span>
+      </div>
+      
+      <div class="control-group">
+        <label for="gapLength">Gap Length:</label>
+        <input type="range" id="gapLength" min="5" max="60" value="15" step="1">
+        <span class="value" id="gapLengthValue">15px</span>
+      </div>
+    </div>
+    
+    <div class="explanation">
+      <h3>How it Works</h3>
+      <p>This implementation creates thick dashed lines with uniform screen-space thickness:</p>
+      <ol>
+        <li>The original polyline is split into dash segments based on the dash pattern</li>
+        <li>Each dash segment is expanded into a thick line using CPU calculations</li>
+        <li>Miter joins are computed at segment connections for smooth corners</li>
+        <li>The expanded geometry is rendered using WebGL</li>
+      </ol>
+      <div class="code">
+        // Key steps in the code:<br>
+        const dashedPaths = dashPolyline(path, [dashLength, gapLength]);<br>
+        const geom = buildThickLineGeometry(dashSegment, halfThickness);<br>
+        gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const canvas = document.getElementById('canvas');
+    const gl = canvas.getContext('webgl');
+    if (!gl) {
+      alert('WebGL not supported');
+      throw new Error('WebGL not supported');
+    }
+
+    // ------------------ Vertex & Fragment Shaders ------------------
+    const vertexShaderSource = `
+      attribute vec2 a_position;   // in pixel space
+      uniform vec2 u_resolution;   // (canvas.width, canvas.height)
+      uniform vec3 u_color;
+      varying vec3 v_color;
+      void main() {
+        // Convert from pixel coords to clip space coords:
+        //   x_clip = (x_pixel / width)  * 2.0 - 1.0
+        //   y_clip = (y_pixel / height) * 2.0 - 1.0
+        vec2 clip = (a_position / u_resolution) * 2.0 - 1.0;
+        gl_Position = vec4(clip, 0.0, 1.0);
+        v_color = u_color;
+      }
+    `;
+
+    const fragmentShaderSource = `
+      precision mediump float;
+      varying vec3 v_color;
+      void main() {
+        gl_FragColor = vec4(v_color, 1.0);
+      }
+    `;
+
+    // ------------------ Compile and Link Shaders ------------------
+    function createShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
+    }
+
+    function createProgram(gl, vs, fs) {
+      const program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error('Program link error:', gl.getProgramInfoLog(program));
+        gl.deleteProgram(program);
+        return null;
+      }
+      return program;
+    }
+
+    const vShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+    const fShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+    const program = createProgram(gl, vShader, fShader);
+
+    // ------------------ Example Path in Pixel Coordinates ------------------
+    const basePaths = [
+      // Heart-shaped path
+      [[100, 150], [150, 50], [200, 150], [250, 200], [200, 300], [150, 350], [100, 300], [50, 200], [100, 150]],
+      // Wave path
+      [[350, 100], [400, 150], [450, 100], [500, 150], [550, 100]]
+    ];
+
+    // ------------------ Dash Pattern Generation ------------------
+    /**
+     * Splits a polyline into dashed segments based on a pattern.
+     * @param {Array} points - Array of [x, y] points
+     * @param {Array} pattern - Dash pattern array (e.g., [dashLength, gapLength, ...])
+     * @returns {Array} Array of dash segments
+     */
+    function dashPolyline(points, pattern) {
+      if (points.length < 2) return [];
+      
+      const segments = [];
+      let currentSegment = [];
+      let accumulated = 0;
+      let patternIndex = 0;
+      let isDash = true; // Start with dash
+      
+      // Helper to calculate distance between two points
+      function distance(p0, p1) {
+        const dx = p1[0] - p0[0];
+        const dy = p1[1] - p0[1];
+        return Math.sqrt(dx*dx + dy*dy);
+      }
+      
+      // Traverse each segment of the polyline
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i];
+        const p1 = points[i+1];
+        const segLength = distance(p0, p1);
+        const dir = [(p1[0] - p0[0]) / segLength, (p1[1] - p0[1]) / segLength];
+        let segStart = 0;
+        
+        // Process the segment in chunks based on the pattern
+        while (segStart < segLength) {
+          const remainingInSeg = segLength - segStart;
+          const remainingInPattern = pattern[patternIndex] - accumulated;
+          const amt = Math.min(remainingInSeg, remainingInPattern);
+          
+          // Calculate the start and end points of the current chunk
+          const startPoint = [
+            p0[0] + dir[0] * segStart,
+            p0[1] + dir[1] * segStart
+          ];
+          
+          const endPoint = [
+            p0[0] + dir[0] * (segStart + amt),
+            p0[1] + dir[1] * (segStart + amt)
+          ];
+          
+          if (isDash) {
+            if (currentSegment.length === 0) {
+              currentSegment.push(startPoint);
+            }
+            currentSegment.push(endPoint);
+          }
+          
+          // Update counters
+          accumulated += amt;
+          segStart += amt;
+          
+          // Check if we've completed the current pattern element
+          if (accumulated >= pattern[patternIndex]) {
+            // Finish the current dash segment if we're in a dash
+            if (isDash && currentSegment.length > 0) {
+              segments.push(currentSegment);
+              currentSegment = [];
+            }
+            
+            // Move to next pattern element
+            patternIndex = (patternIndex + 1) % pattern.length;
+            accumulated = 0;
+            isDash = !isDash;
+          }
+        }
+      }
+      
+      // Add any remaining dash segment
+      if (isDash && currentSegment.length > 0) {
+        segments.push(currentSegment);
+      }
+      
+      return segments;
+    }
+
+    // ------------------ Polyline Expansion (CPU) ------------------
+    /**
+     * Returns an object { vertices, indices } that defines the expanded triangles.
+     * All coordinates remain in pixel space. We'll do the clip-space transform in the vertex shader.
+     */
+    function buildThickLineGeometry(points, halfThickness) {
+      const verts = [];
+      const indices = [];
+      
+      // Handle case where there's only one point
+      if (points.length === 1) {
+        const p = points[0];
+        // Create a diamond shape for a single point
+        verts.push(
+          p[0], p[1] - halfThickness, // top
+          p[0] + halfThickness, p[1], // right
+          p[0], p[1] + halfThickness, // bottom
+          p[0] - halfThickness, p[1]  // left
+        );
+        indices.push(0, 1, 2, 0, 2, 3, 0, 3, 1);
+        return {
+          vertices: new Float32Array(verts),
+          indices: new Uint16Array(indices),
+        };
+      }
+      
+      // Precompute tangents (normalized) and normals for each segment
+      const tangents = [];
+      const normals = [];
+      
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i];
+        const p1 = points[i+1];
+        let dx = p1[0] - p0[0];
+        let dy = p1[1] - p0[1];
+        const segLen = Math.sqrt(dx*dx + dy*dy) || 1e-6;
+        dx /= segLen;   // tangent (unit)
+        dy /= segLen;
+        tangents.push([dx, dy]);
+        // Normal is (-dy, dx) to the left or right; pick one consistently.
+        normals.push([-dy, dx]);
+      }
+      
+      // For each vertex, compute the "offset normal" for expansion
+      const offsetVectors = [];
+      
+      for (let i = 0; i < points.length; i++) {
+        if (i === 0) {
+          // Start vertex: just use the normal of the first segment
+          const n = normals[0];
+          offsetVectors.push([n[0], n[1]]);
+        }
+        else if (i === points.length - 1) {
+          // End vertex: just use the normal of the last segment
+          const n = normals[normals.length - 1];
+          offsetVectors.push([n[0], n[1]]);
+        }
+        else {
+          // Interior vertex: compute the "miter" of the two adjacent normals
+          const n0 = normals[i - 1];
+          const n1 = normals[i];
+          
+          // n0, n1 are each unit length
+          const lenN0 = Math.sqrt(n0[0]*n0[0] + n0[1]*n0[1]) || 1e-6;
+          const lenN1 = Math.sqrt(n1[0]*n1[0] + n1[1]*n1[1]) || 1e-6;
+          const u0 = [n0[0]/lenN0, n0[1]/lenN0];
+          const u1 = [n1[0]/lenN1, n1[1]/lenN1];
+          
+          // Raw miter direction is the sum:
+          let mx = u0[0] + u1[0];
+          let my = u0[1] + u1[1];
+          let mLen = Math.sqrt(mx*mx + my*my);
+          if (mLen < 1e-6) {
+            // Degenerate (nearly 180-degree turn). Fall back to one normal:
+            mx = u0[0];
+            my = u0[1];
+            mLen = Math.sqrt(mx*mx + my*my);
+          }
+          mx /= mLen;
+          my /= mLen;
+          
+          // Compute miter scale factor
+          const dot = mx*u0[0] + my*u0[1];  // dot(miter, normal0)
+          const miterScale = halfThickness / Math.max(dot, 0.001);
+          
+          offsetVectors.push([mx, my, miterScale]);
+        }
+      }
+      
+      // Create expanded vertex positions
+      const expandedVerts = [];
+      
+      for (let i = 0; i < points.length; i++) {
+        const [px, py] = points[i];
+        let ox, oy, scaleVal = halfThickness; // default
+        
+        if (offsetVectors[i].length === 3) {
+          // interior vertex with computed miter & scale
+          ox = offsetVectors[i][0];
+          oy = offsetVectors[i][1];
+          scaleVal = offsetVectors[i][2];
+        } else {
+          // just normal
+          ox = offsetVectors[i][0];
+          oy = offsetVectors[i][1];
+        }
+        
+        // final offset vector = (ox, oy) * scaleVal
+        const finalOx = ox * scaleVal;
+        const finalOy = oy * scaleVal;
+        
+        // top and bottom vertices
+        const topX = px + finalOx;
+        const topY = py + finalOy;
+        const botX = px - finalOx;
+        const botY = py - finalOy;
+        
+        expandedVerts.push(topX, topY, botX, botY);
+      }
+      
+      // Build triangle indices
+      for (let i = 0; i < points.length - 1; i++) {
+        const iTop    = i * 2;
+        const iBot    = i * 2 + 1;
+        const iTopNext= (i+1)*2;
+        const iBotNext= (i+1)*2 + 1;
+        indices.push(
+          iTop, iBot, iTopNext,
+          iBot, iBotNext, iTopNext
+        );
+      }
+      
+      return {
+        vertices: new Float32Array(expandedVerts),
+        indices: new Uint16Array(indices),
+      };
+    }
+
+    // ------------------ Rendering Functions ------------------
+    let vertexBuffer, indexBuffer;
+    let currentGeometry = { vertices: [], indices: [] };
+
+    function createBuffers(vertices, indices) {
+      // Delete old buffers if they exist
+      if (vertexBuffer) gl.deleteBuffer(vertexBuffer);
+      if (indexBuffer) gl.deleteBuffer(indexBuffer);
+      
+      vertexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+      indexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+      
+      currentGeometry.vertices = vertices;
+      currentGeometry.indices = indices;
+    }
+
+    function renderScene() {
+      // Get current settings from UI
+      const thickness = parseFloat(document.getElementById('thickness').value);
+      const dashLength = parseFloat(document.getElementById('dashLength').value);
+      const gapLength = parseFloat(document.getElementById('gapLength').value);
+      
+      // Update UI values
+      document.getElementById('thicknessValue').textContent = thickness + 'px';
+      document.getElementById('dashLengthValue').textContent = dashLength + 'px';
+      document.getElementById('gapLengthValue').textContent = gapLength + 'px';
+      
+      // Build geometry for all paths
+      let combinedVertices = [];
+      let combinedIndices = [];
+      let vertexOffset = 0;
+      const halfT = thickness * 0.5;
+      
+      for (const path of basePaths) {
+        // Split path into dash segments
+        const dashedPaths = dashPolyline(path, [dashLength, gapLength]);
+        
+        for (const dashSegment of dashedPaths) {
+          // Build expanded geometry for this dash segment
+          const geom = buildThickLineGeometry(dashSegment, halfT);
+          
+          // Merge geometry
+          for (let i = 0; i < geom.vertices.length; i++) {
+            combinedVertices.push(geom.vertices[i]);
+          }
+          for (let i = 0; i < geom.indices.length; i++) {
+            combinedIndices.push(geom.indices[i] + vertexOffset);
+          }
+          
+          // Each point adds 2 expanded vertices
+          vertexOffset += (dashSegment.length * 2);
+        }
+      }
+      
+      // Create or update buffers
+      if (combinedVertices.length > 0) {
+        createBuffers(combinedVertices, combinedIndices);
+      }
+      
+      // Set up program and attributes
+      gl.useProgram(program);
+      
+      const positionLoc = gl.getAttribLocation(program, 'a_position');
+      gl.enableVertexAttribArray(positionLoc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.vertexAttribPointer(
+        positionLoc,
+        2,
+        gl.FLOAT,
+        false,
+        0,
+        0
+      );
+      
+      // Uniforms
+      const resolutionLoc = gl.getUniformLocation(program, 'u_resolution');
+      const colorLoc      = gl.getUniformLocation(program, 'u_color');
+      
+      // Set uniforms
+      gl.uniform2f(resolutionLoc, canvas.width, canvas.height);
+      gl.uniform3f(colorLoc, 0.0, 0.8, 1.0); // Cyan color
+      
+      // Render
+      gl.clearColor(0.1, 0.1, 0.15, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      gl.drawElements(gl.TRIANGLES, combinedIndices.length, gl.UNSIGNED_SHORT, 0);
+    }
+
+    // ------------------ Initialize and Set Up UI Events ------------------
+    // Initial render
+    renderScene();
+    
+    // Set up event listeners for controls
+    document.getElementById('thickness').addEventListener('input', renderScene);
+    document.getElementById('dashLength').addEventListener('input', renderScene);
+    document.getElementById('gapLength').addEventListener('input', renderScene);
+  </script>
+</body>
+</html>
