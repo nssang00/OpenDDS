@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Pattern-Along-Line (WebGL, fixed)</title>
+<style>
+ body{background:#181826;color:#eee;font-family:sans-serif}
+ canvas{border:1px solid #4cc9f0;background:#222;margin:16px 0}
+</style>
+</head>
+<body>
+<canvas id="glc" width="640" height="420"></canvas>
+<script>
+/* ────────────── 1. 유틸 ────────────── */
+const sub =(a,b)=>[a[0]-b[0],a[1]-b[1]];
+const add =(a,b)=>[a[0]+b[0],a[1]+b[1]];
+const mul =(v,s)=>[v[0]*s,v[1]*s];
+const len =v=>Math.hypot(v[0],v[1]);
+const norm=v=>{const l=len(v);return l?[v[0]/l,v[1]/l]:[0,0];};
+const perp=v=>[-v[1],v[0]];
+
+/* ────────────── 2. WebGL 초기화 ────────────── */
+const gl=document.getElementById("glc").getContext("webgl",{antialias:false});
+function compile(type,src){
+  const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(s);
+  return s;
+}
+const vs=compile(gl.VERTEX_SHADER,`
+  attribute vec2  a_pos;
+  attribute float a_dist;
+  attribute vec2  a_tan;
+  attribute float a_side;
+  uniform   vec2  u_res;
+  varying   float v_dist;
+  varying   vec2  v_tan;
+  varying   float v_side;
+  void main(){
+    v_dist=a_dist;
+    v_tan =a_tan;
+    v_side=a_side;
+    vec2 clip=a_pos/u_res*2.0-1.0;
+    gl_Position=vec4(clip*vec2(1.0,-1.0),0.0,1.0);
+  }`);
+const fs=compile(gl.FRAGMENT_SHADER,`
+  precision mediump float;
+  varying float v_dist;
+  varying vec2  v_tan;
+  varying float v_side;
+  uniform sampler2D u_tex;
+  uniform float     u_texLen;   // 패턴 한 주기 길이(px)
+  uniform vec3      u_color;
+  void main(){
+    float u = mod(v_dist, u_texLen)/u_texLen;  // 0~1
+    float v = v_side*0.5 + 0.5;                // -1~1 → 0~1
+    vec4  samp = texture2D(u_tex, vec2(u,v));
+    if (samp.a < 0.5) discard;                 // 알파 마스크
+    gl_FragColor = vec4(u_color, 1.0);
+  }`);
+const prog=gl.createProgram();
+gl.attachShader(prog,vs);gl.attachShader(prog,fs);gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw gl.getProgramInfoLog(prog);
+gl.useProgram(prog);
+
+/* ────────────── 3. 경로 + 두께 → 정점 데이터 ────────────── */
+const path=[[100,300],[150,120],[220,200],[300,110],[390,200],[520,150],[570,340]];
+const thickness=20;      // px
+const texLen   =64;      // 텍스처 1패턴이 차지할 길이(px)
+
+let V=[],D=[],T=[],S=[],I=[],offset=0,total=0;
+for(let i=0;i<path.length-1;i++){
+  const a=path[i], b=path[i+1];
+  const dir=norm(sub(b,a)), n=perp(dir), l=len(sub(b,a));
+  const l0=add(a,mul(n, thickness/2)), r0=sub(a,mul(n, thickness/2));
+  const l1=add(b,mul(n, thickness/2)), r1=sub(b,mul(n, thickness/2));
+  //   왼,오  /  왼,오
+  V.push(...l0,...r0,...l1,...r1);
+  D.push(total,total,total+l,total+l);
+  T.push(...dir,...dir,...dir,...dir);
+  S.push(-1, 1, -1, 1);
+  I.push(offset,offset+1,offset+2, offset+1,offset+3,offset+2);
+  offset+=4; total+=l;
+}
+
+/* 버퍼 업로드 */
+function attrib(name,data,size){
+  const loc=gl.getAttribLocation(prog,name);
+  const buf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc,size,gl.FLOAT,false,0,0);
+}
+attrib("a_pos" ,V,2);
+attrib("a_dist",D,1);
+attrib("a_tan" ,T,2);
+attrib("a_side",S,1);
+const ibo=gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(I),gl.STATIC_DRAW);
+
+/* 고정 유니폼 */
+gl.uniform2f (gl.getUniformLocation(prog,"u_res"), gl.canvas.width, gl.canvas.height);
+gl.uniform1f (gl.getUniformLocation(prog,"u_texLen"), texLen);
+gl.uniform3f (gl.getUniformLocation(prog,"u_color"), 0.20, 0.80, 1.0);
+
+/* ────────────── 4. 패턴 텍스처 (Canvas로 생성 → cross-origin 걱정 X) ────────────── */
+function makePatternTexture(){
+  const c=document.createElement("canvas"); c.width=c.height=64;
+  const ctx=c.getContext("2d");
+  ctx.fillStyle="#0000"; ctx.fillRect(0,0,64,64);          // 완전 투명
+  ctx.fillStyle="#fff";
+  // 간단한 화살표 패턴
+  ctx.beginPath(); ctx.moveTo(32,  4); ctx.lineTo(60,32); ctx.lineTo(32,60); ctx.lineTo(32,44);
+  ctx.lineTo( 4,44); ctx.lineTo( 4,20); ctx.lineTo(32,20); ctx.closePath();
+  ctx.fill();
+
+  const tex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  return tex;
+}
+const tex=makePatternTexture();
+gl.activeTexture(gl.TEXTURE0);
+gl.bindTexture(gl.TEXTURE_2D,tex);
+gl.uniform1i(gl.getUniformLocation(prog,"u_tex"),0); // 반드시 valid location!
+
+/* ────────────── 5. 렌더 ────────────── */
+function render(){
+  gl.viewport(0,0,gl.canvas.width,gl.canvas.height);
+  gl.clearColor(0.10,0.11,0.18,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawElements(gl.TRIANGLES,I.length,gl.UNSIGNED_SHORT,0);
+}
+render();   // 모든 준비 끝난 뒤 한 번 호출
+</script>
+</body>
+</html>
