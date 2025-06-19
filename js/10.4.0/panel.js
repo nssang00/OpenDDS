@@ -6,6 +6,20 @@ plugins/
     ├── icon.png            ← 아이콘 이미지 (옵션)
     └── style.css           ← 플러그인 전용 스타일 (옵션)
 
+{
+  "id": "measure-tool",
+  "name": "Measure Tool",
+  "entry": "plugin.js",
+  "hooks": ["onMapInit", "onMapClick"],
+  "ui": {
+    "button": {
+      "label": "Measure",
+      "icon": "icon.png"
+    },
+    "panel": "panel.html"
+  }
+}
+
 
 
 // plugins/measure-tool/index.js
