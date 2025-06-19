@@ -1,3 +1,13 @@
+plugins/
+└── measure-tool/
+    ├── plugin.json         ← 플러그인 메타데이터 (필수)
+    ├── plugin.js           ← 실행 로직 (필수)
+    ├── panel.html          ← UI 패널 (옵션)
+    ├── icon.png            ← 아이콘 이미지 (옵션)
+    └── style.css           ← 플러그인 전용 스타일 (옵션)
+
+
+
 // plugins/measure-tool/index.js
 import React from "react";
 
