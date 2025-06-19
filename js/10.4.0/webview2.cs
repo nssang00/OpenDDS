@@ -49,26 +49,38 @@ namespace WebView2Test
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             await webView.EnsureCoreWebView2Async();
-            webView.CoreWebView2.NavigateToString("<html><body><h2>WebView2 Ready</h2></body></html>");
+
+            // JS 함수 정의 포함한 HTML 주입
+            string html = @"
+                <html>
+                <body><h2>WebView2 Ready</h2></body>
+                <script>
+                    function add(a, b) {
+                        return a + b;
+                    }
+                </script>
+                </html>";
+
+            webView.CoreWebView2.NavigateToString(html);
         }
 
         private async void TestButton_Click(object sender, RoutedEventArgs e)
         {
-            int a = 123;
-            int b = 456;
-            int loopCount = 1000;
+            int a = 123, b = 456;
             int expected = a + b;
+            int loopCount = 1000;
 
             var sw = Stopwatch.StartNew();
 
             for (int i = 0; i < loopCount; i++)
             {
-                string js = $"(function() {{ return {a} + {b}; }})()";
-                string result = await webView.ExecuteScriptAsync(js);
-                result = result.Trim('"'); // 문자열 처리
+                string jsCall = $"add({a}, {b})";
+                string result = await webView.ExecuteScriptAsync(jsCall);
+                result = result.Trim('"');
+
                 if (result != expected.ToString())
                 {
-                    MessageBox.Show($"Unexpected result at i={i}: {result}");
+                    MessageBox.Show($"오류: i={i}, 결과={result}");
                     return;
                 }
             }
@@ -76,5 +88,11 @@ namespace WebView2Test
             sw.Stop();
             MessageBox.Show($"1000번 계산 완료!\n소요 시간: {sw.ElapsedMilliseconds} ms");
         }
+
+        private void ResetButton_Click(object sender, RoutedEventArgs e)
+        {
+            webView.CoreWebView2.NavigateToString("<html><body><h2>초기화 완료</h2></body></html>");
+        }
     }
 }
+
