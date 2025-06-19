@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebGL Thick Dashed Line – Full Cap/Join/Pattern</title>
+    <style>
+      body {
+        background: #181826;
+        color: #eee;
+        font-family: sans-serif;
+      }
+      canvas {
+        border: 1px solid #4cc9f0;
+        background: #222;
+        margin: 16px 0;
+      }
+      .controls {
+        margin-bottom: 10px;
+      }
+      label {
+        margin-right: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <label
+        >Thickness
+        <input type="range" id="thickness" min="2" max="30" value="10"
+      /></label>
+      <label
+        >Dash <input type="range" id="dashLength" min="10" max="60" value="30"
+      /></label>
+      <label
+        >Gap <input type="range" id="gapLength" min="5" max="30" value="12"
+      /></label>
+      <label
+        >Join
+        <select id="join">
+          <option value="miter">Miter</option>
+          <option value="bevel">Bevel</option>
+          <option value="round">Round</option>
+        </select>
+      </label>
+      <label
+        >Cap
+        <select id="cap">
+          <option value="butt">Butt</option>
+          <option value="round">Round</option>
+          <option value="square">Square</option>
+        </select>
+      </label>
+      <label>Pattern <input type="checkbox" id="pattern" /></label>
+      <label
+        >Pattern Type
+        <select id="patternType">
+          <option value="dots">Dots</option>
+          <option value="stripes">Stripes</option>
+          <option value="chevron">Chevron</option>
+          <option value="diamond">Diamond</option>
+        </select>
+      </label>
+    </div>
+    <canvas id="canvas" width="600" height="400"></canvas>
+    <script>
+      // ------- Utility
+      function sub(a, b) {
+        return [a[0] - b[0], a[1] - b[1]];
+      }
+      function add(a, b) {
+        return [a[0] + b[0], a[1] + b[1]];
+      }
+      function mul(a, s) {
+        return [a[0] * s, a[1] * s];
+      }
+      function len(v) {
+        return Math.sqrt(v[0] * v[0] + v[1] * v[1]);
+      }
+      function norm(v) {
+        let l = len(v);
+        return l ? [v[0] / l, v[1] / l] : [0, 0];
+      }
+      function perp(v) {
+        return [-v[1], v[0]];
+      }
+      function lerp(a, b, t) {
+        return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      }
+
+      // ------- Dash polyline into dash segment arrays
+      function dashPolyline(points, dash, gap) {
+        if (points.length < 2) return [];
+        let total = 0,
+          segLens = [];
+        for (let i = 1; i < points.length; i++) {
+          let d = len(sub(points[i], points[i - 1]));
+          segLens.push(d);
+          total += d;
+        }
+        let patternLen = dash + gap;
+        let segments = [];
+        let patternOffset = 0,
+          segIdx = 0,
+          segPos = 0,
+          pos = 0,
+          inDash = true;
+        while (pos < total - 1e-5) {
+          let rem = inDash ? dash - patternOffset : gap - patternOffset;
+          let segRem = segLens[segIdx] - segPos;
+          let step = Math.min(rem, segRem);
+          if (inDash) {
+            let t0 = segPos / segLens[segIdx],
+              t1 = (segPos + step) / segLens[segIdx];
+            let p0 = lerp(points[segIdx], points[segIdx + 1], t0);
+            let p1 = lerp(points[segIdx], points[segIdx + 1], t1);
+            if (segments.length === 0 || segments[segments.length - 1].closed) {
+              segments.push({ pts: [p0, p1], lens: [step], startDist: pos });
+            } else {
+              segments[segments.length - 1].pts.push(p1);
+              segments[segments.length - 1].lens.push(step);
+            }
+          }
+          segPos += step;
+          pos += step;
+          patternOffset += step;
+          if (Math.abs(segPos - segLens[segIdx]) < 1e-5) {
+            segIdx++;
+            segPos = 0;
+          }
+          if (Math.abs(patternOffset - (inDash ? dash : gap)) < 1e-5) {
+            inDash = !inDash;
+            patternOffset = 0;
+            if (!inDash && segments.length)
+              segments[segments.length - 1].closed = true;
+          }
+        }
+        return segments;
+      }
+
+      // ------- Build expanded geometry with join/cap
+      function buildThickLineGeometry(segment, thickness, joinType, capType) {
+        let verts = [],
+          dists = [],
+          indices = [];
+        let pts = segment.pts;
+        if (pts.length < 2) return { vertices: [], distances: [], indices: [] };
+        let n = pts.length;
+        let left = [],
+          right = [],
+          dAlong = [],
+          dTotal = segment.startDist;
+        // Precompute per-vertex normal and miter for joins
+        for (let i = 0; i < n; i++) {
+          let t0 =
+            i > 0
+              ? norm(sub(pts[i], pts[i - 1]))
+              : norm(sub(pts[i + 1], pts[i]));
+          let t1 =
+            i < n - 1 ? norm(sub(pts[Math.min(i + 1, n - 1)], pts[i])) : t0;
+          let n0 = perp(t0),
+            n1 = perp(t1);
+          let normal;
+          if (i === 0 || i === n - 1) {
+            normal = i === 0 ? n0 : n1;
+          } else {
+            // join
+            let join;
+            if (joinType === "bevel") {
+              normal = n0;
+            } else if (joinType === "round") {
+              // just average
+              let avg = norm([n0[0] + n1[0], n0[1] + n1[1]]);
+              normal = avg;
+            } else {
+              // miter
+              let miter = norm([n0[0] + n1[0], n0[1] + n1[1]]);
+              let denom = Math.max(0.5, miter[0] * n0[0] + miter[1] * n0[1]);
+              let miterLen = 1.0 / denom;
+              normal = [miter[0] * miterLen, miter[1] * miterLen];
+            }
+          }
+          left.push(add(pts[i], mul(normal, thickness / 2)));
+          right.push(sub(pts[i], mul(normal, thickness / 2)));
+          dAlong.push(dTotal);
+          dAlong.push(dTotal);
+          if (i > 0) dTotal += len(sub(pts[i], pts[i - 1]));
+        }
+        // Add cap
+        if (capType === "square") {
+          let t0 = norm(sub(pts[1], pts[0]));
+          left[0] = add(left[0], mul(t0, -thickness / 2));
+          right[0] = add(right[0], mul(t0, -thickness / 2));
+          let t1 = norm(sub(pts[n - 1], pts[n - 2]));
+          left[n - 1] = add(left[n - 1], mul(t1, thickness / 2));
+          right[n - 1] = add(right[n - 1], mul(t1, thickness / 2));
+        }
+        if (capType === "round") {
+          // Start cap
+          let center = pts[0];
+          let t = norm(sub(pts[1], pts[0]));
+          let theta0 = Math.atan2(-t[0], t[1]);
+          let steps = 12,
+            base = verts.length / 2;
+          verts.push(center[0], center[1]);
+          dists.push(segment.startDist);
+          for (let i = 0; i <= steps; i++) {
+            let theta = theta0 + Math.PI * (i / steps);
+            verts.push(
+              center[0] + (Math.cos(theta) * thickness) / 2,
+              center[1] + (Math.sin(theta) * thickness) / 2
+            );
+            dists.push(segment.startDist);
+            if (i > 0) indices.push(base, base + i, base + i + 1);
+          }
+        }
+        // Triangle strip
+        let base = verts.length / 2;
+        for (let i = 0; i < n; i++) {
+          verts.push(left[i][0], left[i][1]);
+          dists.push(dAlong[i * 2]);
+          verts.push(right[i][0], right[i][1]);
+          dists.push(dAlong[i * 2 + 1]);
+        }
+        for (let i = 0; i < n - 1; i++) {
+          let i0 = base + i * 2,
+            i1 = i0 + 1,
+            i2 = i0 + 2,
+            i3 = i0 + 3;
+          indices.push(i0, i1, i2, i1, i3, i2);
+        }
+        // End cap
+        if (capType === "round") {
+          let center = pts[n - 1];
+          let t = norm(sub(pts[n - 1], pts[n - 2]));
+          let theta0 = Math.atan2(t[0], -t[1]);
+          let steps = 12,
+            b = verts.length / 2;
+          verts.push(center[0], center[1]);
+          dists.push(dAlong[dAlong.length - 2]);
+          for (let i = 0; i <= steps; i++) {
+            let theta = theta0 + Math.PI * (i / steps);
+            verts.push(
+              center[0] + (Math.cos(theta) * thickness) / 2,
+              center[1] + (Math.sin(theta) * thickness) / 2
+            );
+            dists.push(dAlong[dAlong.length - 2]);
+            if (i > 0) indices.push(b, b + i, b + i + 1);
+          }
+        }
+        return {
+          vertices: new Float32Array(verts),
+          distances: new Float32Array(dists),
+          indices: new Uint16Array(indices),
+        };
+      }
+
+      // -------- Pattern texture generators
+      function createPatternTexture(gl, type) {
+        const canvas = document.createElement("canvas");
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext("2d");
+        
+        // Clear to transparent
+        ctx.clearRect(0, 0, 64, 64);
+        ctx.fillStyle = "#fff";
+        
+        switch (type) {
+          case "dots":
+            // Create repeating dot pattern
+            for (let y = 8; y < 64; y += 16) {
+              for (let x = 8; x < 64; x += 16) {
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+            break;
+            
+          case "stripes":
+            // Create diagonal stripes
+            for (let i = 0; i < 64; i += 8) {
+              ctx.fillRect(i, 0, 4, 64);
+            }
+            break;
+            
+          case "chevron":
+            // Create chevron/arrow pattern
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 3;
+            for (let x = 0; x < 64; x += 16) {
+              ctx.beginPath();
+              ctx.moveTo(x, 32);
+              ctx.lineTo(x + 8, 20);
+              ctx.moveTo(x, 32);
+              ctx.lineTo(x + 8, 44);
+              ctx.stroke();
+            }
+            break;
+            
+          case "diamond":
+            // Create diamond pattern
+            for (let y = 16; y < 64; y += 32) {
+              for (let x = 16; x < 64; x += 32) {
+                ctx.beginPath();
+                ctx.moveTo(x, y - 8);
+                ctx.lineTo(x + 8, y);
+                ctx.lineTo(x, y + 8);
+                ctx.lineTo(x - 8, y);
+                ctx.closePath();
+                ctx.fill();
+              }
+            }
+            break;
+        }
+        
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          canvas
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        return tex;
+      }
+
+      // --------- Shader
+      const vSrc = `
+      attribute vec2 a_position;
+      attribute float a_dist;
+      uniform vec2 u_resolution;
+      uniform float u_thickness;
+      varying float v_dist;
+      varying vec2 v_worldPos;
+      varying float v_thickness;
+      void main() {
+        v_dist = a_dist;
+        v_worldPos = a_position;
+        v_thickness = u_thickness;
+        vec2 clip = (a_position / u_resolution) * 2.0 - 1.0;
+        clip.y = -clip.y; // Flip Y coordinate
+        gl_Position = vec4(clip, 0, 1);
+      }
+    `;
+      const fSrc = `
+      precision mediump float;
+      varying float v_dist;
+      varying vec2 v_worldPos;
+      varying float v_thickness;
+      uniform float u_dashLength;
+      uniform float u_gapLength;
+      uniform bool u_usePattern;
+      uniform sampler2D u_pattern;
+      uniform vec3 u_color;
+      uniform float u_patternScale;
+      void main() {
+        float patternLength = u_dashLength + u_gapLength;
+        float pos = mod(v_dist, patternLength);
+        float dash = u_dashLength;
+        
+        if (!u_usePattern) {
+          if (pos > dash) discard;
+          gl_FragColor = vec4(u_color, 1.0);
+        } else {
+          // Use world position for pattern UV to ensure proper tiling
+          vec2 patternUV = v_worldPos / (u_patternScale * v_thickness);
+          vec4 patternColor = texture2D(u_pattern, patternUV);
+          
+          // Apply pattern with dash/gap logic
+          if (pos > dash || patternColor.a < 0.5) discard;
+          
+          // Blend pattern color with base color
+          vec3 finalColor = mix(u_color, u_color * patternColor.rgb, 0.8);
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      }
+    `;
+      function makeShader(gl, type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+          throw gl.getShaderInfoLog(s);
+        return s;
+      }
+      function makeProgram(gl, vs, fs) {
+        const p = gl.createProgram();
+        gl.attachShader(p, vs);
+        gl.attachShader(p, fs);
+        gl.linkProgram(p);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS))
+          throw gl.getProgramInfoLog(p);
+        return p;
+      }
+
+      // -------- Main
+      const gl = document.getElementById("canvas").getContext("webgl");
+      const vs = makeShader(gl, gl.VERTEX_SHADER, vSrc);
+      const fs = makeShader(gl, gl.FRAGMENT_SHADER, fSrc);
+      const program = makeProgram(gl, vs, fs);
+
+      // Attribute/uniform locations
+      const a_position = gl.getAttribLocation(program, "a_position");
+      const a_dist = gl.getAttribLocation(program, "a_dist");
+      const u_resolution = gl.getUniformLocation(program, "u_resolution");
+      const u_thickness = gl.getUniformLocation(program, "u_thickness");
+      const u_dashLength = gl.getUniformLocation(program, "u_dashLength");
+      const u_gapLength = gl.getUniformLocation(program, "u_gapLength");
+      const u_color = gl.getUniformLocation(program, "u_color");
+      const u_usePattern = gl.getUniformLocation(program, "u_usePattern");
+      const u_pattern = gl.getUniformLocation(program, "u_pattern");
+      const u_patternScale = gl.getUniformLocation(program, "u_patternScale");
+
+      // Pattern textures
+      let patternTextures = {};
+      patternTextures.dots = createPatternTexture(gl, "dots");
+      patternTextures.stripes = createPatternTexture(gl, "stripes");
+      patternTextures.chevron = createPatternTexture(gl, "chevron");
+      patternTextures.diamond = createPatternTexture(gl, "diamond");
+
+      const path = [
+        [100, 300],
+        [150, 120],
+        [220, 200],
+        [300, 110],
+        [390, 200],
+        [520, 150],
+        [570, 340],
+      ];
+
+      let vbo = null,
+        ibo = null,
+        dbo = null;
+
+      function render() {
+        const thickness = parseFloat(
+          document.getElementById("thickness").value
+        );
+        const dash = parseFloat(document.getElementById("dashLength").value);
+        const gap = parseFloat(document.getElementById("gapLength").value);
+        const joinType = document.getElementById("join").value;
+        const capType = document.getElementById("cap").value;
+        const usePattern = document.getElementById("pattern").checked;
+        const patternType = document.getElementById("patternType").value;
+
+        // 1. Dash
+        const segments = dashPolyline(path, dash, gap);
+
+        let allVerts = [],
+          allDists = [],
+          allIdx = [],
+          vOffset = 0;
+        for (const seg of segments) {
+          const geom = buildThickLineGeometry(
+            seg,
+            thickness,
+            joinType,
+            capType
+          );
+          for (let i = 0; i < geom.vertices.length; i++)
+            allVerts.push(geom.vertices[i]);
+          for (let i = 0; i < geom.distances.length; i++)
+            allDists.push(geom.distances[i]);
+          for (let i = 0; i < geom.indices.length; i++)
+            allIdx.push(geom.indices[i] + vOffset / 2);
+          vOffset += geom.vertices.length;
+        }
+
+        // Create/update buffer
+        if (vbo) gl.deleteBuffer(vbo);
+        if (ibo) gl.deleteBuffer(ibo);
+        if (dbo) gl.deleteBuffer(dbo);
+        vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(allVerts),
+          gl.STATIC_DRAW
+        );
+        dbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, dbo);
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(allDists),
+          gl.STATIC_DRAW
+        );
+        ibo = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+        gl.bufferData(
+          gl.ELEMENT_ARRAY_BUFFER,
+          new Uint16Array(allIdx),
+          gl.STATIC_DRAW
+        );
+
+        // Setup
+        gl.useProgram(program);
+        gl.enableVertexAttribArray(a_position);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
+
+        gl.enableVertexAttribArray(a_dist);
+        gl.bindBuffer(gl.ARRAY_BUFFER, dbo);
+        gl.vertexAttribPointer(a_dist, 1, gl.FLOAT, false, 0, 0);
+
+        gl.uniform2f(u_resolution, gl.canvas.width, gl.canvas.height);
+        gl.uniform1f(u_thickness, thickness);
+        gl.uniform1f(u_dashLength, dash);
+        gl.uniform1f(u_gapLength, gap);
+        gl.uniform3f(u_color, 0.2, 0.75, 1.0);
+        gl.uniform1i(u_usePattern, usePattern ? 1 : 0);
+        gl.uniform1f(u_patternScale, 2.0); // Scale factor for pattern repetition
+
+        if (usePattern) {
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, patternTextures[patternType]);
+          gl.uniform1i(u_pattern, 0);
+        }
+
+        gl.clearColor(0.1, 0.12, 0.18, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+        gl.drawElements(gl.TRIANGLES, allIdx.length, gl.UNSIGNED_SHORT, 0);
+      }
+
+      for (const id of [
+        "thickness",
+        "dashLength",
+        "gapLength",
+        "join",
+        "cap",
+        "pattern",
+        "patternType",
+      ])
+        document.getElementById(id).addEventListener("input", render);
+      render();
+    </script>
+  </body>
+</html>
