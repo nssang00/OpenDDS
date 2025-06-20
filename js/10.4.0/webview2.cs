@@ -30,6 +30,28 @@
     </Grid>
 </Window>
 
+await webView.EnsureCoreWebView2Async();
+
+webView.CoreWebView2.NavigateToString(@"
+  <html>
+  <body>
+    <script>
+      async function asyncAdd(a, b) {
+        await new Promise(r => setTimeout(r, 10));
+        return a + b;
+      }
+    </script>
+  </body>
+  </html>
+");
+
+await Task.Delay(100); // 함수 정의 기다림
+
+string result = await webView.ExecuteScriptAsync("asyncAdd(3, 7)");
+result = result.Trim('"');
+MessageBox.Show($"결과: {result}");
+
+
 
 using System;
 using System.Diagnostics;
