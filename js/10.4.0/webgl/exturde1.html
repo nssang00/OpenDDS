@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Thick polyline with proper miter-joins (raw WebGL)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html,
+      body,
+      canvas {
+        margin: 0;
+        height: 100%;
+        width: 100%;
+        background: #111;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="glcanvas"></canvas>
+    <script>
+      // ───────── 1. 샘플 경로 (MapLibre 예제와 동일) ─────────
+      const route = [
+        [-122.48369693756104, 37.83381888486939],
+        [-122.48348236083984, 37.83317489144141],
+        [-122.48339653015138, 37.83270036637107],
+        [-122.48356819152832, 37.832056363179625],
+        [-122.48404026031496, 37.83114119107971],
+        [-122.48404026031496, 37.83049717427869],
+        [-122.48348236083984, 37.829920943955045],
+        [-122.48356819152832, 37.82954808664175],
+        [-122.48507022857666, 37.82944639795659],
+        [-122.48610019683838, 37.82880236636284],
+        [-122.48695850372314, 37.82931081282506],
+        [-122.48700141906738, 37.83080223556934],
+        [-122.48751640319824, 37.83168351665737],
+        [-122.48803138732912, 37.832158048267786],
+        [-122.48888969421387, 37.83297152392784],
+        [-122.48987674713133, 37.83263257682617],
+        [-122.49043464660643, 37.832937629287755],
+        [-122.49125003814696, 37.832429207817725],
+        [-122.49163627624512, 37.832564787218985],
+        [-122.49223709106445, 37.83337825839438],
+        [-122.49378204345702, 37.83368330777276],
+      ];
+
+      // ───────── 2. 벡터·투영 유틸 ─────────
+      const R = 6378137; // 지구 반지름
+      const rad = (d) => (d * Math.PI) / 180;
+      const toXY = ([lng, lat], baseLat) => [
+        rad(lng) * R * Math.cos(rad(baseLat)),
+        rad(lat) * R,
+      ];
+      const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+      const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+      const scale = (v, s) => [v[0] * s, v[1] * s];
+      const len = (v) => Math.hypot(v[0], v[1]);
+      const norm = (v) => {
+        const l = len(v);
+        return [v[0] / l, v[1] / l];
+      };
+      const perp = (v) => [-v[1], v[0]];
+      const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
+
+      // ───────── 3. 메시 생성 (miter-join) ─────────
+      function buildMesh(lngLat, width = 20) {
+        const baseLat = lngLat[0][1];
+        const pts = lngLat.map((c) => toXY(c, baseLat));
+
+        // 세그먼트 단위 방향·노말
+        const dir = [],
+          normL = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const d = norm(sub(pts[i + 1], pts[i]));
+          dir.push(d);
+          normL.push(perp(d)); // 왼쪽 방향
+        }
+
+        // 정점 (2·N), 인덱스 (6·(N-1))
+        const verts = [],
+          idx = [];
+        for (let i = 0; i < pts.length; i++) {
+          let nPrev = i > 0 ? normL[i - 1] : normL[0];
+          let nNext = i < pts.length - 1 ? normL[i] : normL[pts.length - 2];
+
+          // bisector
+          let e = add(nPrev, nNext);
+          if (len(e) < 1e-6) e = nPrev; // 180° 직선
+          const eHat = norm(e);
+
+          // 스케일 보정 (MapLibre ‘miter’ 공식)
+          const miterLen = width / 2 / dot(eHat, nPrev);
+          const extrude = scale(eHat, miterLen);
+
+          // 왼·오 정점
+          const left = add(pts[i], extrude);
+          const right = sub(pts[i], extrude);
+          verts.push(...left, ...right);
+        }
+
+        // 세그먼트 삼각형 인덱스
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = i * 2,
+            b = a + 1,
+            c = a + 2,
+            d = a + 3;
+          idx.push(a, b, c, b, d, c);
+        }
+
+        // ─ 클립 공간 변환 (단순 bbox) ─
+        const xs = verts.filter((_, i) => i % 2 === 0),
+          ys = verts.filter((_, i) => i % 2 === 1);
+        const minX = Math.min(...xs),
+          maxX = Math.max(...xs);
+        const minY = Math.min(...ys),
+          maxY = Math.max(...ys);
+        const sx = 2 / (maxX - minX),
+          sy = 2 / (maxY - minY);
+        for (let i = 0; i < verts.length; i += 2) {
+          verts[i] = (verts[i] - minX) * sx - 1;
+          verts[i + 1] = (verts[i + 1] - minY) * sy - 1;
+        }
+
+        return {
+          vertices: new Float32Array(verts),
+          indices: new Uint16Array(idx),
+        };
+      }
+
+      // ───────── 4. WebGL 설정 ─────────
+      const canvas = document.getElementById("glcanvas");
+      const gl = canvas.getContext("webgl");
+      if (!gl) {
+        alert("WebGL not supported");
+      }
+
+      const vs = `
+  attribute vec2 a_xy;
+  void main(){ gl_Position = vec4(a_xy,0.0,1.0); }
+`;
+      const fs = `
+  precision mediump float;
+  void main(){ gl_FragColor = vec4(1.0,0.2,0.2,1.0); }
+`;
+      function compile(type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+          console.error(gl.getShaderInfoLog(s));
+        return s;
+      }
+      const prog = gl.createProgram();
+      gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+      gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
+      gl.linkProgram(prog);
+      gl.useProgram(prog);
+
+      const a_xy = gl.getAttribLocation(prog, "a_xy");
+
+      // ───────── 5. 버퍼 업로드 & 렌더 ─────────
+      const { vertices, indices } = buildMesh(route, 24 /* 폭 [m] */);
+
+      const vbo = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+      const ebo = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+      gl.enableVertexAttribArray(a_xy);
+      gl.vertexAttribPointer(a_xy, 2, gl.FLOAT, false, 0, 0);
+
+      resize();
+      window.addEventListener("resize", resize);
+      function resize() {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        render();
+      }
+      function render() {
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+      }
+    </script>
+  </body>
+</html>
