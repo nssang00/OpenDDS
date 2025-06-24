@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebGL Polyline – 개선된 Miter / Bevel / Round</title>
+    <style>
+      body {
+        margin: 0;
+        background: #1a1a2e;
+        color: #e6e6e6;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+      }
+      h1 {
+        color: #4cc9f0;
+        margin-bottom: 10px;
+        text-align: center;
+        text-shadow: 0 0 8px rgba(76, 201, 240, 0.6);
+      }
+      .subtitle {
+        color: #a9a9a9;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        max-width: 1000px;
+        width: 100%;
+        background: #16213e;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      }
+      #ui {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        margin: 20px 0;
+        justify-content: center;
+        padding: 15px;
+        background: rgba(25, 35, 60, 0.7);
+        border-radius: 12px;
+        width: 100%;
+        max-width: 900px;
+      }
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        min-width: 160px;
+      }
+      label {
+        font-size: 14px;
+        margin-bottom: 8px;
+        color: #4cc9f0;
+        font-weight: 600;
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: #4cc9f0;
+      }
+      select,
+      input[type="checkbox"] {
+        background: #1e2a4a;
+        color: #e6e6e6;
+        border: 1px solid #4cc9f0;
+        padding: 8px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      canvas {
+        border: 2px solid #4cc9f0;
+        background: #1e2a4a;
+        width: 90vmin;
+        height: 60vmin;
+        max-width: 900px;
+        max-height: 600px;
+        border-radius: 8px;
+        box-shadow: 0 0 20px rgba(76, 201, 240, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>WebGL Polyline</h1>
+      <p class="subtitle">
+        Miter · Bevel · Round 조인 &amp; Butt · Square · Round 캡
+      </p>
+
+      <!-- ───── UI ───── -->
+      <div id="ui">
+        <div class="control-group">
+          <label for="w">라인 두께</label>
+          <input id="w" type="range" min="2" max="40" value="12" />
+          <span id="width-value">12px</span>
+        </div>
+        <div class="control-group">
+          <label for="join">조인 스타일</label>
+          <select id="join">
+            <option>miter</option>
+            <option>bevel</option>
+            <option>round</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="cap">캡 스타일</label>
+          <select id="cap">
+            <option>butt</option>
+            <option>square</option>
+            <option>round</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="dash">대시</label>
+          <div><input id="dash" type="checkbox" /><span>활성화</span></div>
+        </div>
+        <div class="control-group">
+          <label for="dashLen">대시 길이</label>
+          <input id="dashLen" type="range" min="4" max="60" value="20" />
+          <span id="dash-value">20px</span>
+        </div>
+      </div>
+
+      <canvas id="gl"></canvas>
+    </div>
+
+    <script>
+      /* ╔══════════════════════╗
+     ║   간단 벡터 클래스   ║
+     ╚══════════════════════╝ */
+      class V {
+        constructor(x, y) {
+          this.x = x;
+          this.y = y;
+        }
+        add(v) {
+          return new V(this.x + v.x, this.y + v.y);
+        }
+        sub(v) {
+          return new V(this.x - v.x, this.y - v.y);
+        }
+        mul(s) {
+          return new V(this.x * s, this.y * s);
+        }
+        len() {
+          return Math.hypot(this.x, this.y);
+        }
+        unit() {
+          const l = this.len();
+          return l ? this.mul(1 / l) : new V(0, 0);
+        }
+        perp() {
+          return new V(-this.y, this.x);
+        }
+        dot(v) {
+          return this.x * v.x + this.y * v.y;
+        }
+      }
+
+      const DEG_PER_TRI = 15; // 라운드 분할 각도
+      const MITER_LIMIT = 2.0; // 허용 비율  (=miter길이/(width/2))
+
+      /* ╔══════════════════════╗
+     ║  메쉬 빌더 함수      ║
+     ╚══════════════════════╝ */
+      function buildMesh(path, { width, join, cap }) {
+        const verts = [],
+          idx = [];
+        const push = (p, d) => verts.push(p.x, p.y, d);
+        const quad = (a, b, c, d, da, db) => {
+          const s = verts.length / 3;
+          push(a, da);
+          push(b, da);
+          push(c, db);
+          push(d, db);
+          idx.push(s, s + 1, s + 2, s + 2, s + 1, s + 3);
+        };
+        const signedAngle = (a, b) =>
+          Math.atan2(a.x * b.y - a.y * b.x, a.dot(b));
+        const rot = (v, a) =>
+          new V(
+            v.x * Math.cos(a) - v.y * Math.sin(a),
+            v.x * Math.sin(a) + v.y * Math.cos(a)
+          );
+        const roundFan = (ctr, n0, n1, left, dist) => {
+          let ang = signedAngle(n0, n1);
+          const steps = Math.max(
+            1,
+            Math.ceil((Math.abs(ang) * 180) / Math.PI / DEG_PER_TRI)
+          );
+          let prev = n0;
+          for (let i = 1; i <= steps; i++) {
+            const cur = rot(n0, (ang * i) / steps).unit();
+            const s = verts.length / 3;
+            push(ctr, dist);
+            push(ctr.add(prev.mul(width / 2)), dist);
+            push(ctr.add(cur.mul(width / 2)), dist);
+            idx.push(s, left ? s + 2 : s + 1, left ? s + 1 : s + 2);
+            prev = cur;
+          }
+        };
+
+        let dist = 0;
+        let P0 = new V(...path[0]),
+          P1 = new V(...path[1]);
+        let dir1 = P1.sub(P0).unit(),
+          n1 = dir1.perp();
+
+        /* ─── 시작 캡 ─── */
+        if (cap === "square") {
+          const off = dir1.mul(-width / 2);
+          quad(
+            P0.add(n1.mul(width / 2)),
+            P0.add(n1.mul(-width / 2)),
+            P0.add(n1.mul(width / 2)).add(off),
+            P0.add(n1.mul(-width / 2)).add(off),
+            0,
+            0
+          );
+        } else if (cap === "round") {
+          roundFan(P0, n1.mul(-1), n1, true, 0);
+        }
+
+        /* ─── 세그먼트 루프 ─── */
+        for (let i = 1; i < path.length; i++) {
+          const P2 = new V(...(path[i + 1] || path[i]));
+          const dir2 = i < path.length - 1 ? P2.sub(P1).unit() : dir1;
+          const n2 = dir2.perp();
+
+          const d0 = dist;
+          dist += P0.sub(P1).len();
+          const d1 = dist;
+
+          quad(
+            P0.add(n1.mul(width / 2)),
+            P0.add(n1.mul(-width / 2)),
+            P1.add(n1.mul(width / 2)),
+            P1.add(n1.mul(-width / 2)),
+            d0,
+            d1
+          );
+
+          /* ─── 조인 ─── */
+          if (i < path.length - 1) {
+            const leftTurn = dir1.x * dir2.y - dir1.y * dir2.x > 0;
+            const bis = n1.add(n2).unit();
+            const miterLen = width / 2 / Math.max(1e-6, Math.abs(bis.dot(n1)));
+            const miterRatio = miterLen / (width / 2);
+
+            const joinType =
+              join === "miter" && miterRatio <= MITER_LIMIT
+                ? "miter"
+                : join === "round"
+                ? "round"
+                : "bevel";
+
+            if (joinType === "round") {
+              roundFan(
+                P1,
+                leftTurn ? n1.mul(-1) : n1,
+                leftTurn ? n2.mul(-1) : n2,
+                leftTurn,
+                d1
+              );
+            } else if (joinType === "bevel") {
+              quad(
+                P1.add(n1.mul(width / 2)),
+                P1.add(n1.mul(-width / 2)),
+                P1.add(n2.mul(width / 2)),
+                P1.add(n2.mul(-width / 2)),
+                d1,
+                d1
+              );
+            } else {
+              // miter
+              const sign = leftTurn ? -1 : 1;
+              const miterPt = P1.add(bis.mul(miterLen * sign));
+              const outerPrev = P1.add(
+                n1.mul(leftTurn ? -width / 2 : width / 2)
+              );
+              const outerNext = P1.add(
+                n2.mul(leftTurn ? -width / 2 : width / 2)
+              );
+              const s = verts.length / 3;
+              push(outerPrev, d1);
+              push(outerNext, d1);
+              push(miterPt, d1);
+              idx.push(s, leftTurn ? s + 2 : s + 1, leftTurn ? s + 1 : s + 2);
+            }
+          }
+          P0 = P1;
+          P1 = P2;
+          dir1 = dir2;
+          n1 = n2;
+        }
+
+        /* ─── 끝 캡 ─── */
+        if (cap === "square") {
+          const off = dir1.mul(width / 2);
+          quad(
+            P1.add(n1.mul(width / 2)),
+            P1.add(n1.mul(-width / 2)),
+            P1.add(n1.mul(width / 2)).add(off),
+            P1.add(n1.mul(-width / 2)).add(off),
+            dist,
+            dist
+          );
+        } else if (cap === "round") {
+          roundFan(P1, n1, n1.mul(-1), false, dist);
+        }
+        return { verts: new Float32Array(verts), idx: new Uint16Array(idx) };
+      }
+
+      /* ╔══════════════════════╗
+     ║   WebGL 초기화       ║
+     ╚══════════════════════╝ */
+      const canvas = document.getElementById("gl");
+      const gl = canvas.getContext("webgl", { antialias: true });
+      if (!gl) {
+        alert("WebGL 미지원");
+        throw "no WebGL";
+      }
+
+      gl.enable(gl.DEPTH_TEST);
+      gl.disable(gl.CULL_FACE);
+      gl.clearColor(0.1, 0.1, 0.15, 1);
+
+      const SH = (t, src) => {
+        const s = gl.createShader(t);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+          console.error(gl.getShaderInfoLog(s));
+        return s;
+      };
+
+      const prog = gl.createProgram();
+      gl.attachShader(
+        prog,
+        SH(
+          gl.VERTEX_SHADER,
+          `
+    attribute vec2 a_pos;attribute float a_d;
+    uniform mat4 u_mvp;varying float v_d;
+    void main(){gl_Position=u_mvp*vec4(a_pos,0.,1.);v_d=a_d;}
+  `
+        )
+      );
+      gl.attachShader(
+        prog,
+        SH(
+          gl.FRAGMENT_SHADER,
+          `
+    precision mediump float;varying float v_d;
+    uniform bool  u_dash;uniform float u_a,u_b;uniform vec4 u_c;
+    void main(){if(u_dash && mod(v_d,u_a+u_b)>u_a)discard;gl_FragColor=u_c;}
+  `
+        )
+      );
+      gl.linkProgram(prog);
+      gl.useProgram(prog);
+
+      const loc = {
+        p: gl.getAttribLocation(prog, "a_pos"),
+        d: gl.getAttribLocation(prog, "a_d"),
+        mvp: gl.getUniformLocation(prog, "u_mvp"),
+        dash: gl.getUniformLocation(prog, "u_dash"),
+        a: gl.getUniformLocation(prog, "u_a"),
+        b: gl.getUniformLocation(prog, "u_b"),
+        col: gl.getUniformLocation(prog, "u_c"),
+      };
+      const mvp = (w, h) =>
+        new Float32Array([
+          2 / w,
+          0,
+          0,
+          0,
+          0,
+          -2 / h,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          -1,
+          1,
+          0,
+          1,
+        ]);
+
+      let vbo = null,
+        ibo = null;
+      function render() {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = canvas.clientWidth * dpr;
+        canvas.height = canvas.clientHeight * dpr;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        const $ = (id) => document.getElementById(id);
+        const width = +$("w").value,
+          join = $("join").value,
+          cap = $("cap").value;
+
+        const mesh = buildMesh(
+          [
+            [60, 80],
+            [150, 300],
+            [280, 60],
+            [380, 320],
+            [500, 40],
+          ],
+          { width, join, cap }
+        );
+
+        if (vbo) gl.deleteBuffer(vbo);
+        if (ibo) gl.deleteBuffer(ibo);
+        vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, mesh.verts, gl.STATIC_DRAW);
+        ibo = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.idx, gl.STATIC_DRAW);
+
+        const stride = 12;
+        gl.enableVertexAttribArray(loc.p);
+        gl.vertexAttribPointer(loc.p, 2, gl.FLOAT, false, stride, 0);
+        gl.enableVertexAttribArray(loc.d);
+        gl.vertexAttribPointer(loc.d, 1, gl.FLOAT, false, stride, 8);
+
+        gl.uniformMatrix4fv(loc.mvp, false, mvp(canvas.width, canvas.height));
+        gl.uniform4f(loc.col, 0.22, 0.85, 0.96, 1);
+        gl.uniform1i(loc.dash, $("dash").checked ? 1 : 0);
+        gl.uniform1f(loc.a, +$("dashLen").value);
+        gl.uniform1f(loc.b, +$("dashLen").value);
+
+        gl.drawElements(gl.TRIANGLES, mesh.idx.length, gl.UNSIGNED_SHORT, 0);
+      }
+
+      /* UI 이벤트 */
+      document.getElementById("w").addEventListener("input", function () {
+        document.getElementById("width-value").textContent = this.value + "px";
+        render();
+      });
+      document.getElementById("dashLen").addEventListener("input", function () {
+        document.getElementById("dash-value").textContent = this.value + "px";
+        render();
+      });
+      ["join", "cap", "dash"].forEach((id) =>
+        document.getElementById(id).addEventListener("change", render)
+      );
+
+      render();
+    </script>
+  </body>
+</html>
