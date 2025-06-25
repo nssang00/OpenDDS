@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>WebGL2 – Thick Polyline (gl_VertexID 방식)</title>
+<style>
+  html,body,canvas{margin:0;padding:0;width:100%;height:100%;background:#111;}
+</style>
+</head>
+<body>
+<canvas id="glc"></canvas>
+
+<script>
+/*───────────────────────── 1. 데이터 ─────────────────────────*/
+const route = [
+  [-122.48369693756104, 37.83381888486939],
+  [-122.48348236083984, 37.83317489144141],
+  [-122.48339653015138, 37.83270036637107],
+  [-122.48356819152832, 37.832056363179625],
+  [-122.48404026031496, 37.83114119107971],
+  [-122.48404026031496, 37.83049717427869],
+  [-122.48348236083984, 37.829920943955045],
+  [-122.48356819152832, 37.82954808664175],
+  [-122.48507022857666, 37.82944639795659],
+  [-122.48610019683838, 37.82880236636284],
+  [-122.48695850372314, 37.82931081282506],
+  [-122.48700141906738, 37.83080223556934],
+  [-122.48751640319824, 37.83168351665737],
+  [-122.48803138732912, 37.832158048267786],
+  [-122.48888969421387, 37.83297152392784],
+  [-122.48987674713133, 37.83263257682617],
+  [-122.49043464660643, 37.832937629287755],
+  [-122.49125003814696, 37.832429207817725],
+  [-122.49163627624512, 37.832564787218985],
+  [-122.49223709106445, 37.83337825839438],
+  [-122.49378204345702, 37.83368330777276],
+];
+
+/*──────────────────── 2. 좌표를 clip-space(-1~1)로 정규화 ───────────────────*/
+const xs = route.map(p => p[0]);
+const ys = route.map(p => p[1]);
+const xmin = Math.min(...xs), xmax = Math.max(...xs);
+const ymin = Math.min(...ys), ymax = Math.max(...ys);
+const cx = x => ((x - xmin) / (xmax - xmin)) * 2 - 1;
+const cy = y => ((y - ymin) / (ymax - ymin)) * 2 - 1;
+
+/*──────────────────── 3. 정점 / 인덱스 버퍼 생성 ───────────────────*/
+const verts = [];           // [x,y, dx,dy]  (dx,dy = P0→P1 clip 방향)
+const indices = [];
+
+for (let i = 0; i < route.length - 1; ++i) {
+  const p0 = [cx(route[i][0]),     cy(route[i][1])];
+  const p1 = [cx(route[i+1][0]),   cy(route[i+1][1])];
+  const dir = [p1[0] - p0[0], p1[1] - p0[1]];
+
+  // 세그먼트당 정점 2개: P0, P1
+  verts.push(...p0, ...dir);
+  verts.push(...p1, ...dir);
+
+  const base = i * 2;          // 인덱스 6개 (두 삼각형) – gl_VertexID 0 … 5
+  indices.push(base, base+1, base,
+               base+1, base,   base+1);
+}
+
+/*──────────────────── 4. WebGL2 초기화 ───────────────────*/
+const gl = document.getElementById('glc').getContext('webgl2');
+if (!gl) { alert('WebGL 2 미지원 브라우저입니다.'); }
+
+/*──────────────────── 5. 셰이더 소스 ───────────────────*/
+const vsSource = `#version 300 es
+precision mediump float;
+in vec2 a_pos;
+in vec2 a_dir;
+uniform vec2  u_viewPx;   // canvas 픽셀
+uniform float u_halfW;    // 선 half-width(px)
+
+vec2 px2clip(vec2 p){return p/u_viewPx*2.0-1.0;}
+vec2 clip2px(vec2 c){return (c*0.5+0.5)*u_viewPx;}
+
+void main() {
+    int v = gl_VertexID & 3;         // 0L 1R 2L 3R
+    float side = (v==0||v==2)? -1.0 : 1.0;
+    float fwd  = (v < 2)     ?  0.0 : 1.0;
+
+    vec2 base  = a_pos + a_dir * fwd;      // P0 또는 P1
+    vec2 normal = normalize(vec2(-a_dir.y, a_dir.x));
+
+    vec2 posPx = clip2px(base) + normal * side * u_halfW;
+    gl_Position = vec4(px2clip(posPx), 0.0, 1.0);
+}`;
+const fsSource = `#version 300 es
+precision mediump float;
+out vec4 fragColor;
+void main() { fragColor = vec4(0.1, 0.8, 1.0, 1.0); }`;
+
+/*──────────────────── 6. 컴파일 / 링크 ───────────────────*/
+function compile(src, type) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+    throw new Error('shader compile error');
+  }
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(vsSource, gl.VERTEX_SHADER));
+gl.attachShader(prog, compile(fsSource, gl.FRAGMENT_SHADER));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+  console.error(gl.getProgramInfoLog(prog));
+  throw new Error('link error');
+}
+gl.useProgram(prog);
+
+/*──────────────────── 7. 버퍼 바인딩 ───────────────────*/
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+
+const stride = 4 * 4;   // 4 floats = 16B
+const locPos = gl.getAttribLocation(prog, 'a_pos');
+const locDir = gl.getAttribLocation(prog, 'a_dir');
+gl.enableVertexAttribArray(locPos);
+gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, stride, 0);
+gl.enableVertexAttribArray(locDir);
+gl.vertexAttribPointer(locDir, 2, gl.FLOAT, false, stride, 8);
+
+const ibo = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+/*──────────────────── 8. Uniform & 렌더링 ───────────────────*/
+function resize() {
+  gl.canvas.width  = innerWidth;
+  gl.canvas.height = innerHeight;
+  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  gl.uniform2f(gl.getUniformLocation(prog, 'u_viewPx'),
+               gl.canvas.width, gl.canvas.height);
+}
+function render() {
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.uniform1f(gl.getUniformLocation(prog, 'u_halfW'), 7.0);  // 선 두께 14px
+  gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+}
+window.addEventListener('resize', () => { resize(); render(); });
+resize(); render();
+</script>
+</body>
+</html>
