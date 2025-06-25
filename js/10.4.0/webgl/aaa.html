@@ -76,6 +76,7 @@ void main(){
                n * a_extrude.y * u_halfWidth;
 
   vec2 clip = posPx / u_viewSize * 2.0 - 1.0;
+  clip.y = -clip.y;  
   gl_Position = vec4(clip, 0.0, 1.0);
 }`;
 
