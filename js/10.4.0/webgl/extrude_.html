@@ -2,85 +2,109 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Polyline – GPU extrude</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Polyline – GPU Extrude</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    html, body, canvas { margin:0; height:100%; width:100%; display:block; background:#111; }
-    .ui { position:absolute; top:10px; left:10px; color:#eee; font:14px/1 sans-serif; }
+    html,body,canvas{margin:0;height:100%;width:100%;display:block;background:#111}
+    .ui{position:absolute;top:10px;left:10px;color:#eee;font:14px/1 sans-serif}
   </style>
 </head>
 <body>
 <canvas id="glcanvas"></canvas>
 <div class="ui">
-  <label>Width [m]
+  <label>
+    Width [m]
     <input id="wSlider" type="range" min="2" max="60" value="24">
     <span id="wVal">24</span>
   </label>
 </div>
 
 <script>
-/* ───────── 1. sample path ───────── */
-const route = [ /* … same coords … */ ];
+/* ───────── 1. sample route (SF Presidio) ───────── */
+const route = [
+  [-122.48369693756104, 37.83381888486939],
+  [-122.48348236083984, 37.83317489144141],
+  [-122.48339653015138, 37.83270036637107],
+  [-122.48356819152832, 37.832056363179625],
+  [-122.48404026031496, 37.83114119107971],
+  [-122.48404026031496, 37.83049717427869],
+  [-122.48348236083984, 37.829920943955045],
+  [-122.48356819152832, 37.82954808664175],
+  [-122.48507022857666, 37.82944639795659],
+  [-122.48610019683838, 37.82880236636284],
+  [-122.48695850372314, 37.82931081282506],
+  [-122.48700141906738, 37.83080223556934],
+  [-122.48751640319824, 37.83168351665737],
+  [-122.48803138732912, 37.832158048267786],
+  [-122.48888969421387, 37.83297152392784],
+  [-122.48987674713133, 37.83263257682617],
+  [-122.49043464660643, 37.832937629287755],
+  [-122.49125003814696, 37.832429207817725],
+  [-122.49163627624512, 37.832564787218985],
+  [-122.49223709106445, 37.83337825839438],
+  [-122.49378204345702, 37.83368330777276]
+];
 
-/* ───────── 2. projection / vector utils ───────── */
-const R = 6378137;
-const rad  = d => d * Math.PI / 180;
-const toXY = ([lng,lat], baseLat) => [rad(lng)*R*Math.cos(rad(baseLat)), rad(lat)*R]; // WebMercator approx
-const sub  = (a,b)=>[a[0]-b[0], a[1]-b[1]];
-const add  = (a,b)=>[a[0]+b[0], a[1]+b[1]];
-const vecScale = (v,s)=>[v[0]*s, v[1]*s];             // renamed
-const len  = v=>Math.hypot(v[0],v[1]);
-const norm = v=>{ const l=len(v); return [v[0]/l, v[1]/l]; };
-const perp = v=>[-v[1], v[0]];
-const dot  = (a,b)=>a[0]*b[0]+a[1]*b[1];
+/* ───────── 2. projection & vector helpers ───────── */
+const R   = 6378137;
+const rad = d=>d*Math.PI/180;
+const toXY=([lng,lat],baseLat)=>[rad(lng)*R*Math.cos(rad(baseLat)), rad(lat)*R]; // WebMercator approx
+const sub =(a,b)=>[a[0]-b[0], a[1]-b[1]];
+const add =(a,b)=>[a[0]+b[0], a[1]+b[1]];
+const vecScale=(v,s)=>[v[0]*s, v[1]*s];
+const len =v=>Math.hypot(v[0],v[1]);
+const norm=v=>{const l=len(v); return [v[0]/l, v[1]/l]};
+const perp=v=>[-v[1], v[0]];
 
-/* ───────── 3. buffer builder (extrude) ───────── */
+/* ───────── 3. build GPU-friendly buffers ───────── */
 function buildBuffers(lngLat){
-  const baseLat = lngLat[0][1];
-  const P = lngLat.map(c=>toXY(c, baseLat));          // world coords
+  if(!lngLat?.length) throw new Error('buildBuffers: route is empty');
 
-  // segment directions & left normals
-  const dir=[], normL=[];
+  const baseLat = lngLat[0][1];
+  const P = lngLat.map(c=>toXY(c, baseLat));      // world-space points
+
+  // segment direction & left-hand normals
+  const normL=[];
   for(let i=0;i<P.length-1;i++){
-    const d=norm(sub(P[i+1],P[i]));
-    dir.push(d); normL.push(perp(d));
+    const d = norm(sub(P[i+1],P[i]));
+    normL.push(perp(d));                          // left normal
   }
 
-  const v=[], idx=[];
+  const v = [], idx=[];
   for(let i=0;i<P.length;i++){
-    const nPrev = i>0           ? normL[i-1]          : normL[0];
-    const nNext = i<P.length-1  ? normL[i]            : normL[normL.length-1];
-    let  e = add(nPrev, nNext);
-    if(len(e)<1e-6) e=nPrev;                          // straight (180°)
-    const eHat = norm(e);                             // bisector
+    const nPrev = i>0          ? normL[i-1]               : normL[0];
+    const nNext = i<P.length-1 ? normL[i]                 : normL[normL.length-1];
+    let   e     = add(nPrev,nNext);                       // angle bisector
+    if(len(e)<1e-6) e = nPrev;                            // straight segment
+    const eHat  = norm(e);
 
-    v.push(...P[i], ...eHat);                         // left  (+1)
-    v.push(...P[i], ...vecScale(eHat,-1));            // right (-1)
+    v.push(...P[i], ...eHat);              // left  (+1 extrude)
+    v.push(...P[i], ...vecScale(eHat,-1)); // right (-1 extrude)
   }
 
   for(let i=0;i<P.length-1;i++){
     const a=i*2, b=a+1, c=a+2, d=a+3;
-    idx.push(a,b,c, b,d,c);
+    idx.push(a,b,c,  b,d,c);               // two triangles per segment
   }
 
-  // 2-D world→clip transform
+  // simple 2-d world→clip transform (fits coords into -1..1)
   const xs=v.filter((_,i)=>i%4===0), ys=v.filter((_,i)=>i%4===1);
   const minX=Math.min(...xs), maxX=Math.max(...xs);
   const minY=Math.min(...ys), maxY=Math.max(...ys);
   const scaleX=2/(maxX-minX), scaleY=2/(maxY-minY);
 
-  return {
-    vertices : new Float32Array(v),       // [x,y,ex,ey] …
+  return{
+    vertices : new Float32Array(v),         // [x,y,ex,ey] …
     indices  : new Uint16Array(idx),
     scale    : [scaleX, scaleY],
     translate: [-minX, -minY]
   };
 }
 
-/* ───────── 4. WebGL init ───────── */
-const canvas=document.getElementById('glcanvas');
-const gl = canvas.getContext('webgl');
-if(!gl) alert('WebGL not supported');
+/* ───────── 4. WebGL setup ───────── */
+const glCanvas = document.getElementById('glcanvas');
+const gl = glCanvas.getContext('webgl');
+if(!gl) alert('WebGL not supported 🚫');
 
 const vsSrc=`
 attribute vec2 a_pos;
@@ -91,16 +115,16 @@ uniform float u_halfWidth;
 void main(){
   vec2 world = a_pos + a_extrude * u_halfWidth;
   vec2 clip  = vec2(
-      (world.x + u_translate.x) * u_scale.x - 1.0,
-      (world.y + u_translate.y) * u_scale.y - 1.0
+    (world.x + u_translate.x)*u_scale.x - 1.0,
+    (world.y + u_translate.y)*u_scale.y - 1.0
   );
-  gl_Position = vec4(clip, 0.0, 1.0);
+  gl_Position = vec4(clip,0.0,1.0);
 }`;
-const fsSrc=`precision mediump float; void main(){ gl_FragColor = vec4(1.0,0.25,0.25,1.0); }`;
+const fsSrc=`precision mediump float;
+void main(){ gl_FragColor = vec4(1.0,0.25,0.25,1.0); }`;
 
 function compile(type,src){
-  const s=gl.createShader(type);
-  gl.shaderSource(s,src); gl.compileShader(s);
+  const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
   if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))
     console.error(gl.getShaderInfoLog(s));
   return s;
@@ -118,8 +142,8 @@ const loc={
   u_halfWidth: gl.getUniformLocation(prog,'u_halfWidth')
 };
 
-/* ───────── 5. upload buffers ───────── */
-const {vertices, indices, scale, translate} = buildBuffers(route);
+/* ───────── 5. buffer upload ───────── */
+const {vertices,indices,scale,translate}=buildBuffers(route);
 
 const vbo=gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
@@ -129,7 +153,7 @@ const ebo=gl.createBuffer();
 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ebo);
 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);
 
-const stride=4*4;
+const stride=4*4;                           // 4 floats / vertex
 gl.enableVertexAttribArray(loc.a_pos);
 gl.vertexAttribPointer(loc.a_pos,2,gl.FLOAT,false,stride,0);
 gl.enableVertexAttribArray(loc.a_extrude);
@@ -138,19 +162,20 @@ gl.vertexAttribPointer(loc.a_extrude,2,gl.FLOAT,false,stride,8);
 gl.uniform2fv(loc.u_scale,scale);
 gl.uniform2fv(loc.u_translate,translate);
 
-/* ───────── 6. render & resize ───────── */
+/* ───────── 6. render & resize helpers ───────── */
 function resize(){
-  canvas.width = canvas.clientWidth;
-  canvas.height= canvas.clientHeight;
-  gl.viewport(0,0,canvas.width,canvas.height);
+  const dpr = window.devicePixelRatio||1;
+  glCanvas.width  = glCanvas.clientWidth * dpr;
+  glCanvas.height = glCanvas.clientHeight* dpr;
+  gl.viewport(0,0,glCanvas.width,glCanvas.height);
   draw();
 }
-window.addEventListener('resize', resize);
+window.addEventListener('resize',resize);
 resize();
 
 function draw(){
   gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+  gl.drawElements(gl.TRIANGLES,indices.length,gl.UNSIGNED_SHORT,0);
 }
 
 /* ───────── 7. width slider ───────── */
@@ -159,7 +184,7 @@ const wVal   =document.getElementById('wVal');
 function updateWidth(){
   const w=parseFloat(wSlider.value);
   wVal.textContent=w;
-  gl.uniform1f(loc.u_halfWidth, w*0.5);
+  gl.uniform1f(loc.u_halfWidth,w*0.5);
   draw();
 }
 wSlider.addEventListener('input',updateWidth);
