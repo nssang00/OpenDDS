@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>OL 10 Line Shader — Instanced Quad Demo</title>
+    <style>
+      html,
+      body,
+      canvas {
+        margin: 0;
+        height: 100%;
+        width: 100%;
+        background: #111;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gl"></canvas>
+    <script>
+      /* ────────────────── 0. GL 초기화 ────────────────── */
+      const canvas = document.getElementById("gl");
+      const gl = canvas.getContext("webgl2");
+      if (!gl) {
+        alert("WebGL 2 필요");
+        throw 0;
+      }
+
+      /* ────────────────── 1. 경로 데이터 (lon / lat) ────────────────── */
+      const routeLL = [
+        [-122.48369693756104, 37.83381888486939],
+        [-122.48348236083984, 37.83317489144141],
+        [-122.48339653015138, 37.83270036637107],
+        [-122.48356819152832, 37.832056363179625],
+        [-122.48404026031496, 37.83114119107971],
+        [-122.48404026031496, 37.83049717427869],
+        [-122.48348236083984, 37.829920943955045],
+        [-122.48356819152832, 37.82954808664175],
+        [-122.48507022857666, 37.82944639795659],
+        [-122.48610019683838, 37.82880236636284],
+        [-122.48695850372314, 37.82931081282506],
+        [-122.48700141906738, 37.83080223556934],
+        [-122.48751640319824, 37.83168351665737],
+        [-122.48803138732912, 37.832158048267786],
+        [-122.48888969421387, 37.83297152392784],
+        [-122.48987674713133, 37.83263257682617],
+        [-122.49043464660643, 37.832937629287755],
+        [-122.49125003814696, 37.832429207817725],
+        [-122.49163627624512, 37.832564787218985],
+        [-122.49223709106445, 37.83337825839438],
+        [-122.49378204345702, 37.83368330777276],
+      ];
+
+      /* lon/lat → 0-1 정규화 */
+      const lons = routeLL.map((p) => p[0]),
+        lats = routeLL.map((p) => p[1]);
+      const minLon = Math.min(...lons),
+        maxLon = Math.max(...lons);
+      const minLat = Math.min(...lats),
+        maxLat = Math.max(...lats);
+      const nx = (lon) => (lon - minLon) / (maxLon - minLon);
+      const ny = (lat) => (maxLat - lat) / (maxLat - minLat); // y 뒤집기
+
+      /* ∠(BA, BC)  계산 */
+      const signedAngle = (ax, ay, bx, by, cx, cy) => {
+        const ux = ax - bx,
+          uy = ay - by,
+          vx = cx - bx,
+          vy = cy - by;
+        return Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+      };
+
+      /* ────────────────── 2. 인스턴스 배열 작성 ──────────────────
+   15 float = 60 byte / 세그먼트  (OpenLayers 기본 필드)  */
+      const segN = routeLL.length - 1;
+      const instData = new Float32Array(segN * 15);
+      let accLen = 0;
+      for (let i = 0; i < segN; ++i) {
+        const [lon0, lat0] = routeLL[i];
+        const [lon1, lat1] = routeLL[i + 1];
+        const sx = nx(lon0),
+          sy = ny(lat0);
+        const ex = nx(lon1),
+          ey = ny(lat1);
+        const dx = ex - sx,
+          dy = ey - sy;
+        const segLen = Math.hypot(dx, dy);
+
+        const prev = i ? routeLL[i - 1] : null;
+        const next = i < segN - 1 ? routeLL[i + 2] : null;
+        const aStart = prev
+          ? signedAngle(nx(prev[0]), ny(prev[1]), sx, sy, ex, ey)
+          : -3.14;
+        const aEnd = next
+          ? signedAngle(sx, sy, ex, ey, nx(next[0]), ny(next[1]))
+          : -3.14;
+
+        const o = i * 15;
+        instData.set(
+          [
+            sx,
+            sy,
+            ex,
+            ey, // a_segmentStart / End
+            accLen,
+            accLen + segLen, // a_measureStart / End
+            0, // a_parameters (extrude 비트 0)
+            segLen, // a_distance
+            aStart,
+            aEnd, // a_joinAngles
+            1,
+            0,
+            0,
+            1, // a_hitColor
+            0, // a_prop_layer
+          ],
+          o
+        );
+        accLen += segLen;
+      }
+
+      /* ────────────────── 3. VBO 준비 ────────────────── */
+      const quadBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, -1, 1, 1, -1, 1, 1]),
+        gl.STATIC_DRAW
+      );
+
+      const instBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, instData, gl.STATIC_DRAW);
+
+      /* ────────────────── 4. 셰이더 (OpenLayers + instanced-quad) ────────────────── */
+      const VS = `#version 300 es
+#define GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+/* ── uniforms (필요 최소) ── */
+uniform mat4  u_projectionMatrix;
+uniform vec2  u_viewportSizePx;
+uniform float u_resolution;
+uniform float u_depth;
+uniform float u_halfWidth;
+
+/* ── 정적 쿼드 ── */
+layout(location=0) in vec2 a_extrude;
+
+/* ── instanced attributes ── */
+layout(location=1) in vec2 a_segmentStart;
+layout(location=2) in vec2 a_segmentEnd;
+layout(location=3) in float a_measureStart;
+layout(location=4) in float a_measureEnd;
+layout(location=5) in float a_parameters;
+layout(location=6) in float a_distance;
+layout(location=7) in vec2 a_joinAngles;
+layout(location=8) in vec4 a_hitColor;
+layout(location=9) in float a_prop_layer;
+
+/* ── varyings ── */
+out vec2  v_segmentStart;
+out vec2  v_segmentEnd;
+out float v_angleStart;
+out float v_angleEnd;
+out float v_width;
+out vec4  v_hitColor;
+out float v_distanceOffsetPx;
+out float v_measureStart;
+out float v_measureEnd;
+out float v_prop_layer;
+
+/* helper */
+bool isCap(float a){return a < -0.1;}
+vec2 getJoinDir(vec2 n,float a){
+  float h=a*0.5,c=cos(h),s=sin(h);
+  vec2 bis=vec2(s*n.x + c*n.y, -c*n.x + s*n.y);
+  return bis * (1.0 / s);
+}
+vec4 pxToScreen(vec2 p){
+  vec2 s = p / u_viewportSizePx * 2.0 - 1.0;
+  s.y = -s.y;
+  return vec4(s, u_depth, 1.0);
+}
+vec2 worldToPx(vec2 w){
+  vec4 s = u_projectionMatrix * vec4(w,0.0,1.0);
+  return (0.5 * s.xy + 0.5) * u_viewportSizePx;
+}
+
+void main(){
+  v_angleStart = a_joinAngles.x;
+  v_angleEnd   = a_joinAngles.y;
+
+  /* vertexNumber 계산: a_extrude 부호 조합 */
+  float vNum = (a_extrude.x < 0. ? 0. : 2.) + (a_extrude.y > 0. ? 0. : 1.);
+
+  float lineOffsetPx = 0.0;
+  float lineWidth    = u_halfWidth * 2.0;
+
+  vec2 sPx = worldToPx(a_segmentStart);
+  vec2 ePx = worldToPx(a_segmentEnd);
+  vec2 tPx = normalize(ePx - sPx);
+  vec2 nPx = vec2(-tPx.y, tPx.x);
+
+  /* offset (라인 오프셋 0 → 그대로) */
+  sPx -= nPx * lineOffsetPx;
+  ePx -= nPx * lineOffsetPx;
+
+  vec2 base = vNum < 1.5 ? sPx : ePx;
+  float ang = vNum < 1.5 ? v_angleStart : v_angleEnd;
+  float nDir = (vNum < 0.5 || vNum > 1.5) ? 1. : -1.;
+  float tDir = (vNum < 1.5) ? 1. : -1.;
+  vec2 j = (cos(ang) > 0.985 || isCap(ang))
+         ? nPx * nDir - tPx * tDir
+         : getJoinDir(nPx * nDir, ang);
+
+  vec2 pos = base + j * (u_halfWidth + 1.0);
+  gl_Position = pxToScreen(pos);
+
+  /* varyings */
+  v_segmentStart = sPx;
+  v_segmentEnd   = ePx;
+  v_angleStart   = v_angleStart;
+  v_angleEnd     = v_angleEnd;
+  v_width        = lineWidth;
+  v_hitColor     = a_hitColor;
+  v_distanceOffsetPx = a_distance / u_resolution;
+  v_measureStart = a_measureStart;
+  v_measureEnd   = a_measureEnd;
+  v_prop_layer   = a_prop_layer;
+}`;
+      const FS = `#version 300 es
+precision mediump float;
+in vec4 v_hitColor; out vec4 fragColor;
+void main(){ fragColor = vec4(0.08,0.8,1.0,1.0); }`;
+
+      function compile(type, src) {
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS))
+          throw gl.getShaderInfoLog(sh);
+        return sh;
+      }
+      const prog = gl.createProgram();
+      gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+      gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+        throw gl.getProgramInfoLog(prog);
+      gl.useProgram(prog);
+
+      /* ────────────────── 5. VAO & 속성 바인딩 ────────────────── */
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      /* 0 : a_extrude (정적) */
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      /* instanced attributes (stride 60B) */
+      gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
+      const STR = 60;
+      function instAttrib(loc, size, offset) {
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, STR, offset);
+        gl.vertexAttribDivisor(loc, 1);
+      }
+      instAttrib(1, 2, 0); // a_segmentStart
+      instAttrib(2, 2, 8); // a_segmentEnd
+      instAttrib(3, 1, 16); // a_measureStart
+      instAttrib(4, 1, 20); // a_measureEnd
+      instAttrib(5, 1, 24); // a_parameters
+      instAttrib(6, 1, 28); // a_distance
+      instAttrib(7, 2, 32); // a_joinAngles
+      instAttrib(8, 4, 40); // a_hitColor
+      instAttrib(9, 1, 56); // a_prop_layer
+
+      /* ────────────────── 6. 기본 유니폼 셋업 ────────────────── */
+      const uni = (n) => gl.getUniformLocation(prog, n);
+      const uProj = new Float32Array([
+        2, 0, 0, -1, 0, 2, 0, -1, 0, 0, 1, 0, 0, 0, 0, 1,
+      ]);
+      gl.uniformMatrix4fv(uni("u_projectionMatrix"), false, uProj);
+      gl.uniform1f(uni("u_resolution"), 1);
+      gl.uniform1f(uni("u_depth"), 0);
+      gl.uniform1f(uni("u_halfWidth"), 8); // half-width = 8px (→ 16 px 라인)
+
+      /* 뷰포트 사이즈 동기화 */
+      function resize() {
+        canvas.width = innerWidth;
+        canvas.height = innerHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.uniform2f(uni("u_viewportSizePx"), canvas.width, canvas.height);
+      }
+      addEventListener("resize", resize);
+      resize();
+
+      /* ────────────────── 7. 렌더 ┄┄ ┄┄ ────────────────── */
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.bindVertexArray(vao);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, segN);
+    </script>
+  </body>
+</html>
