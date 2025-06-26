@@ -216,14 +216,14 @@ void main(){ gl_FragColor = vec4(0.08,0.8,1.0,1.0); }`;
       gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
       gl.enableVertexAttribArray(locSegStart);
       gl.vertexAttribPointer(locSegStart, 2, gl.FLOAT, false, 24, 0);
+      ext.vertexAttribDivisorANGLE(locSegStart, 1);
       gl.enableVertexAttribArray(locSegEnd);
       gl.vertexAttribPointer(locSegEnd, 2, gl.FLOAT, false, 24, 8);
+      ext.vertexAttribDivisorANGLE(locSegEnd, 1);
       gl.enableVertexAttribArray(locJoinAngles);
       gl.vertexAttribPointer(locJoinAngles, 2, gl.FLOAT, false, 24, 16);
-
-      ext.vertexAttribDivisorANGLE(locSegStart, 1);
-      ext.vertexAttribDivisorANGLE(locSegEnd, 1);
       ext.vertexAttribDivisorANGLE(locJoinAngles, 1);
+
 
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
 
