@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>Miter Join Instanced Line</title>
+  <title>Miter Join Instanced Line (Interleaved)</title>
   <style>
     html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
   </style>
@@ -11,7 +11,6 @@
 <canvas id="glcanvas"></canvas>
 <script>
 const canvas = document.getElementById("glcanvas");
-// 고해상도 대응
 function fitCanvas() {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = canvas.clientWidth * dpr;
@@ -23,13 +22,12 @@ const gl = canvas.getContext("webgl");
 const ext = gl.getExtension("ANGLE_instanced_arrays");
 if (!ext) throw "ANGLE_instanced_arrays 미지원";
 
-// ======= 셰이더 소스 =======
 const vertexShaderSource = `
 precision mediump float;
-attribute vec2 a_position;        // (-1/1, -1/1) 쿼드
-attribute vec2 a_segmentStart;   // 인스턴스: 선분 시작(norm)
-attribute vec2 a_segmentEnd;     // 인스턴스: 선분 끝(norm)
-attribute vec2 a_joinAngles;     // 인스턴스: 조인 각 (cosθ, sinθ)
+attribute vec2 a_position;
+attribute vec2 a_segmentStart;
+attribute vec2 a_segmentEnd;
+attribute vec2 a_joinAngles;
 uniform vec2  u_viewSize;
 uniform float u_halfWidth;
 uniform float u_miterLimit;
@@ -41,20 +39,17 @@ void main(){
   vec2 offset = n * a_position.y * u_halfWidth;
   float s = (a_position.x + 1.0) * 0.5;
   vec2 posPx = mix(startPx, endPx, s);
-
-  // (시작점에서만) 마이터 조인 처리
   if (s < 0.5) {
     float cosA = a_joinAngles.x, sinA = a_joinAngles.y;
     float miterLen = u_halfWidth / max(0.1, cosA);
     if (abs(miterLen) < u_miterLimit * u_halfWidth) {
-      // bisector = 회전된 노말
       vec2 bisector = normalize(vec2(
         n.x * cosA - n.y * sinA,
         n.x * sinA + n.y * cosA
       ));
       offset = bisector * a_position.y * miterLen;
     } else {
-      offset = n * a_position.y * u_halfWidth; // bevel fallback
+      offset = n * a_position.y * u_halfWidth;
     }
   }
   posPx += offset;
@@ -65,7 +60,6 @@ const fragmentShaderSource = `
 precision mediump float;
 void main(){ gl_FragColor = vec4(0.08,0.8,1.0,1.0); }`;
 
-// ======= 셰이더 컴파일 =======
 function compileShader(type, source) {
   const shader = gl.createShader(type);
   gl.shaderSource(shader, source);
@@ -80,7 +74,6 @@ gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource)
 gl.linkProgram(program);
 gl.useProgram(program);
 
-// ======= routeLL → 정규화, 세그먼트, 조인각 =======
 const routeLL = [
   [-122.48369693756104, 37.83381888486939],
   [-122.48348236083984, 37.83317489144141],
@@ -105,7 +98,7 @@ const routeLL = [
   [-122.49378204345702, 37.83368330777276],
 ];
 
-// 정규화: 0~1 범위로
+// 정규화: 0~1 범위
 function normalizeCoords(coords) {
   const lons = coords.map(p => p[0]);
   const lats = coords.map(p => p[1]);
@@ -118,10 +111,9 @@ function normalizeCoords(coords) {
 }
 const norm = normalizeCoords(routeLL);
 
-// 세그먼트 & 조인각 준비
+// interleaved: [sx,sy,ex,ey,cosA,sinA,...]
 const segCount = norm.length - 1;
-const segments = new Float32Array(segCount * 4);
-const joinAngles = new Float32Array(segCount * 2);
+const instanceData = new Float32Array(segCount * 6);
 
 function normalizeVec2(v) {
   const len = Math.hypot(v[0], v[1]);
@@ -133,9 +125,9 @@ function clamp(v, min, max) {
 for (let i = 0; i < segCount; i++) {
   const p0 = norm[i];
   const p1 = norm[i + 1];
-  segments.set(p0.concat(p1), i * 4);
+  instanceData.set(p0.concat(p1), i * 6);
 
-  // join angle: 이전 방향과 현 방향의 bisector
+  // join angle
   let cosA = 1.0, sinA = 0.0;
   if (i > 0) {
     const prev = norm[i - 1];
@@ -149,47 +141,50 @@ for (let i = 0; i < segCount; i++) {
     const cross = dir0[0]*dir1[1] - dir0[1]*dir1[0];
     if (cross < 0) sinA = -sinA;
   }
-  joinAngles.set([cosA, sinA], i * 2);
+  instanceData[i*6 + 4] = cosA;
+  instanceData[i*6 + 5] = sinA;
 }
 
-// ======= 쿼드 버퍼 (정적 4점) =======
+// 쿼드 버퍼 (정적 4점)
 const quadVerts = new Float32Array([
-  -1, -1, // 0: 좌하
-  -1,  1, // 1: 좌상
-   1, -1, // 2: 우하
-   1,  1, // 3: 우상
+  -1, -1,
+  -1,  1,
+   1, -1,
+   1,  1,
 ]);
 const quadBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, quadVerts, gl.STATIC_DRAW);
 
-// ======= 인덱스 =======
+// 인덱스
 const indices = new Uint16Array([0, 1, 2, 2, 1, 3]);
 const indexBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
 
-// ======= 인스턴스 버퍼 =======
-function bindInstancedBuffer(name, buf, size, stride, offset, divisor) {
+// ======= 인스턴스 버퍼 1개 =======
+const instanceBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+
+function bindInstancedAttrib(name, size, stride, offset) {
   const loc = gl.getAttribLocation(program, name);
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offset);
-  ext.vertexAttribDivisorANGLE(loc, divisor);
+  ext.vertexAttribDivisorANGLE(loc, 1);
 }
 
-const segBuf = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, segBuf);
-gl.bufferData(gl.ARRAY_BUFFER, segments, gl.STATIC_DRAW);
+// ======= attribute =======
+const a_position = gl.getAttribLocation(program, "a_position");
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+gl.enableVertexAttribArray(a_position);
+gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
+ext.vertexAttribDivisorANGLE(a_position, 0);
 
-const joinBuf = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, joinBuf);
-gl.bufferData(gl.ARRAY_BUFFER, joinAngles, gl.STATIC_DRAW);
-
-bindInstancedBuffer("a_position", quadBuffer, 2, 0, 0, 0);
-bindInstancedBuffer("a_segmentStart", segBuf, 2, 16, 0, 1);
-bindInstancedBuffer("a_segmentEnd", segBuf, 2, 16, 8, 1);
-bindInstancedBuffer("a_joinAngles", joinBuf, 2, 0, 0, 1);
+bindInstancedAttrib("a_segmentStart", 2, 24, 0);   // [sx,sy]
+bindInstancedAttrib("a_segmentEnd",   2, 24, 8);   // [ex,ey]
+bindInstancedAttrib("a_joinAngles",   2, 24, 16);  // [cosA,sinA]
 
 // ======= uniform =======
 gl.uniform2f(gl.getUniformLocation(program, "u_viewSize"), canvas.width, canvas.height);
