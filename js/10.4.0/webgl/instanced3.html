@@ -18,13 +18,8 @@
     <canvas id="gl"></canvas>
     <script>
       const canvas = document.getElementById("gl");
-      const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
-      const isGL2 = gl instanceof WebGL2RenderingContext;
-      const instEx = isGL2 ? null : gl.getExtension("ANGLE_instanced_arrays");
-      if (!isGL2 && !instEx) {
-        alert("ANGLE_instanced_arrays 확장 없음");
-        throw 0;
-      }
+      const gl = canvas.getContext("webgl");
+      const ext = gl.getExtension("ANGLE_instanced_arrays");
 
       // 1. 위경도 데이터
       const routeLL = [
@@ -65,9 +60,9 @@
       } // y축 뒤집기
 
       // 2. 셰이더(OL 스타일)
-      const VS = `
+      const vertexShaderSource = `
 precision mediump float;
-attribute vec2 a_extrude;        // (-1/1, -1/1) 쿼드
+attribute vec2 a_position;        // (-1/1, -1/1) 쿼드
 attribute vec2 a_segmentStart;   // 인스턴스: 선분 시작점(norm)
 attribute vec2 a_segmentEnd;     // 인스턴스: 선분 끝점(norm)
 attribute vec2 a_joinAngles;     // 인스턴스: 조인 각 (cosθ, sinθ)
@@ -81,9 +76,9 @@ void main(){
   vec2 t = normalize(endPx - startPx); // 방향
   vec2 n = vec2(-t.y, t.x);            // 노말
   // 2. offset (노말방향 두께)
-  vec2 offset = n * a_extrude.y * u_halfWidth;
+  vec2 offset = n * a_position.y * u_halfWidth;
   // 3. 조인 처리 (start= -1, end= +1)
-  float s = (a_extrude.x + 1.0) * 0.5;
+  float s = (a_position.x + 1.0) * 0.5;
   vec2 posPx = mix(startPx, endPx, s);
   // 4. (시작점에서만) 마이터 계산
   if (s < 0.5) {
@@ -96,9 +91,9 @@ void main(){
         n.x * cosA - n.y * sinA,
         n.x * sinA + n.y * cosA
       ));
-      offset = bisector * a_extrude.y * miterLen;
+      offset = bisector * a_position.y * miterLen;
     } else {
-      offset = n * a_extrude.y * u_halfWidth; // bevel fallback
+      offset = n * a_position.y * u_halfWidth; // bevel fallback
     }
   }
   posPx += offset;
@@ -106,154 +101,171 @@ void main(){
   clip.y = -clip.y;
   gl_Position = vec4(clip, 0.0, 1.0);
 }`;
-      const FS = `
+      const fragmentShaderSource = `
 precision mediump float;
 void main(){ gl_FragColor = vec4(0.08,0.8,1.0,1.0); }`;
 
       // 3. 셰이더 빌드
-      function compile(type, src) {
-        const s = gl.createShader(type);
-        gl.shaderSource(s, src);
-        gl.compileShader(s);
-        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
-          throw gl.getShaderInfoLog(s);
-        return s;
+      function compileShader(source, type) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          console.error("셰이더 컴파일 에러:", gl.getShaderInfoLog(shader));
+          gl.deleteShader(shader);
+          return null;
+        }
+        return shader;
       }
-      function link(vsSrc, fsSrc) {
-        const p = gl.createProgram();
-        gl.attachShader(p, compile(gl.VERTEX_SHADER, vsSrc));
-        gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc));
-        gl.bindAttribLocation(p, 0, "a_extrude");
-        gl.bindAttribLocation(p, 1, "a_segmentStart");
-        gl.bindAttribLocation(p, 2, "a_segmentEnd");
-        gl.bindAttribLocation(p, 3, "a_joinAngles");
-        gl.linkProgram(p);
-        if (!gl.getProgramParameter(p, gl.LINK_STATUS))
-          throw gl.getProgramInfoLog(p);
-        return p;
-      }
-      const prog = link(VS, FS);
-      gl.useProgram(prog);
+
+      const vertexShader = compileShader(vertexShaderSource, gl.VERTEX_SHADER);
+      const fragmentShader = compileShader(
+        fragmentShaderSource,
+        gl.FRAGMENT_SHADER
+      );
+
+      const program = gl.createProgram();
+      gl.attachShader(program, vertexShader);
+      gl.attachShader(program, fragmentShader);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS))
+        throw gl.getProgramInfoLog(program);
+
+      gl.useProgram(program);
 
       // 4. 정적 쿼드 + 인덱스
-      const quad = new Float32Array([-1, -1, -1, 1, 1, -1, 1, 1]);
-      const quadBuf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-      const indices = new Uint16Array([0, 1, 2, 1, 3, 2]);
-      const idxBuf = gl.createBuffer();
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+      const quadVertices = new Float32Array([
+        -1,
+        -1, // 0: 좌하단
+        -1,
+        1, // 1: 좌상단
+        1,
+        -1, // 2: 우하단
+        1,
+        1, // 3: 우상단
+      ]);
+      const quadVertexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+
+      const quadIndices = new Uint16Array([0, 1, 2, 2, 1, 3]);
+      const quadIndexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
 
       // 5. 인스턴스 버퍼(a_segmentStart, a_segmentEnd, a_joinAngles)
       const segCount = routeLL.length - 1;
-      const instData = new Float32Array(segCount * 6); // start(xy)+end(xy)+joinAngle(xy)
-      for (let i = 0; i < segCount; i++) {
-        const prev = i > 0 ? routeLL[i - 1] : routeLL[0];
-        const start = routeLL[i];
-        const end = routeLL[i + 1];
+      const instanceData = new Float32Array(segCount * 6); // start(xy)+end(xy)+joinAngle(xy)
+      function updateInstanceData() {
+        for (let i = 0; i < segCount; i++) {
+          const prev = i > 0 ? routeLL[i - 1] : routeLL[0];
+          const start = routeLL[i];
+          const end = routeLL[i + 1];
 
-        // 두 방향: 이전->시작, 시작->끝
-        const t0 = [
-          lonToX(start[0]) - lonToX(prev[0]),
-          latToY(start[1]) - latToY(prev[1]),
-        ];
-        const t1 = [
-          lonToX(end[0]) - lonToX(start[0]),
-          latToY(end[1]) - latToY(start[1]),
-        ];
-        // 방향 벡터 정규화
-        function norm(v) {
-          const d = Math.sqrt(v[0] * v[0] + v[1] * v[1]) || 1;
-          return [v[0] / d, v[1] / d];
+          // 두 방향: 이전->시작, 시작->끝
+          const t0 = [
+            lonToX(start[0]) - lonToX(prev[0]),
+            latToY(start[1]) - latToY(prev[1]),
+          ];
+          const t1 = [
+            lonToX(end[0]) - lonToX(start[0]),
+            latToY(end[1]) - latToY(start[1]),
+          ];
+          // 방향 벡터 정규화
+          function norm(v) {
+            const d = Math.sqrt(v[0] * v[0] + v[1] * v[1]) || 1;
+            return [v[0] / d, v[1] / d];
+          }
+          const n0 = norm([-t0[1], t0[0]]);
+          const n1 = norm([-t1[1], t1[0]]);
+          // 두 노말 사이 각 (n0·n1, cross 등으로)
+          const cosA = n0[0] * n1[0] + n0[1] * n1[1];
+          const sinA = n0[0] * n1[1] - n0[1] * n1[0];
+
+          instanceData.set(
+            [
+              lonToX(start[0]),
+              latToY(start[1]),
+              lonToX(end[0]),
+              latToY(end[1]),
+              cosA,
+              sinA,
+            ],
+            i * 6
+          );
         }
-        const n0 = norm([-t0[1], t0[0]]);
-        const n1 = norm([-t1[1], t1[0]]);
-        // 두 노말 사이 각 (n0·n1, cross 등으로)
-        const cosA = n0[0] * n1[0] + n0[1] * n1[1];
-        const sinA = n0[0] * n1[1] - n0[1] * n1[0];
-
-        instData.set(
-          [
-            lonToX(start[0]),
-            latToY(start[1]),
-            lonToX(end[0]),
-            latToY(end[1]),
-            cosA,
-            sinA,
-          ],
-          i * 6
-        );
       }
-      const instBuf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, instData, gl.STATIC_DRAW);
+      updateInstanceData();
+      const instanceBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+      // ★ 최초 한 번만 bufferData로 크기 할당!
+      gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
 
-      // 6. VAO & attribute
-      const vao = gl.createVertexArray ? gl.createVertexArray() : null;
-      if (vao) gl.bindVertexArray(vao);
+      // 6. Attribute location 조회
+      const locPosition = gl.getAttribLocation(program, "a_position");
+      const locSegStart = gl.getAttribLocation(program, "a_segmentStart");
+      const locSegEnd = gl.getAttribLocation(program, "a_segmentEnd");
+      const locJoinAngles = gl.getAttribLocation(program, "a_joinAngles");
+
       // 6-1. 고정 쿼드
-      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+      gl.enableVertexAttribArray(locPosition);
+      gl.vertexAttribPointer(locPosition, 2, gl.FLOAT, false, 0, 0);
+
       // 6-2. 인스턴스: a_segmentStart, a_segmentEnd, a_joinAngles
-      gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
-      gl.enableVertexAttribArray(1);
-      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 24, 0);
-      gl.enableVertexAttribArray(2);
-      gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 24, 8);
-      gl.enableVertexAttribArray(3);
-      gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 24, 16);
-      if (isGL2) {
-        gl.vertexAttribDivisor(1, 1);
-        gl.vertexAttribDivisor(2, 1);
-        gl.vertexAttribDivisor(3, 1);
-      } else {
-        instEx.vertexAttribDivisorANGLE(1, 1);
-        instEx.vertexAttribDivisorANGLE(2, 1);
-        instEx.vertexAttribDivisorANGLE(3, 1);
-      }
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
-      if (vao) gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+      gl.enableVertexAttribArray(locSegStart);
+      gl.vertexAttribPointer(locSegStart, 2, gl.FLOAT, false, 24, 0);
+      gl.enableVertexAttribArray(locSegEnd);
+      gl.vertexAttribPointer(locSegEnd, 2, gl.FLOAT, false, 24, 8);
+      gl.enableVertexAttribArray(locJoinAngles);
+      gl.vertexAttribPointer(locJoinAngles, 2, gl.FLOAT, false, 24, 16);
+
+      ext.vertexAttribDivisorANGLE(locSegStart, 1);
+      ext.vertexAttribDivisorANGLE(locSegEnd, 1);
+      ext.vertexAttribDivisorANGLE(locJoinAngles, 1);
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
 
       // 7. uniform & 렌더
-      const uViewSize = gl.getUniformLocation(prog, "u_viewSize");
-      const uHalfWidth = gl.getUniformLocation(prog, "u_halfWidth");
-      const uMiterLimit = gl.getUniformLocation(prog, "u_miterLimit");
+      const uViewSize = gl.getUniformLocation(program, "u_viewSize");
+      const uHalfWidth = gl.getUniformLocation(program, "u_halfWidth");
+      const uMiterLimit = gl.getUniformLocation(program, "u_miterLimit");
       function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         gl.viewport(0, 0, canvas.width, canvas.height);
         gl.uniform2f(uViewSize, canvas.width, canvas.height);
       }
-      window.addEventListener("resize", resize);
+      window.addEventListener("resize", () => {
+        resize();
+        render();
+      });
       resize();
       gl.uniform1f(uHalfWidth, 6.0);
       gl.uniform1f(uMiterLimit, 4.0);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      function draw() {
-        if (vao) gl.bindVertexArray(vao);
-        if (isGL2) {
-          gl.drawElementsInstanced(
-            gl.TRIANGLES,
-            6,
-            gl.UNSIGNED_SHORT,
-            0,
-            segCount
-          );
-        } else {
-          instEx.drawElementsInstancedANGLE(
-            gl.TRIANGLES,
-            6,
-            gl.UNSIGNED_SHORT,
-            0,
-            segCount
-          );
-        }
-        if (vao) gl.bindVertexArray(null);
+
+      // ★ render 함수: 매번 instanceData 값을 바꾸면 buffersubdata로 값만 반영
+      function render() {
+        // 예시: 매번 값이 바뀌는 상황(없다면 이 라인은 실전에서 옵션)
+        // updateInstanceData();
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, instanceData);
+
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        ext.drawElementsInstancedANGLE(
+          gl.TRIANGLES,
+          6,
+          gl.UNSIGNED_SHORT,
+          0,
+          segCount
+        );
       }
-      draw();
+
+      render();
     </script>
   </body>
 </html>
