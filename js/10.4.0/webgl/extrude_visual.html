@@ -2,44 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Polyline Extrude – α-조절 채움</title>
+    <title>Polyline Extrude – join / cap 시각화</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
       body {
         background: #161625;
         color: #eee;
         font-family: sans-serif;
+        margin: 0;
+        padding: 16px;
+      }
+      h2 {
+        margin: 0 0 8px;
       }
       canvas {
+        display: block;
         border: 1px solid #4cc9f0;
         background: #232343;
-      }
-      .note {
-        margin: 10px 0;
-      }
-      .dump {
-        font-size: 13px;
-        background: #222;
-        color: #eee;
-        padding: 8px;
-        margin: 12px 0;
-        white-space: pre;
       }
       label {
         margin-right: 14px;
       }
+      .note {
+        margin: 10px 0;
+      }
     </style>
   </head>
   <body>
-    <h2>두꺼운 라인 Extrude 계산/시각화</h2>
+    <h2>두꺼운 라인 Extrude (join / cap 확인)</h2>
     <div class="note">
-      파란 선: 원본 | 초록: 법선 |
-      <span style="color: #fa4242">빨강: extrusion</span> (채움 투명도 조절)<br />
-      miter / bevel / round + α 슬라이더로 확인해 보세요.
+      파란 선: 원본 ｜ 초록: 법선 ｜
+      <span style="color: #fa4242">빨강: extrude</span> (α 조절)
     </div>
 
     <canvas id="c" width="800" height="400"></canvas>
-    <div class="dump" id="dump"></div>
 
     <label
       >두께
@@ -55,13 +51,21 @@
       </select>
     </label>
     <label
+      >캡
+      <select id="capSel">
+        <option value="butt">butt</option>
+        <option value="square">square</option>
+        <option value="round">round</option>
+      </select>
+    </label>
+    <label
       >채움 α
       <input id="aSlider" type="range" min="0" max="100" value="30" />
       <span id="aVal">30</span> %
     </label>
 
     <script>
-      /* ─── 1. 경위도 → 캔버스 좌표 ─── */
+      /* ───────── 1. 경위도 → 캔버스 좌표 ───────── */
       const raw = [
         [-122.48369693756104, 37.83381888486939],
         [-122.48348236083984, 37.83317489144141],
@@ -100,110 +104,133 @@
       ];
       const poly = raw.map(proj);
 
-      /* ─── 2. 벡터 유틸 ─── */
+      /* ───────── 2. 벡터 유틸 ───────── */
       const sub = (a, b) => [a[0] - b[0], a[1] - b[1]],
-        add = (a, b) => [a[0] + b[0], a[1] + b[1]];
-      const len = (v) => Math.hypot(v[0], v[1]),
+        add = (a, b) => [a[0] + b[0], a[1] + b[1]],
+        len = (v) => Math.hypot(v[0], v[1]),
         norm = (v) => {
           const l = len(v);
           return l ? [v[0] / l, v[1] / l] : [0, 0];
-        };
-      const perp = (v) => [-v[1], v[0]],
+        },
+        perp = (v) => [-v[1], v[0]],
         scale = (v, s) => [v[0] * s, v[1] * s];
 
-      /* ─── 3. miter ─── */
-      function miterExtrude(pl, th) {
-        const r = th / 2,
-          L = pl.length,
-          left = [],
-          right = [],
-          dump = [];
-        for (let i = 0; i < L; i++) {
-          const n0 =
-            i > 0
-              ? norm(perp(sub(pl[i], pl[i - 1])))
-              : norm(perp(sub(pl[i + 1], pl[i])));
-          const n1 =
-            i < L - 1
-              ? norm(perp(sub(pl[i + 1], pl[i])))
-              : norm(perp(sub(pl[i], pl[i - 1])));
-          let nx = (n0[0] + n1[0]) * 0.5,
-            ny = (n0[1] + n1[1]) * 0.5;
-          const nlen = len([nx, ny]);
-          if (nlen > 1e-4) {
-            nx /= nlen;
-            ny /= nlen;
+      /* ───────── 3. Extrude Path 생성 (join + cap) ───────── */
+      function buildPath(pl, r, join, cap) {
+        const nSeg = [],
+          L = pl.length;
+        for (let i = 0; i < L - 1; i++)
+          nSeg.push(norm(perp(sub(pl[i + 1], pl[i]))));
+        const path = new Path2D();
+
+        /* --- 왼쪽 --- */
+        path.moveTo(...add(pl[0], scale(nSeg[0], r)));
+        for (let i = 1; i < L - 1; i++) {
+          const n0 = nSeg[i - 1],
+            n1 = nSeg[i];
+          if (join === "miter") {
+            let nx = n0[0] + n1[0],
+              ny = n0[1] + n1[1];
+            const l = len([nx, ny]);
+            if (l > 1e-4) {
+              nx /= l;
+              ny /= l;
+            }
+            const m = r / Math.max(nx * n0[0] + ny * n0[1], 0.5);
+            path.lineTo(pl[i][0] + nx * m, pl[i][1] + ny * m);
+          } else if (join === "bevel") {
+            path.lineTo(...add(pl[i], scale(n0, r)));
+            path.lineTo(...add(pl[i], scale(n1, r)));
+          } else {
+            // round
+            const a0 = Math.atan2(n0[1], n0[0]),
+              a1 = Math.atan2(n1[1], n1[0]);
+            path.arc(
+              pl[i][0],
+              pl[i][1],
+              r,
+              a0,
+              a1,
+              n0[0] * n1[1] - n0[1] * n1[0] < 0
+            );
           }
-          const m = r / Math.max(nx * n0[0] + ny * n0[1], 0.5);
-          const l = add(pl[i], scale([nx, ny], m)),
-            rPt = add(pl[i], scale([nx, ny], -m));
-          left.push(l);
-          right.push(rPt);
-          dump.push({ base: pl[i], l, r: rPt });
         }
-        return { left, right, dump };
+        path.lineTo(...add(pl[L - 1], scale(nSeg[L - 2], r)));
+
+        /* --- 끝(cap) --- */
+        const dirEnd = norm(sub(pl[L - 1], pl[L - 2]));
+        const lEnd = add(pl[L - 1], scale(nSeg[L - 2], r)),
+          rEnd = add(pl[L - 1], scale(nSeg[L - 2], -r));
+        if (cap === "square") {
+          const sh = scale(dirEnd, r);
+          path.lineTo(lEnd[0] + sh[0], lEnd[1] + sh[1]);
+          path.lineTo(rEnd[0] + sh[0], rEnd[1] + sh[1]);
+        } else if (cap === "round") {
+          const aL = Math.atan2(lEnd[1] - pl[L - 1][1], lEnd[0] - pl[L - 1][0]),
+            aR = Math.atan2(rEnd[1] - pl[L - 1][1], rEnd[0] - pl[L - 1][0]);
+          /* anticlockwise=true ⟹ 외곽으로 반원 */
+          path.arc(pl[L - 1][0], pl[L - 1][1], r, aL, aR, true);
+        }
+        path.lineTo(...rEnd);
+
+        /* --- 오른쪽(역순) --- */
+        for (let i = L - 2; i >= 1; i--) {
+          const n0 = nSeg[i],
+            n1 = nSeg[i - 1];
+          if (join === "miter") {
+            let nx = n0[0] + n1[0],
+              ny = n0[1] + n1[1];
+            const l = len([nx, ny]);
+            if (l > 1e-4) {
+              nx /= l;
+              ny /= l;
+            }
+            const m = r / Math.max(nx * n0[0] + ny * n0[1], 0.5);
+            path.lineTo(pl[i][0] - nx * m, pl[i][1] - ny * m);
+          } else if (join === "bevel") {
+            path.lineTo(...add(pl[i], scale(n0, -r)));
+            path.lineTo(...add(pl[i], scale(n1, -r)));
+          } else {
+            // round
+            const nn0 = [-n0[0], -n0[1]],
+              nn1 = [-n1[0], -n1[1]];
+            const a0 = Math.atan2(nn0[1], nn0[0]),
+              a1 = Math.atan2(nn1[1], nn1[0]);
+            path.arc(
+              pl[i][0],
+              pl[i][1],
+              r,
+              a0,
+              a1,
+              nn0[0] * nn1[1] - nn0[1] * nn1[0] < 0
+            );
+          }
+        }
+        path.lineTo(...add(pl[0], scale(nSeg[0], -r)));
+
+        /* --- 시작(cap) --- */
+        const dirStart = norm(sub(pl[1], pl[0]));
+        const rStart = add(pl[0], scale(nSeg[0], r)),
+          lStart = add(pl[0], scale(nSeg[0], -r));
+        if (cap === "square") {
+          const sh = scale(dirStart, -r);
+          path.lineTo(lStart[0] + sh[0], lStart[1] + sh[1]);
+          path.lineTo(rStart[0] + sh[0], rStart[1] + sh[1]);
+        } else if (cap === "round") {
+          const aR = Math.atan2(rStart[1] - pl[0][1], rStart[0] - pl[0][0]),
+            aL = Math.atan2(lStart[1] - pl[0][1], lStart[0] - pl[0][0]);
+          path.arc(pl[0][0], pl[0][1], r, aR, aL, false);
+        }
+        path.closePath();
+        return path;
       }
 
-      /* ─── 4. bevel-/round ─── */
-      function bevelPath(pl, r) {
-        const p = new Path2D(),
-          n = [];
-        for (let i = 0; i < pl.length - 1; i++)
-          n.push(norm(perp(sub(pl[i + 1], pl[i]))));
-        p.moveTo(...add(pl[0], scale(n[0], r)));
-        for (let i = 1; i < pl.length; i++) {
-          const nPrev = n[i - 1],
-            nNext = i < n.length ? n[i] : n[i - 1],
-            P = pl[i];
-          p.lineTo(...add(P, scale(nPrev, r)));
-          p.lineTo(...add(P, scale(nNext, r)));
-        }
-        p.lineTo(...add(pl[pl.length - 1], scale(n[n.length - 1], -r)));
-        for (let i = pl.length - 2; i >= 0; i--) {
-          const nPrev = n[i],
-            nNext = i > 0 ? n[i - 1] : n[0],
-            P = pl[i];
-          p.lineTo(...add(P, scale(nPrev, -r)));
-          p.lineTo(...add(P, scale(nNext, -r)));
-        }
-        p.closePath();
-        return p;
-      }
-      function roundPath(pl, r) {
-        const p = new Path2D(),
-          n = [];
-        for (let i = 0; i < pl.length - 1; i++)
-          n.push(norm(perp(sub(pl[i + 1], pl[i]))));
-        p.moveTo(...add(pl[0], scale(n[0], r)));
-        for (let i = 1; i < pl.length; i++) {
-          const n0 = n[i - 1],
-            n1 = i < n.length ? n[i] : n[i - 1],
-            P = pl[i];
-          const a0 = Math.atan2(n0[1], n0[0]),
-            a1 = Math.atan2(n1[1], n1[0]);
-          p.arc(P[0], P[1], r, a0, a1, n0[0] * n1[1] - n0[1] * n1[0] < 0);
-        }
-        p.lineTo(...add(pl[pl.length - 1], scale(n[n.length - 1], -r)));
-        for (let i = pl.length - 2; i >= 0; i--) {
-          const n0 = n[i],
-            n1 = i > 0 ? n[i - 1] : n[0],
-            P = pl[i],
-            nn0 = [-n0[0], -n0[1]],
-            nn1 = [-n1[0], -n1[1]];
-          const a0 = Math.atan2(nn0[1], nn0[0]),
-            a1 = Math.atan2(nn1[1], nn1[0]);
-          p.arc(P[0], P[1], r, a0, a1, nn0[0] * nn1[1] - nn0[1] * nn1[0] < 0);
-        }
-        p.closePath();
-        return p;
-      }
-
-      /* ─── 5. 그리기 ─── */
+      /* ───────── 4. 그리기 ───────── */
       const ctx = document.getElementById("c").getContext("2d");
-      function draw(th, mode, alpha) {
+      function draw(th, join, cap, alpha) {
         ctx.clearRect(0, 0, W, H);
 
-        /* 원본 폴리라인 */
+        /* 원본 경로 */
         ctx.strokeStyle = "#4cc9f0";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -211,11 +238,11 @@
         poly.slice(1).forEach((p) => ctx.lineTo(...p));
         ctx.stroke();
 
-        /* 노멀 */
+        /* 노멀 시각화 */
         ctx.strokeStyle = "#57fc98";
         ctx.lineWidth = 2;
         poly.forEach((p, i) => {
-          const n0 =
+          const n =
             i > 0
               ? norm(perp(sub(p, poly[i - 1])))
               : norm(perp(sub(poly[i + 1], p)));
@@ -223,8 +250,8 @@
             i < poly.length - 1
               ? norm(perp(sub(poly[i + 1], p)))
               : norm(perp(sub(p, poly[i - 1])));
-          let nx = (n0[0] + n1[0]) * 0.5,
-            ny = (n0[1] + n1[1]) * 0.5,
+          let nx = (n[0] + n1[0]) * 0.5,
+            ny = (n[1] + n1[1]) * 0.5,
             l = len([nx, ny]);
           if (l > 1e-4) {
             nx /= l;
@@ -236,39 +263,15 @@
           ctx.stroke();
         });
 
-        /* extrusion 채움/외곽선 */
+        /* Extrude */
+        const path = buildPath(poly, th / 2, join, cap);
+        ctx.fillStyle = `rgba(250,66,66,${alpha})`;
+        if (alpha > 0) ctx.fill(path);
+        ctx.strokeStyle = "#fa4242";
         ctx.lineWidth = 2;
-        const r = th / 2,
-          fill = `rgba(250,66,66,${alpha})`;
-        if (mode === "miter") {
-          const { left, right } = miterExtrude(poly, th);
-          const path = new Path2D();
-          path.moveTo(...left[0]);
-          left.slice(1).forEach((p) => path.lineTo(...p));
-          right
-            .slice()
-            .reverse()
-            .forEach((p) => path.lineTo(...p));
-          path.closePath();
-          ctx.fillStyle = fill;
-          if (alpha > 0) ctx.fill(path);
-          ctx.strokeStyle = "#fa4242";
-          ctx.stroke(path);
-        } else if (mode === "bevel") {
-          const path = bevelPath(poly, r);
-          ctx.fillStyle = fill;
-          if (alpha > 0) ctx.fill(path);
-          ctx.strokeStyle = "#fa4242";
-          ctx.stroke(path);
-        } else {
-          const path = roundPath(poly, r);
-          ctx.fillStyle = fill;
-          if (alpha > 0) ctx.fill(path);
-          ctx.strokeStyle = "#fa4242";
-          ctx.stroke(path);
-        }
+        ctx.stroke(path);
 
-        /* 원본 점 인덱스 */
+        /* 점 인덱스 */
         ctx.fillStyle = "#36b6ff";
         poly.forEach((p, i) => {
           ctx.beginPath();
@@ -280,19 +283,23 @@
         });
       }
 
-      /* ─── 6. UI 업데이트 ─── */
+      /* ───────── 5. UI ───────── */
       const wS = document.getElementById("wSlider"),
-        aS = document.getElementById("aSlider");
-      const wV = document.getElementById("wVal"),
-        aV = document.getElementById("aVal"),
-        sel = document.getElementById("joinSel");
-      function upd() {
+        aS = document.getElementById("aSlider"),
+        joinSel = document.getElementById("joinSel"),
+        capSel = document.getElementById("capSel"),
+        wV = document.getElementById("wVal"),
+        aV = document.getElementById("aVal");
+
+      function update() {
         wV.textContent = wS.value;
         aV.textContent = aS.value;
-        draw(+wS.value, sel.value, +aS.value / 100);
+        draw(+wS.value, joinSel.value, capSel.value, +aS.value / 100);
       }
-      [wS, aS, sel].forEach((el) => el.addEventListener("input", upd));
-      upd(); /* 첫 렌더 */
+      [wS, aS, joinSel, capSel].forEach((el) =>
+        el.addEventListener("input", update)
+      );
+      update(); // 첫 렌더
     </script>
   </body>
 </html>
