@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPS 경로 라인 렌더링</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 20px;
+        background: #1a1a1a;
+        color: white;
+        font-family: monospace;
+      }
+      canvas {
+        border: 1px solid #444;
+        display: block;
+        margin: 20px auto;
+        background: #2a2a2a;
+      }
+      .controls {
+        text-align: center;
+        margin: 20px;
+      }
+      input[type="range"] {
+        width: 200px;
+        margin: 0 10px;
+      }
+      label {
+        display: inline-block;
+        width: 100px;
+        text-align: right;
+      }
+      .info {
+        text-align: center;
+        margin: 10px;
+        color: #aaa;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <div>
+        <label>라인 두께:</label>
+        <input
+          type="range"
+          id="thickness"
+          min="1"
+          max="50"
+          value="15"
+          step="0.5"
+        />
+        <span id="thicknessValue">15</span>px
+      </div>
+    </div>
+
+    <canvas id="canvas" width="900" height="700"></canvas>
+
+    <div class="info">
+      <p>샌프란시스코 GPS 경로 데이터 (21개 포인트)</p>
+    </div>
+
+    <script>
+      // GPS 좌표 데이터 (경도, 위도)
+      const gpsCoordinates = [
+        [-122.48369693756104, 37.83381888486939],
+        [-122.48348236083984, 37.83317489144141],
+        [-122.48339653015138, 37.83270036637107],
+        [-122.48356819152832, 37.832056363179625],
+        [-122.48404026031496, 37.83114119107971],
+        [-122.48404026031496, 37.83049717427869],
+        [-122.48348236083984, 37.829920943955045],
+        [-122.48356819152832, 37.82954808664175],
+        [-122.48507022857666, 37.82944639795659],
+        [-122.48610019683838, 37.82880236636284],
+        [-122.48695850372314, 37.82931081282506],
+        [-122.48700141906738, 37.83080223556934],
+        [-122.48751640319824, 37.83168351665737],
+        [-122.48803138732912, 37.832158048267786],
+        [-122.48888969421387, 37.83297152392784],
+        [-122.48987674713133, 37.83263257682617],
+        [-122.49043464660643, 37.832937629287755],
+        [-122.49125003814696, 37.832429207817725],
+        [-122.49163627624512, 37.832564787218985],
+        [-122.49223709106445, 37.83337825839438],
+        [-122.49378204345702, 37.83368330777276],
+      ];
+
+      // 정점 셰이더 (vertexShaderSource2 방식)
+      const vertexShaderSource = `
+          attribute vec2 a_position;        // (-1~1, -1~1) 쿼드
+          attribute vec2 a_segmentStart;    // 인스턴스: 선분 시작점 (정규화 [0,1])
+          attribute vec2 a_segmentEnd;      // 인스턴스: 선분 끝점   (정규화 [0,1])
+
+          uniform vec2 u_viewSize;          // (캔버스 width, height)
+          uniform float u_halfWidth;        // 라인 두께/2 [픽셀]
+          void main(){
+              // 1. 화면좌표(픽셀)로 변환
+              vec2 startPx = a_segmentStart * u_viewSize;
+              vec2 endPx   = a_segmentEnd * u_viewSize;
+              vec2 t = normalize(endPx - startPx); // 방향
+              vec2 n = vec2(-t.y, t.x);            // 노말
+
+              // 2. offset (노말방향 두께)
+              vec2 offset = n * a_position.y * u_halfWidth;
+
+              // 3. 라인 보간
+              float s = (a_position.x + 1.0) * 0.5;
+              vec2 posPx = mix(startPx, endPx, s) + offset;
+
+              // 4. NDC 변환
+              vec2 clip = posPx / u_viewSize * 2.0 - 1.0;
+              clip.y = -clip.y;
+              gl_Position = vec4(clip, 0.0, 1.0);
+          }
+    `;
+
+      // 프래그먼트 셰이더
+      const fragmentShaderSource = `
+        precision mediump float;
+        uniform vec3 u_color;
+        void main() {
+            gl_FragColor = vec4(u_color, 1.0);
+        }
+        `;
+
+      // WebGL 초기화
+      const canvas = document.getElementById("canvas");
+      const gl = canvas.getContext("webgl");
+      if (!gl) {
+        alert("WebGL을 지원하지 않습니다.");
+      }
+
+      // 셰이더 컴파일 및 프로그램 생성 함수들
+      function compileShader(source, type) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          console.error("셰이더 컴파일 에러:", gl.getShaderInfoLog(shader));
+          gl.deleteShader(shader);
+          return null;
+        }
+        return shader;
+      }
+
+
+      // 셰이더와 프로그램 생성
+      const vertexShader = compileShader(
+        vertexShaderSource,
+        gl.VERTEX_SHADER
+      );
+      const fragmentShader = compileShader(
+        fragmentShaderSource,        
+        gl.FRAGMENT_SHADER
+      );
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error("프로그램 링크 에러:", gl.getProgramInfoLog(program));
+        }      
+
+      // 속성과 유니폼 위치 가져오기
+      const locations = {
+        attributes: {
+          position: gl.getAttribLocation(program, "a_position"),
+          segmentStart: gl.getAttribLocation(program, "a_segmentStart"),
+          segmentEnd: gl.getAttribLocation(program, "a_segmentEnd"),
+        },
+        uniforms: {
+          viewSize: gl.getUniformLocation(program, "u_viewSize"),
+          halfWidth: gl.getUniformLocation(program, "u_halfWidth"),
+          color: gl.getUniformLocation(program, "u_color"),
+        },
+      };
+
+      // GPS 좌표 → [0,1] 정규화 화면좌표 변환 (픽셀 변환 없이 정규화만)
+      function gpsToScreenNorm(coords) {
+        const lons = coords.map((coord) => coord[0]);
+        const lats = coords.map((coord) => coord[1]);
+        const minLon = Math.min(...lons);
+        const maxLon = Math.max(...lons);
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
+        const lonRange = maxLon - minLon;
+        const latRange = maxLat - minLat;
+
+        const margin = 50;
+        return coords.map((coord) => {
+          const x = (coord[0] - minLon) / lonRange;
+          // ↓ y축 반전 처리
+          const y = 1.0 - (coord[1] - minLat) / latRange;
+          return [x, y];
+        });
+      }
+
+      // 실제 margin을 적용해서 셰이더에서 변환되도록 보정
+      function getViewSizeAndMargin() {
+        const margin = 50;
+        return {
+          viewWidth: canvas.width - margin * 2,
+          viewHeight: canvas.height - margin * 2,
+          margin,
+        };
+      }
+
+      // 라인 세그먼트 생성 (정규화좌표)
+      let normCoordinates = gpsToScreenNorm(gpsCoordinates);
+      let lines = [];
+      function createLinesFromPath() {
+        lines = [];
+        for (let i = 0; i < normCoordinates.length - 1; i++) {
+          const start = normCoordinates[i];
+          const end = normCoordinates[i + 1];
+          lines.push({ start, end });
+        }
+      }
+
+      // 버텍스/인덱스 버퍼 (쿼드)
+      const quadVertices = new Float32Array([
+            -1, -1,  // 왼쪽 아래
+             1, -1,  // 오른쪽 아래
+            -1,  1,  // 왼쪽 위
+             1,  1   // 오른쪽 위
+        ]);
+      const quadIndices = new Uint16Array([0, 1, 2, 2, 1, 3]);
+      const quadVertexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+      const quadIndexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
+
+      // 인스턴스 데이터를 위한 버퍼들
+      const segmentStartBuffer = gl.createBuffer();
+      const segmentEndBuffer = gl.createBuffer();
+
+      // 인스턴스 데이터 업데이트
+      function updateInstanceData() {
+        const startData = new Float32Array(lines.length * 2);
+        const endData = new Float32Array(lines.length * 2);
+        lines.forEach((line, i) => {
+          startData[i * 2] = line.start[0];
+          startData[i * 2 + 1] = line.start[1];
+          endData[i * 2] = line.end[0];
+          endData[i * 2 + 1] = line.end[1];
+        });
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, segmentStartBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, startData, gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, segmentEndBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, endData, gl.DYNAMIC_DRAW);
+      }
+
+      // 라인 스타일 유니폼 (초기값)
+      let uniformThickness = 15.0;
+      let uniformColor = [1, 0, 0];
+
+      // 렌더링 함수
+      function render() {
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(0.05, 0.05, 0.1, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.useProgram(program);
+
+        // margin을 뷰포트에 직접 적용: (실좌표 = 정규화좌표 * viewSize + margin)
+        const { viewWidth, viewHeight, margin } = getViewSizeAndMargin();
+
+        // 유니폼 세팅
+        gl.uniform2f(locations.uniforms.viewSize, viewWidth, viewHeight);
+        gl.uniform1f(locations.uniforms.halfWidth, uniformThickness * 0.5);
+        gl.uniform3fv(locations.uniforms.color, uniformColor);
+
+        // 쿼드 버텍스
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+        gl.enableVertexAttribArray(locations.attributes.position);
+        gl.vertexAttribPointer(
+          locations.attributes.position,
+          2,
+          gl.FLOAT,
+          false,
+          0,
+          0
+        );
+
+        const ext = gl.getExtension("ANGLE_instanced_arrays");
+        // 인스턴스 start
+        gl.bindBuffer(gl.ARRAY_BUFFER, segmentStartBuffer);
+        gl.enableVertexAttribArray(locations.attributes.segmentStart);
+        gl.vertexAttribPointer(
+          locations.attributes.segmentStart,
+          2,
+          gl.FLOAT,
+          false,
+          0,
+          0
+        );
+        ext.vertexAttribDivisorANGLE(locations.attributes.segmentStart, 1);
+
+        // 인스턴스 end
+        gl.bindBuffer(gl.ARRAY_BUFFER, segmentEndBuffer);
+        gl.enableVertexAttribArray(locations.attributes.segmentEnd);
+        gl.vertexAttribPointer(
+          locations.attributes.segmentEnd,
+          2,
+          gl.FLOAT,
+          false,
+          0,
+          0
+        );
+        ext.vertexAttribDivisorANGLE(locations.attributes.segmentEnd, 1);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        // margin 보정용: viewport를 margin만큼 시프트 (scissor도 가능)
+        gl.viewport(margin, margin, viewWidth, viewHeight);
+
+        ext.drawElementsInstancedANGLE(
+          gl.TRIANGLES,
+          6,
+          gl.UNSIGNED_SHORT,
+          0,
+          lines.length
+        );
+
+        // 원래 viewport로 복원
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+
+      // 초기화
+      createLinesFromPath();
+      updateInstanceData();
+
+      // 컨트롤 이벤트
+      const thicknessSlider = document.getElementById("thickness");
+      const thicknessValue = document.getElementById("thicknessValue");
+
+      thicknessSlider.addEventListener("input", (e) => {
+        uniformThickness = parseFloat(e.target.value);
+        thicknessValue.textContent = uniformThickness;
+        render();
+      });
+
+      // 창 크기 변경 시 자동 리스케일
+      window.addEventListener("resize", () => {
+        canvas.width = 900;
+        canvas.height = 700;
+        normCoordinates = gpsToScreenNorm(gpsCoordinates);
+        createLinesFromPath();
+        updateInstanceData();
+        render();
+      });
+
+      // 초기 렌더링
+      render();
+    </script>
+  </body>
+</html>
