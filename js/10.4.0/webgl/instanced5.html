@@ -268,7 +268,6 @@ gl.uniform2f(gl.getUniformLocation(program, "u_viewSize"), canvas.width, canvas.
 
 
 // ========== 그리기 (동일) ==========
-gl.clear(gl.COLOR_BUFFER_BIT);
 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
 ext.drawElementsInstancedANGLE(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, segCount);
 </script>
