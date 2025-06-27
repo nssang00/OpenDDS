@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>Instanced Polyline with Dash</title>
+  <title>Instanced Polyline with Dash (a_id, v_hitColor 추가)</title>
   <style>
     html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
   </style>
@@ -31,10 +31,22 @@ attribute vec2 a_position;
 attribute float a_distanceStart;
 attribute float a_distanceEnd;
 attribute vec2 a_joinAngles;
+attribute float a_id;
 uniform vec2  u_viewSize;
 uniform float u_halfWidth;
 uniform float u_miterLimit;
 varying float v_dist;
+varying vec4 v_hitColor;
+
+vec4 colorEncodeId(float id) {
+  float radix = 256.0;
+  float r = floor(id / (radix * radix * radix));
+  float g = floor(mod(id / (radix * radix), radix));
+  float b = floor(mod(id / radix, radix));
+  float a = floor(mod(id, radix));
+  return vec4(r, g, b, a) / 255.0;
+}
+
 void main(){
   vec2 startPx = a_segmentStart * u_viewSize;
   vec2 endPx   = a_segmentEnd * u_viewSize;
@@ -64,12 +76,14 @@ void main(){
 
   // 대시/패턴을 위한 거리 보간
   v_dist = mix(a_distanceStart, a_distanceEnd, s);
+  v_hitColor = colorEncodeId(a_id);
 }`;
 
 // ───── Fragment Shader (Dash/Pattern 지원) ─────
 const fragmentShaderSource = `
 precision mediump float;
 varying float v_dist;
+varying vec4 v_hitColor;
 uniform float u_dashLength;
 uniform float u_gapLength;
 uniform bool u_usePattern;
@@ -154,9 +168,9 @@ for (let i = 1; i < norm.length; i++) {
   distances.push(totalLen);
 }
 
-// 인스턴스 데이터 생성 (버퍼순서: start, end, distStart, distEnd, joinAngles)
+// 인스턴스 데이터 생성 (버퍼순서: start, end, distStart, distEnd, joinAngles, id)
 const segCount = norm.length - 1;
-const instanceData = new Float32Array(segCount * 8);
+const instanceData = new Float32Array(segCount * 9);
 
 function normalizeVec2(v) {
   const len = Math.hypot(v[0], v[1]);
@@ -187,8 +201,9 @@ for (let i = 0; i < segCount; i++) {
     p0[0], p0[1],              // a_segmentStart
     p1[0], p1[1],              // a_segmentEnd
     distances[i], distances[i+1], // a_distanceStart, a_distanceEnd
-    cosA, sinA                 // a_joinAngles
-  ], i * 8);
+    cosA, sinA,                // a_joinAngles
+    i                          // a_id (추가)
+  ], i * 9);
 }
 
 // 쿼드 정점 (고정, a_position용)
@@ -229,13 +244,14 @@ function bindQuadAttrib(name) {
   ext.vertexAttribDivisorANGLE(loc, 0);
 }
 
-// 순서대로 바인딩!
-bindInstancedAttrib("a_segmentStart", 2, 32, 0);    // sx,sy
-bindInstancedAttrib("a_segmentEnd",   2, 32, 8);    // ex,ey
+// stride: 9 floats * 4 bytes = 36
+bindInstancedAttrib("a_segmentStart", 2, 36, 0);    // sx,sy
+bindInstancedAttrib("a_segmentEnd",   2, 36, 8);    // ex,ey
 bindQuadAttrib("a_position");                        // px,py (쿼드 정점)
-bindInstancedAttrib("a_distanceStart", 1, 32, 16);  // distanceStart
-bindInstancedAttrib("a_distanceEnd",   1, 32, 20);  // distanceEnd
-bindInstancedAttrib("a_joinAngles",   2, 32, 24);   // cosA,sinA
+bindInstancedAttrib("a_distanceStart", 1, 36, 16);  // distanceStart
+bindInstancedAttrib("a_distanceEnd",   1, 36, 20);  // distanceEnd
+bindInstancedAttrib("a_joinAngles",   2, 36, 24);   // cosA,sinA
+bindInstancedAttrib("a_id",           1, 36, 32);   // a_id (추가)
 
 // ========== Uniform 설정 ==========
 gl.uniform2f(gl.getUniformLocation(program, "u_viewSize"), canvas.width, canvas.height);
