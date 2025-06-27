@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Polyline Extrude – join / cap 시각화</title>
+    <title>Polyline Extrude – join / cap + 삼각형 분해 시각화</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
       body {
@@ -29,10 +29,11 @@
     </style>
   </head>
   <body>
-    <h2>두꺼운 라인 Extrude (join / cap 확인)</h2>
+    <h2>두꺼운 라인 Extrude (join / cap + 삼각형 분해)</h2>
     <div class="note">
       파란 선: 원본 ｜ 초록: 법선 ｜
-      <span style="color: #fa4242">빨강: extrude</span> (α 조절)
+      <span style="color: #fa4242">빨강: extrude(path)</span> ｜<br />
+      <span style="color: #44eaff">각 세그먼트의 사각형 + 삼각형 분해</span>
     </div>
 
     <canvas id="c" width="800" height="400"></canvas>
@@ -65,7 +66,7 @@
     </label>
 
     <script>
-      /* ───────── 1. 경위도 → 캔버스 좌표 ───────── */
+      // (1) 경위도 → 캔버스 좌표
       const raw = [
         [-122.48369693756104, 37.83381888486939],
         [-122.48348236083984, 37.83317489144141],
@@ -104,7 +105,7 @@
       ];
       const poly = raw.map(proj);
 
-      /* ───────── 2. 벡터 유틸 ───────── */
+      // (2) 벡터 유틸
       const sub = (a, b) => [a[0] - b[0], a[1] - b[1]],
         add = (a, b) => [a[0] + b[0], a[1] + b[1]],
         len = (v) => Math.hypot(v[0], v[1]),
@@ -115,7 +116,7 @@
         perp = (v) => [-v[1], v[0]],
         scale = (v, s) => [v[0] * s, v[1] * s];
 
-      /* ───────── 3. Extrude Path 생성 (join + cap) ───────── */
+      // (3) Extrude Path 생성 (join + cap)
       function buildPath(pl, r, join, cap) {
         const nSeg = [],
           L = pl.length;
@@ -123,7 +124,7 @@
           nSeg.push(norm(perp(sub(pl[i + 1], pl[i]))));
         const path = new Path2D();
 
-        /* --- 왼쪽 --- */
+        // --- 왼쪽 ---
         path.moveTo(...add(pl[0], scale(nSeg[0], r)));
         for (let i = 1; i < L - 1; i++) {
           const n0 = nSeg[i - 1],
@@ -157,7 +158,7 @@
         }
         path.lineTo(...add(pl[L - 1], scale(nSeg[L - 2], r)));
 
-        /* --- 끝(cap) --- */
+        // --- 끝(cap) ---
         const dirEnd = norm(sub(pl[L - 1], pl[L - 2]));
         const lEnd = add(pl[L - 1], scale(nSeg[L - 2], r)),
           rEnd = add(pl[L - 1], scale(nSeg[L - 2], -r));
@@ -168,12 +169,11 @@
         } else if (cap === "round") {
           const aL = Math.atan2(lEnd[1] - pl[L - 1][1], lEnd[0] - pl[L - 1][0]),
             aR = Math.atan2(rEnd[1] - pl[L - 1][1], rEnd[0] - pl[L - 1][0]);
-          /* anticlockwise=true ⟹ 외곽으로 반원 */
           path.arc(pl[L - 1][0], pl[L - 1][1], r, aL, aR, true);
         }
         path.lineTo(...rEnd);
 
-        /* --- 오른쪽(역순) --- */
+        // --- 오른쪽(역순) ---
         for (let i = L - 2; i >= 1; i--) {
           const n0 = nSeg[i],
             n1 = nSeg[i - 1];
@@ -208,7 +208,7 @@
         }
         path.lineTo(...add(pl[0], scale(nSeg[0], -r)));
 
-        /* --- 시작(cap) --- */
+        // --- 시작(cap) ---
         const dirStart = norm(sub(pl[1], pl[0]));
         const rStart = add(pl[0], scale(nSeg[0], r)),
           lStart = add(pl[0], scale(nSeg[0], -r));
@@ -225,12 +225,68 @@
         return path;
       }
 
-      /* ───────── 4. 그리기 ───────── */
+      // (4) 각 세그먼트의 "사각형+삼각형 분해" 시각화
+      function drawSegments(poly, thickness) {
+        for (let i = 0; i < poly.length - 1; i++) {
+          const a = poly[i],
+            b = poly[i + 1];
+          const dx = b[0] - a[0],
+            dy = b[1] - a[1],
+            lenAB = Math.hypot(dx, dy);
+          const nx = dy / lenAB,
+            ny = -dx / lenAB,
+            half = thickness / 2;
+          // 4점
+          const A_left = [a[0] + nx * half, a[1] + ny * half];
+          const A_right = [a[0] - nx * half, a[1] - ny * half];
+          const B_left = [b[0] + nx * half, b[1] + ny * half];
+          const B_right = [b[0] - nx * half, b[1] - ny * half];
+          // 삼각형 1
+          ctx.beginPath();
+          ctx.moveTo(...A_left);
+          ctx.lineTo(...A_right);
+          ctx.lineTo(...B_left);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(76,201,240,0.21)";
+          ctx.fill();
+          // 삼각형 2
+          ctx.beginPath();
+          ctx.moveTo(...A_right);
+          ctx.lineTo(...B_left);
+          ctx.lineTo(...B_right);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(231,29,231,0.17)";
+          ctx.fill();
+          // 4점
+          [A_left, A_right, B_left, B_right].forEach(([x, y], idx) => {
+            ctx.beginPath();
+            ctx.arc(x, y, 2.8, 0, 2 * Math.PI);
+            ctx.fillStyle = idx < 2 ? "#44eaff" : "#e7a1fc";
+            ctx.fill();
+          });
+          // 사각형 외곽선
+          ctx.save();
+          ctx.strokeStyle = "#65e7fc";
+          ctx.lineWidth = 1.1;
+          ctx.setLineDash([3, 2]);
+          ctx.beginPath();
+          ctx.moveTo(...A_left);
+          ctx.lineTo(...B_left);
+          ctx.lineTo(...B_right);
+          ctx.lineTo(...A_right);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
+      }
+
+      // (5) 그리기
       const ctx = document.getElementById("c").getContext("2d");
       function draw(th, join, cap, alpha) {
         ctx.clearRect(0, 0, W, H);
 
-        /* 원본 경로 */
+        // 원본 경로
         ctx.strokeStyle = "#4cc9f0";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -238,7 +294,7 @@
         poly.slice(1).forEach((p) => ctx.lineTo(...p));
         ctx.stroke();
 
-        /* 노멀 시각화 */
+        // 노멀 시각화
         ctx.strokeStyle = "#57fc98";
         ctx.lineWidth = 2;
         poly.forEach((p, i) => {
@@ -263,7 +319,10 @@
           ctx.stroke();
         });
 
-        /* Extrude */
+        // 세그먼트별 사각형+삼각형 분해
+        drawSegments(poly, th);
+
+        // Extrude Path
         const path = buildPath(poly, th / 2, join, cap);
         ctx.fillStyle = `rgba(250,66,66,${alpha})`;
         if (alpha > 0) ctx.fill(path);
@@ -271,7 +330,7 @@
         ctx.lineWidth = 2;
         ctx.stroke(path);
 
-        /* 점 인덱스 */
+        // 점 인덱스
         ctx.fillStyle = "#36b6ff";
         poly.forEach((p, i) => {
           ctx.beginPath();
@@ -283,7 +342,7 @@
         });
       }
 
-      /* ───────── 5. UI ───────── */
+      // (6) UI
       const wS = document.getElementById("wSlider"),
         aS = document.getElementById("aSlider"),
         joinSel = document.getElementById("joinSel"),
