@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>Instanced Polyline with Dash (Optimized, Fragment Join)</title>
+  <title>Instanced Polyline with Dash (Fragment Join, No a_prevSegmentStart)</title>
   <style>
     html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
   </style>
@@ -31,13 +31,11 @@ attribute vec2 a_segmentEnd;
 attribute vec2 a_position;
 attribute float a_distance;
 attribute vec2 a_joinAngles;
-attribute vec2 a_prevSegmentStart;
 attribute float a_id;
 uniform vec2 u_viewSize;
 uniform float u_halfWidth;
 varying vec2 v_segmentStart;
 varying vec2 v_segmentEnd;
-varying vec2 v_prevSegmentStart;
 varying float v_distance;
 varying vec2 v_joinAngles;
 varying vec4 v_hitColor;
@@ -56,7 +54,7 @@ void main() {
   vec2 endPx = a_segmentEnd * u_viewSize;
   vec2 t = normalize(endPx - startPx);
   vec2 n = vec2(-t.y, t.x);
-  vec2 offset = n * a_position.y * u_halfWidth;
+  vec2 offset = n * a_position.y * u_halfWidth * 1.5; // 조인 커버를 위해 확장
   float s = (a_position.x + 1.0) * 0.5;
   vec2 posPx = mix(startPx, endPx, s) + offset;
 
@@ -65,7 +63,6 @@ void main() {
 
   v_segmentStart = startPx;
   v_segmentEnd = endPx;
-  v_prevSegmentStart = a_prevSegmentStart * u_viewSize;
   v_distance = a_distance + distance(a_segmentEnd, a_segmentStart) * s;
   v_joinAngles = a_joinAngles;
   v_hitColor = colorEncodeId(a_id);
@@ -76,11 +73,11 @@ const fragmentShaderSource = `
 precision mediump float;
 varying vec2 v_segmentStart;
 varying vec2 v_segmentEnd;
-varying vec2 v_prevSegmentStart;
 varying float v_distance;
 varying vec2 v_joinAngles;
 varying vec4 v_hitColor;
 uniform float u_halfWidth;
+uniform float u_joinRadius; // 추가: 조인 반경
 uniform float u_miterLimit;
 uniform float u_dashLength;
 uniform float u_gapLength;
@@ -98,19 +95,21 @@ float segmentDistance(vec2 p, vec2 a, vec2 b) {
 void main() {
   vec2 p = gl_FragCoord.xy;
 
+  // 현재 세그먼트 거리
   float distToSegment = segmentDistance(p, v_segmentStart, v_segmentEnd);
-  float distToJoin = length(p - v_segmentStart);
-  float distToPrevSegment = 1e10;
-  if (v_joinAngles.x < 0.999) {
-    distToPrevSegment = segmentDistance(p, v_prevSegmentStart, v_segmentStart);
-  }
 
-  float dist = min(distToSegment, distToJoin);
-  dist = min(dist, distToPrevSegment);
+  // 시작점과 끝점에서의 원형 조인
+  float distToStartJoin = length(p - v_segmentStart);
+  float distToEndJoin = length(p - v_segmentEnd);
 
-  float alpha = smoothstep(u_halfWidth - 1.0, u_halfWidth, dist);
+  // 최소 거리 선택
+  float dist = min(distToSegment, min(distToStartJoin, distToEndJoin));
+
+  // 안티앨리어싱
+  float alpha = smoothstep(u_joinRadius - 2.0, u_joinRadius, dist);
   if (alpha >= 1.0) discard;
 
+  // 대시 패턴
   float patternLength = u_dashLength + u_gapLength;
   float pos = mod(v_distance, patternLength);
   float dash = u_dashLength;
@@ -188,9 +187,9 @@ for (let i = 1; i < norm.length; i++) {
   distances.push(totalLen);
 }
 
-// 인스턴스 데이터 생성
+// 인스턴스 데이터 생성 (10 → 8 floats)
 const segCount = norm.length - 1;
-const instanceData = new Float32Array(segCount * 10); // 10 floats per instance
+const instanceData = new Float32Array(segCount * 8);
 function normalizeVec2(v) {
   const len = Math.hypot(v[0], v[1]);
   return len > 1e-6 ? [v[0]/len, v[1]/len] : [1,0];
@@ -220,9 +219,8 @@ for (let i = 0; i < segCount; i++) {
     p1[0], p1[1],              // a_segmentEnd
     distances[i],              // a_distance
     cosA, sinA,                // a_joinAngles
-    prev[0], prev[1],          // a_prevSegmentStart
     i                          // a_id
-  ], i * 10);
+  ], i * 8);
 }
 
 // 쿼드 정점
@@ -263,16 +261,16 @@ function bindQuadAttrib(name) {
   ext.vertexAttribDivisorANGLE(loc, 0);
 }
 
-bindInstancedAttrib("a_segmentStart", 2, 40, 0);
-bindInstancedAttrib("a_segmentEnd", 2, 40, 8);
+bindInstancedAttrib("a_segmentStart", 2, 32, 0);
+bindInstancedAttrib("a_segmentEnd", 2, 32, 8);
 bindQuadAttrib("a_position");
-bindInstancedAttrib("a_distance", 1, 40, 16);
-bindInstancedAttrib("a_joinAngles", 2, 40, 20);
-bindInstancedAttrib("a_prevSegmentStart", 2, 40, 28);
-bindInstancedAttrib("a_id", 1, 40, 36);
+bindInstancedAttrib("a_distance", 1, 32, 16);
+bindInstancedAttrib("a_joinAngles", 2, 32, 20);
+bindInstancedAttrib("a_id", 1, 32, 28);
 
 // ───── Uniform 설정 ─────
 gl.uniform1f(gl.getUniformLocation(program, "u_halfWidth"), 12.0);
+gl.uniform1f(gl.getUniformLocation(program, "u_joinRadius"), 12.0); // 추가
 gl.uniform1f(gl.getUniformLocation(program, "u_miterLimit"), 4.0);
 gl.uniform1f(gl.getUniformLocation(program, "u_dashLength"), 0.03);
 gl.uniform1f(gl.getUniformLocation(program, "u_gapLength"), 0.03);
@@ -281,8 +279,8 @@ gl.uniform1i(gl.getUniformLocation(program, "u_usePattern"), 0);
 gl.uniform2f(gl.getUniformLocation(program, "u_viewSize"), canvas.width, canvas.height);
 
 // ───── 그리기 ─────
-gl.clearColor(0.1, 0.1, 0.1, 1.0);
-gl.clear(gl.COLOR_BUFFER_BIT);
+//gl.clearColor(0.1, 0.1, 0.1, 1.0);
+//gl.clear(gl.COLOR_BUFFER_BIT);
 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
 ext.drawElementsInstancedANGLE(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, segCount);
 </script>
