@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Instanced Polyline: GLSL 4 corner 시각화</title>
+  <style>
+    body { background: #111; color: #fff; margin: 0 }
+    canvas { display: block; margin: 0 auto; background: #222; }
+    #desc { margin: 16px; color: #fff; }
+  </style>
+</head>
+<body>
+<div id="desc">
+  <b>위쪽</b>: <span style="color:#0af">MapboxGL/MapLibre.js extrude (CPU, 파랑)</span><br>
+  <b>아래쪽</b>: <span style="color:#f44">Instanced: 각 세그먼트의 4 GLSL 코너(빨강 점/사각형)</span> <br>
+  <span style="color:#ff0">노랑 점</span>: 원본 좌표<br>
+  <span style="color:#f44">빨강 점/사각 outline</span>: instanced 방식에서 각 세그먼트의 4개 GLSL 정점(실제 셰이더에서 생성)
+</div>
+<canvas id="c" width="900" height="1300"></canvas>
+<script>
+// 입력 경로
+const coordsLL = [
+  [-122.48369693756104, 37.83381888486939], [-122.48348236083984, 37.83317489144141],
+  [-122.48339653015138, 37.83270036637107], [-122.48356819152832, 37.832056363179625],
+  [-122.48404026031496, 37.83114119107971], [-122.48404026031496, 37.83049717427869],
+  [-122.48348236083984, 37.829920943955045], [-122.48356819152832, 37.82954808664175],
+  [-122.48507022857666, 37.82944639795659], [-122.48610019683838, 37.82880236636284],
+  [-122.48695850372314, 37.82931081282506], [-122.48700141906738, 37.83080223556934],
+  [-122.48751640319824, 37.83168351665737], [-122.48803138732912, 37.832158048267786],
+  [-122.48888969421387, 37.83297152392784], [-122.48987674713133, 37.83263257682617],
+  [-122.49043464660643, 37.832937629287755], [-122.49125003814696, 37.832429207817725],
+  [-122.49163627624512, 37.832564787218985], [-122.49223709106445, 37.83337825839438],
+  [-122.49378204345702, 37.83368330777276]
+];
+
+// ───── 1. 위경도 → 평면 변환 (WebMercator → 화면 좌표) ─────
+function project([lon, lat]) {
+  const x = lon * 20037508.34 / 180;
+  let y = Math.log(Math.tan((90+lat)*Math.PI/360)) / (Math.PI/180);
+  y = y * 20037508.34 / 180;
+  return [x, y];
+}
+let projected = coordsLL.map(project);
+
+// 화면 정규화
+const minX = Math.min(...projected.map(p=>p[0])), minY = Math.min(...projected.map(p=>p[1]));
+const maxX = Math.max(...projected.map(p=>p[0])), maxY = Math.max(...projected.map(p=>p[1]));
+const W = 800, H = 600, PAD = 40;
+function normalize(projected, offsetY=0) {
+  return projected.map(([x, y]) => [
+    PAD + (x - minX) / (maxX - minX) * (W - 2*PAD),
+    offsetY + H - (PAD + (y - minY) / (maxY - minY) * (H - 2*PAD))
+  ]);
+}
+const projected1 = normalize(projected, 0);      // 위쪽
+const projected2 = normalize(projected, 680);    // 아래쪽
+
+// ───── 2. Extrude/Instanced 계산 함수 ─────
+const thickness = 30;
+function getNormal(p1, p2) {
+  const dx = p2[0]-p1[0], dy = p2[1]-p1[1];
+  const len = Math.sqrt(dx*dx+dy*dy);
+  return [-dy/len, dx/len];
+}
+function extrudePolyline(path, thickness) {
+  const left = [], right = [];
+  for (let i=0; i<path.length; ++i) {
+    let n;
+    if (i===0)
+      n = getNormal(path[i], path[i+1]);
+    else if (i===path.length-1)
+      n = getNormal(path[i-1], path[i]);
+    else {
+      const n1 = getNormal(path[i-1], path[i]);
+      const n2 = getNormal(path[i], path[i+1]);
+      n = [(n1[0]+n2[0])/2, (n1[1]+n2[1])/2];
+      const len = Math.sqrt(n[0]*n[0]+n[1]*n[1]);
+      n = [n[0]/len, n[1]/len];
+    }
+    left.push([path[i][0]+n[0]*thickness/2, path[i][1]+n[1]*thickness/2]);
+    right.push([path[i][0]-n[0]*thickness/2, path[i][1]-n[1]*thickness/2]);
+  }
+  return {left, right};
+}
+const {left:left1, right:right1} = extrudePolyline(projected1, thickness);
+
+// ───── Instanced 방식: 세그먼트별 GLSL에서 생성되는 4개의 정점 ─────
+function quadCorners(p0, p1, thickness) {
+  const n = getNormal(p0, p1);
+  // offset index 순서: [-1,+1], [+1,+1], [+1,-1], [-1,-1]
+  // (p0가 시작, p1이 끝)
+  // 0: p0+normal*+thickness/2 (좌상)
+  // 1: p1+normal*+thickness/2 (우상)
+  // 2: p1+normal*-thickness/2 (우하)
+  // 3: p0+normal*-thickness/2 (좌하)
+  return [
+    [p0[0]+n[0]*thickness/2, p0[1]+n[1]*thickness/2], // 좌상
+    [p1[0]+n[0]*thickness/2, p1[1]+n[1]*thickness/2], // 우상
+    [p1[0]-n[0]*thickness/2, p1[1]-n[1]*thickness/2], // 우하
+    [p0[0]-n[0]*thickness/2, p0[1]-n[1]*thickness/2], // 좌하
+  ];
+}
+const instancedQuads = [];
+for(let i=0; i<projected2.length-1; ++i) {
+  const p0 = projected2[i], p1 = projected2[i+1];
+  instancedQuads.push(quadCorners(p0, p1, thickness));
+}
+
+// ───── 3. Canvas2D 시각화 ─────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// 위쪽: MapboxGL 방식
+ctx.save();
+ctx.strokeStyle = "#ff0";
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(...projected1[0]);
+for (let i=1; i<projected1.length; ++i) ctx.lineTo(...projected1[i]);
+ctx.stroke();
+ctx.restore();
+ctx.fillStyle = "#ff0";
+for(let p of projected1) {
+  ctx.beginPath();
+  ctx.arc(p[0], p[1], 4, 0, 2*Math.PI);
+  ctx.fill();
+}
+ctx.save();
+ctx.strokeStyle = "#0af";
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.moveTo(...left1[0]);
+for (let i=1; i<left1.length; ++i) ctx.lineTo(...left1[i]);
+for (let i=right1.length-1; i>=0; --i) ctx.lineTo(...right1[i]);
+ctx.closePath();
+ctx.stroke();
+ctx.restore();
+ctx.fillStyle = "#0af";
+for (let p of left1.concat(right1)) {
+  ctx.beginPath();
+  ctx.arc(p[0], p[1], 3, 0, 2*Math.PI);
+  ctx.fill();
+}
+ctx.font = "bold 18px sans-serif";
+ctx.fillStyle = "#fff";
+ctx.fillText("MapboxGL/MapLibre.js 스타일 (extrude, CPU)", 50, 50);
+
+// 아래쪽: Instanced 스타일 (각 세그먼트 4 GLSL 코너 표시)
+ctx.save();
+ctx.strokeStyle = "#ff0";
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(...projected2[0]);
+for (let i=1; i<projected2.length; ++i) ctx.lineTo(...projected2[i]);
+ctx.stroke();
+ctx.restore();
+ctx.fillStyle = "#ff0";
+for(let p of projected2) {
+  ctx.beginPath();
+  ctx.arc(p[0], p[1], 4, 0, 2*Math.PI);
+  ctx.fill();
+}
+// instanced 사각형(빨강)
+for (const quad of instancedQuads) {
+  ctx.save();
+  ctx.strokeStyle = "#f44";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(...quad[0]);
+  ctx.lineTo(...quad[1]);
+  ctx.lineTo(...quad[2]);
+  ctx.lineTo(...quad[3]);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+  // 각 GLSL corner (빨강 점)
+  ctx.fillStyle = "#f44";
+  for (const pt of quad) {
+    ctx.beginPath();
+    ctx.arc(pt[0], pt[1], 3, 0, 2*Math.PI);
+    ctx.fill();
+  }
+}
+ctx.font = "bold 18px sans-serif";
+ctx.fillStyle = "#fff";
+ctx.fillText("Instanced 방식 (각 세그먼트의 GLSL 4코너, drawElementsInstanced 스타일)", 50, 730);
+
+</script>
+</body>
+</html>
