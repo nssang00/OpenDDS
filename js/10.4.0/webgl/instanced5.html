@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>Instanced Polyline with Dash (Optimized)</title>
+  <style>
+    html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
+  </style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+<script>
+const canvas = document.getElementById("glcanvas");
+
+function fitCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = canvas.clientHeight * dpr;
+}
+fitCanvas();
+
+const gl = canvas.getContext("webgl");
+const ext = gl.getExtension("ANGLE_instanced_arrays");
+if (!ext) throw "ANGLE_instanced_arrays 미지원";
+
+// ───── Vertex Shader (수정됨) ─────
+const vertexShaderSource = `
+precision mediump float;
+attribute vec2 a_segmentStart;
+attribute vec2 a_segmentEnd;
+attribute vec2 a_position;
+attribute float a_distance;  
+attribute vec2 a_joinAngles;
+attribute float a_id;
+uniform vec2  u_viewSize;
+uniform float u_halfWidth;
+uniform float u_miterLimit;
+varying float v_dist;
+varying vec4 v_hitColor;
+
+vec4 colorEncodeId(float id) {
+  float radix = 256.0;
+  float r = floor(id / (radix * radix * radix));
+  float g = floor(mod(id / (radix * radix), radix));
+  float b = floor(mod(id / radix, radix));
+  float a = floor(mod(id, radix));
+  return vec4(r, g, b, a) / 255.0;
+}
+
+void main(){
+  vec2 startPx = a_segmentStart * u_viewSize;
+  vec2 endPx   = a_segmentEnd * u_viewSize;
+  vec2 t = normalize(endPx - startPx);
+  vec2 n = vec2(-t.y, t.x);
+  vec2 offset = n * a_position.y * u_halfWidth;
+  float s = (a_position.x + 1.0) * 0.5;
+  vec2 posPx = mix(startPx, endPx, s);
+
+  // 세그먼트 길이 계산 (추가)
+  float segLenNorm = distance(a_segmentEnd, a_segmentStart);
+
+  // 마이터 조인 처리
+  if (s < 0.5) {
+    float cosA = a_joinAngles.x, sinA = a_joinAngles.y;
+    float miterLen = u_halfWidth / max(0.1, cosA);
+    if (abs(miterLen) < u_miterLimit * u_halfWidth) {
+      vec2 bisector = normalize(vec2(
+        n.x * cosA - n.y * sinA,
+        n.x * sinA + n.y * cosA
+      ));
+      offset = bisector * a_position.y * miterLen;
+    } else {
+      offset = n * a_position.y * u_halfWidth;
+    }
+  }
+  posPx += offset;
+  vec2 clip = posPx / u_viewSize * 2.0 - 1.0;
+  gl_Position = vec4(clip, 0.0, 1.0);
+
+  // 거리 계산 (수정): a_distance + 세그먼트 길이 * 비율
+  v_dist = a_distance + segLenNorm * s;
+  v_hitColor = colorEncodeId(a_id);
+}`;
+
+// ───── Fragment Shader (동일) ─────
+const fragmentShaderSource = `
+precision mediump float;
+varying float v_dist;
+varying vec4 v_hitColor;
+uniform float u_dashLength;
+uniform float u_gapLength;
+uniform bool u_usePattern;
+uniform sampler2D u_pattern;
+uniform vec3 u_color;
+void main() {
+  float patternLength = u_dashLength + u_gapLength;
+  float pos = mod(v_dist, patternLength);
+  float dash = u_dashLength;
+  if (!u_usePattern) {
+    if (pos > dash) discard;
+    gl_FragColor = vec4(u_color,1);
+  } else {
+    float u = mod(v_dist,64.0)/64.0;
+    float col = texture2D(u_pattern, vec2(u,0.5)).r;
+    if (col < 0.5) discard;
+    gl_FragColor = vec4(u_color,1);
+  }
+}
+`;
+
+// ───── Shader Compile & Link (동일) ─────
+function compileShader(type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+    throw gl.getShaderInfoLog(shader);
+  return shader;
+}
+const program = gl.createProgram();
+gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vertexShaderSource));
+gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource));
+gl.linkProgram(program);
+gl.useProgram(program);
+
+// ───── Polyline Data (경로) (동일) ─────
+const routeLL = [
+  [-122.48369693756104, 37.83381888486939],
+  [-122.48348236083984, 37.83317489144141],
+  [-122.48339653015138, 37.83270036637107],
+  [-122.48356819152832, 37.832056363179625],
+  [-122.48404026031496, 37.83114119107971],
+  [-122.48404026031496, 37.83049717427869],
+  [-122.48348236083984, 37.829920943955045],
+  [-122.48356819152832, 37.82954808664175],
+  [-122.48507022857666, 37.82944639795659],
+  [-122.48610019683838, 37.82880236636284],
+  [-122.48695850372314, 37.82931081282506],
+  [-122.48700141906738, 37.83080223556934],
+  [-122.48751640319824, 37.83168351665737],
+  [-122.48803138732912, 37.832158048267786],
+  [-122.48888969421387, 37.83297152392784],
+  [-122.48987674713133, 37.83263257682617],
+  [-122.49043464660643, 37.832937629287755],
+  [-122.49125003814696, 37.832429207817725],
+  [-122.49163627624512, 37.832564787218985],
+  [-122.49223709106445, 37.83337825839438],
+  [-122.49378204345702, 37.83368330777276],
+];
+
+// 정규화: 0~1 범위 (동일)
+function normalizeCoords(coords) {
+  const lons = coords.map(p => p[0]);
+  const lats = coords.map(p => p[1]);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  return coords.map(([lon, lat]) => [
+    (lon - minLon) / (maxLon - minLon),
+    (lat - minLat) / (maxLat - minLat)
+  ]);
+}
+const norm = normalizeCoords(routeLL);
+
+// 누적 거리 (동일)
+let totalLen = 0;
+const distances = [0];
+for (let i = 1; i < norm.length; i++) {
+  const dx = norm[i][0] - norm[i-1][0];
+  const dy = norm[i][1] - norm[i-1][1];
+  totalLen += Math.sqrt(dx*dx + dy*dy);
+  distances.push(totalLen);
+}
+
+// 인스턴스 데이터 생성 (변경: 9개 -> 8개 속성)
+const segCount = norm.length - 1;
+const instanceData = new Float32Array(segCount * 8); // 8 floats per instance
+
+function normalizeVec2(v) {
+  const len = Math.hypot(v[0], v[1]);
+  return len > 1e-6 ? [v[0]/len, v[1]/len] : [1,0];
+}
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+for (let i = 0; i < segCount; i++) {
+  const p0 = norm[i];
+  const p1 = norm[i + 1];
+
+  // 조인각 계산 (동일)
+  let cosA = 1.0, sinA = 0.0;
+  if (i > 0) {
+    const prev = norm[i - 1];
+    const dir0 = normalizeVec2([p0[0] - prev[0], p0[1] - prev[1]]);
+    const dir1 = normalizeVec2([p1[0] - p0[0], p1[1] - p0[1]]);
+    const dot = clamp(dir0[0]*dir1[0] + dir0[1]*dir1[1], -1, 1);
+    const angle = Math.acos(dot);
+    sinA = Math.sin(angle);
+    cosA = Math.cos(angle);
+    const cross = dir0[0]*dir1[1] - dir0[1]*dir1[0];
+    if (cross < 0) sinA = -sinA;
+  }
+
+  // 변경: a_distanceEnd 제거, 8개 속성으로 구성
+  instanceData.set([
+    p0[0], p0[1],              // a_segmentStart
+    p1[0], p1[1],              // a_segmentEnd
+    distances[i],               // a_distance (시작 거리)
+    cosA, sinA,                // a_joinAngles
+    i                          // a_id
+  ], i * 8); // stride 8 floats
+}
+
+// 쿼드 정점 (고정, a_position용) (동일)
+const quadVerts = new Float32Array([
+  -1, -1,  // 좌하
+  -1,  1,  // 좌상
+   1, -1,  // 우하
+   1,  1,  // 우상
+]);
+const quadBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, quadVerts, gl.STATIC_DRAW);
+
+// 인덱스 (동일)
+const indices = new Uint16Array([0, 1, 2, 2, 1, 3]);
+const indexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+// 인스턴스 버퍼 (동일)
+const instanceBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+
+// ========== Attribute 연결 (수정됨) ==========
+function bindInstancedAttrib(name, size, stride, offset) {
+  const loc = gl.getAttribLocation(program, name);
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offset);
+  ext.vertexAttribDivisorANGLE(loc, 1);
+}
+function bindQuadAttrib(name) {
+  const loc = gl.getAttribLocation(program, name);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  ext.vertexAttribDivisorANGLE(loc, 0);
+}
+
+// stride: 8 floats * 4 = 32 bytes
+bindInstancedAttrib("a_segmentStart", 2, 32, 0);    // offset 0
+bindInstancedAttrib("a_segmentEnd",   2, 32, 8);    // offset 8
+bindQuadAttrib("a_position");                        // 쿼드 정점
+bindInstancedAttrib("a_distance",     1, 32, 16);   // offset 16 (변경)
+bindInstancedAttrib("a_joinAngles",   2, 32, 20);   // offset 20
+bindInstancedAttrib("a_id",           1, 32, 28);   // offset 28
+
+// ========== Uniform 설정 (동일) ==========
+gl.uniform1f(gl.getUniformLocation(program, "u_halfWidth"), 12.0);
+gl.uniform1f(gl.getUniformLocation(program, "u_miterLimit"), 4.0);
+
+gl.uniform1f(gl.getUniformLocation(program, "u_dashLength"), 0.03);
+gl.uniform1f(gl.getUniformLocation(program, "u_gapLength"), 0.03);
+gl.uniform3f(gl.getUniformLocation(program, "u_color"), 0.08, 0.8, 1.0);
+gl.uniform1i(gl.getUniformLocation(program, "u_usePattern"), 0);
+gl.uniform2f(gl.getUniformLocation(program, "u_viewSize"), canvas.width, canvas.height);
+
+
+// ========== 그리기 (동일) ==========
+gl.clear(gl.COLOR_BUFFER_BIT);
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+ext.drawElementsInstancedANGLE(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, segCount);
+</script>
+</body>
+</html>
