@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>OpenLayers-style Join/Cap (Optimized)</title>
+  <title>OpenLayers-style Join/Cap (OL 함수명)</title>
   <style>
     html, body, canvas {
       margin: 0;
@@ -30,15 +30,19 @@ attribute vec2  a_position;
 attribute float a_distance;
 attribute vec2  a_joinAngles;
 attribute float a_id;
+
+uniform mat4  u_projectionMatrix;
 uniform vec2  u_viewportSizePx;
 uniform float u_pixelRatio;
 uniform float u_globalAlpha;
 uniform float u_halfWidth;
+
 varying vec2  v_segmentStart;
 varying vec2  v_segmentEnd;
 varying float v_distance;
 varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
+
 vec4 colorEncodeId(float id){
   float r = floor(id / 16777216.0);
   float g = floor(mod(id , 16777216.0) / 65536.0);
@@ -53,9 +57,16 @@ vec2 getJoinOffsetDirection(vec2 n,float ang){
   vec2 bis = vec2(s*n.x + c*n.y , -c*n.x + s*n.y);
   return bis * (1.0/s);
 }
+vec2 worldToPx(vec2 worldPos) {
+  vec4 clip = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
+  vec2 ndc = clip.xy / clip.w;
+  return (0.5 * ndc + 0.5) * u_viewportSizePx;
+}
+
 void main(){
-  vec2 p0 = a_segmentStart * u_viewportSizePx;
-  vec2 p1 = a_segmentEnd   * u_viewportSizePx;
+  vec2 p0 = worldToPx(a_segmentStart);
+  vec2 p1 = worldToPx(a_segmentEnd);
+
   vec2 t  = normalize(p1-p0);
   vec2 n  = vec2(-t.y , t.x);
   float s = (a_position.x+1.0)*0.5;
@@ -80,7 +91,7 @@ void main(){
 }
 `;
 
-    // ====== Fragment shader ======
+    // ====== Fragment shader (함수명 OL 스타일) ======
     const fragmentShaderSource = `
 precision mediump float;
 varying vec2  v_segmentStart;
@@ -98,60 +109,78 @@ uniform float u_pixelRatio;
 uniform float u_globalAlpha;
 uniform float u_capType;
 uniform float u_joinType;
-bool isCap(float a){return a<-0.1;}
-float segDF(vec2 p,vec2 a,vec2 b,float w){
-  vec2 t=normalize(b-a), n=vec2(-t.y,t.x), pa=p-a;
-  return abs(dot(pa,n))-w*0.5;
+
+bool isCap(float a) { return a < -0.1; }
+
+float segmentDistanceField(vec2 point, vec2 start, vec2 end, float width) {
+  vec2 tangent = normalize(end - start);
+  vec2 normal = vec2(-tangent.y, tangent.x);
+  vec2 startToPoint = point - start;
+  return abs(dot(startToPoint, normal)) - width * 0.5;
 }
-float buttDF(vec2 p,vec2 a,vec2 b){return dot(p-a,-normalize(b-a));}
-float squareDF(vec2 p,vec2 a,vec2 b,float w){return buttDF(p,a,b)-w*0.5;}
-float roundDF(vec2 p,vec2 a,vec2 b,float w){
-  float onSeg=max(0.,1000.*dot(p-a,b-a));
-  return length(p-a)-w*0.5-onSeg;
+float buttCapDistanceField(vec2 point, vec2 start, vec2 end) {
+  vec2 startToPoint = point - start;
+  vec2 tangent = normalize(end - start);
+  return dot(startToPoint, -tangent);
 }
-float bevelDF(vec2 p,vec2 a,vec2 b,float w,float ang){
-  vec2 t=normalize(b-a), pa=p-a;
-  float c=cos(ang*0.5), s=sin(ang*0.5);
-  vec2 bis=vec2(c*t.x-s*t.y, s*t.x+c*t.y);
-  return dot(pa,bis*-sign(s))*1.0 - w*0.5*s;
+float squareCapDistanceField(vec2 point, vec2 start, vec2 end, float width) {
+  return buttCapDistanceField(point, start, end) - width * 0.5;
 }
-float miterDF(vec2 p,vec2 a,vec2 b,float w,float ang){
-  if(cos(ang)>0.985) return bevelDF(p,a,b,w,ang);
-  float m=1./sin(ang*0.5); if(m>10.) return bevelDF(p,a,b,w,ang);
-  return -1000.;
+float roundCapDistanceField(vec2 point, vec2 start, vec2 end, float width) {
+  float onSegment = max(0., 1000. * dot(point - start, end - start));
+  return length(point - start) - width * 0.5 - onSegment;
 }
-float capDF(vec2 p,vec2 a,vec2 b,float w,float t){
-  if(t==4.) return buttDF(p,a,b);
-  if(t==5.) return squareDF(p,a,b,w);
-  return roundDF(p,a,b,w);
+float bevelJoinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle) {
+  vec2 tangent = normalize(end - start);
+  vec2 startToPoint = point - start;
+  float c = cos(joinAngle * 0.5);
+  float s = sin(joinAngle * 0.5);
+  float direction = -sign(sin(joinAngle));
+  vec2 bisector = vec2(c * tangent.x - s * tangent.y, s * tangent.x + c * tangent.y);
+  float radius = width * 0.5 * s;
+  return dot(startToPoint, bisector * direction) - radius;
 }
-float joinDF(vec2 p,vec2 a,vec2 b,float w,float ang,float t){
-  if(t==6.) return bevelDF(p,a,b,w,ang);
-  if(t==7.) return miterDF(p,a,b,w,ang);
-  return roundDF(p,a,b,w);
+float miterJoinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle) {
+  if (cos(joinAngle) > 0.985) return bevelJoinDistanceField(point, start, end, width, joinAngle);
+  float miterLength = 1.0 / sin(joinAngle * 0.5);
+  float miterLimit = 10.0;
+  if (miterLength > miterLimit) return bevelJoinDistanceField(point, start, end, width, joinAngle);
+  return -1000.0;
 }
-float segPointDF(vec2 p,vec2 a,vec2 b,float w,float ang,float capT,float joinT){
-  return isCap(ang) ? capDF(p,a,b,w,capT)
-                    : joinDF(p,a,b,w,ang,joinT);
+float capDistanceField(vec2 point, vec2 start, vec2 end, float width, float capType) {
+  if (capType == 4.0) return buttCapDistanceField(point, start, end);
+  if (capType == 5.0) return squareCapDistanceField(point, start, end, width);
+  return roundCapDistanceField(point, start, end, width);
 }
-void main(){
+float joinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle, float joinType) {
+  if (joinType == 6.0) return bevelJoinDistanceField(point, start, end, width, joinAngle);
+  if (joinType == 7.0) return miterJoinDistanceField(point, start, end, width, joinAngle);
+  return roundCapDistanceField(point, start, end, width);
+}
+float computeSegmentPointDistance(vec2 point, vec2 start, vec2 end, float width, float joinAngle, float capType, float joinType) {
+  return isCap(joinAngle) ?
+    capDistanceField(point, start, end, width, capType) :
+    joinDistanceField(point, start, end, width, joinAngle, joinType);
+}
+
+void main() {
   vec2  p     = gl_FragCoord.xy / u_pixelRatio;
   float w     = u_halfWidth*2.0;
-  float d0    = segPointDF(p,v_segmentStart,v_segmentEnd,w,v_joinAngles.x,u_capType,u_joinType);
-  float d1    = segPointDF(p,v_segmentEnd  ,v_segmentStart,w,v_joinAngles.y,u_capType,u_joinType);
-  float dLine = segDF(p,v_segmentStart,v_segmentEnd,w);
-  float dist  = max(max(d0,d1),dLine);
-  float alpha = smoothstep(0.5,-0.5,dist);
-  if(alpha<=0.0) discard;
-  float patLen = u_dashLength+u_gapLength;
-  float pos    = mod(v_distance,patLen);
-  if(!u_usePattern){
-    if(u_gapLength>0.0 && pos>u_dashLength) discard;
-    gl_FragColor = vec4(u_color,alpha*u_globalAlpha);
-  }else{
-    float uu = mod(v_distance,64.0)/64.0;
-    if(texture2D(u_pattern,vec2(uu,0.5)).r<0.5) discard;
-    gl_FragColor = vec4(u_color,alpha*u_globalAlpha);
+  float d0    = computeSegmentPointDistance(p, v_segmentStart, v_segmentEnd, w, v_joinAngles.x, u_capType, u_joinType);
+  float d1    = computeSegmentPointDistance(p, v_segmentEnd  , v_segmentStart, w, v_joinAngles.y, u_capType, u_joinType);
+  float dLine = segmentDistanceField(p, v_segmentStart, v_segmentEnd, w);
+  float dist  = max(max(d0, d1), dLine);
+  float alpha = smoothstep(0.5, -0.5, dist);
+  if (alpha <= 0.0) discard;
+  float patLen = u_dashLength + u_gapLength;
+  float pos    = mod(v_distance, patLen);
+  if (!u_usePattern) {
+    if (u_gapLength > 0.0 && pos > u_dashLength) discard;
+    gl_FragColor = vec4(u_color, alpha * u_globalAlpha);
+  } else {
+    float uu = mod(v_distance, 64.0) / 64.0;
+    if (texture2D(u_pattern, vec2(uu, 0.5)).r < 0.5) discard;
+    gl_FragColor = vec4(u_color, alpha * u_globalAlpha);
   }
 }
 `;
@@ -180,9 +209,9 @@ void main(){
       { name: "a_joinAngles",   size: 2 },
       { name: "a_id",           size: 1 }
     ];
-    const INSTANCE_STRIDE_FLOATS = instanceAttributes.reduce((sum, a) => sum + a.size, 0);
+    const STRIDE = instanceAttributes.reduce((sum, a) => sum + a.size, 0) * 4;
 
-    // ====== 데이터 준비 ======
+    // ====== 지도(월드) 좌표 ======
     const coordinates = [
       [-122.48369693756104, 37.83381888486939],
       [-122.48348236083984, 37.83317489144141],
@@ -206,78 +235,54 @@ void main(){
       [-122.49223709106445, 37.83337825839438],
       [-122.49378204345702, 37.83368330777276]
     ];
-    
-    // 최적화된 정규화 함수
-    function normalizeCoords(coords) {
-      let minLon = Infinity, maxLon = -Infinity;
-      let minLat = Infinity, maxLat = -Infinity;
-      
-      // 한 번의 순회로 최소/최대값 계산
-      for (let i = 0; i < coords.length; i++) {
-        const [lon, lat] = coords[i];
-        if (lon < minLon) minLon = lon;
-        if (lon > maxLon) maxLon = lon;
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-      }
-      
-      const rangeLon = maxLon - minLon;
-      const rangeLat = maxLat - minLat;
-      
-      return coords.map(([lon, lat]) => [
-        (lon - minLon) / rangeLon,
-        (lat - minLat) / rangeLat
+
+    // ====== 투영행렬 생성 (2D 직교 투영) ======
+    function makeOrthoProjectionMatrix(minX, minY, maxX, maxY) {
+      const sx = 2 / (maxX - minX);
+      const sy = 2 / (maxY - minY);
+      const tx = -(maxX + minX) / (maxX - minX);
+      const ty = -(maxY + minY) / (maxY - minY);
+      return new Float32Array([
+        sx,  0, 0, 0,
+         0, sy, 0, 0,
+         0,  0, 1, 0,
+        tx, ty, 0, 1
       ]);
     }
-    
-    // 최적화된 각도 계산 함수
+    const lons = coordinates.map(c => c[0]);
+    const lats = coordinates.map(c => c[1]);
+    const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat);
+
+    // ====== 인스턴스 데이터 ======
+    const instanceCount = coordinates.length - 1;
+    const instanceData = new Float32Array(instanceCount * STRIDE / 4);
     function angle(p0, pA, pB) {
       const v0x = pA[0] - p0[0];
       const v0y = pA[1] - p0[1];
       const v1x = pB[0] - p0[0];
       const v1y = pB[1] - p0[1];
-      
-      // 벡터 크기 계산 (Math.hypot 최적화)
       const l0 = Math.sqrt(v0x * v0x + v0y * v0y);
       const l1 = Math.sqrt(v1x * v1x + v1y * v1y);
-      
-      // 벡터 크기가 0인 경우
       if (l0 === 0.0 || l1 === 0.0) return -1.0;
-      
       const dot = (v0x * v1x + v0y * v1y) / (l0 * l1);
-      
       const ang = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
-      
-      // 외적을 통해 각도 방향 결정
       const cross = v0x * v1y - v0y * v1x;
       return cross < 0 ? -ang : ang;
     }
-    
-    const norm = normalizeCoords(coordinates);
-    const instanceCount = norm.length - 1;
-    const instanceData = new Float32Array(instanceCount * INSTANCE_STRIDE_FLOATS);
-    
     let distances = 0;
     for (let i = 0; i < instanceCount; i++) {
-      const idx = i * INSTANCE_STRIDE_FLOATS;
-      
-      const p0 = norm[i];
-      const p1 = norm[i + 1];
-      
-      // 선분 길이 계산 (Math.hypot 최적화)
+      const idx = i * STRIDE / 4;
+      const p0 = coordinates[i];
+      const p1 = coordinates[i + 1];
       const dx = p1[0] - p0[0];
       const dy = p1[1] - p0[1];
       const segmentLength = Math.sqrt(dx * dx + dy * dy);
-      
-      // 인접점 계산
-      const prev = i > 0 ? norm[i - 1] : p0;
-      const next = i < instanceCount - 1 ? norm[i + 2] : p1;
-      
-      // 각도 계산
+      const prev = i > 0 ? coordinates[i - 1] : p0;
+      const next = i < instanceCount - 1 ? coordinates[i + 2] : p1;
       const angle0 = i > 0 ? angle(p0, p1, prev) : -1.0;
       const angle1 = i < instanceCount - 1 ? angle(p1, p0, next) : -1.0;
-      
-      // 배열에 직접 할당 (set 메서드 대신)
       instanceData[idx]     = p0[0]; // a_segmentStart.x
       instanceData[idx+1]   = p0[1]; // a_segmentStart.y
       instanceData[idx+2]   = p1[0]; // a_segmentEnd.x
@@ -286,7 +291,6 @@ void main(){
       instanceData[idx+5]   = angle0; // a_joinAngles.x
       instanceData[idx+6]   = angle1; // a_joinAngles.y
       instanceData[idx+7]   = i; // a_id
-      
       distances += segmentLength;
     }
 
@@ -295,7 +299,6 @@ void main(){
     const quadVertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
-
     const quadIndices = new Uint16Array([0, 1, 2, 2, 1, 3]);
     const quadIndexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
@@ -322,12 +325,11 @@ void main(){
     }
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     bindInstanceAttributes(instanceAttributes, 1);
-
-    // ---- 쿼드 버퍼: bindAttrib로 등록 ----
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     bindAttrib("a_position", 2, 0, 0, 0);
 
     // ====== Uniforms ======
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
     gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
     gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
     gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
@@ -337,14 +339,14 @@ void main(){
     gl.uniform1i(gl.getUniformLocation(program, "u_usePattern"), 0);
     gl.uniform3f(gl.getUniformLocation(program, "u_color"), 0.08, 0.8, 1.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_capType"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_joinType"), 7.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_joinType"), 7.0); // 7: miter, 6: bevel, etc.
 
     // ====== Draw ======
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ZERO);
+    gl.blendFunc(gl.ONE, gl.ZERO); // premultiplied alpha 사용 안함 (필요시 gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA 등으로 교체)
     ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
   </script>
 </body>
