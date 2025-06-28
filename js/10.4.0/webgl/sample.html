@@ -1,0 +1,131 @@
+// WebGL 컨텍스트와 확장 가져오기
+const canvas = document.createElement('canvas');
+const gl = canvas.getContext('webgl');
+const ext = gl.getExtension('ANGLE_instanced_arrays');
+
+if (!ext) {
+  console.error('ANGLE_instanced_arrays 확장이 지원되지 않습니다.');
+}
+
+// 쉐이더 소스
+const vertexShaderSource = `
+  attribute vec2 a_position;
+  attribute vec3 a_color;
+  attribute vec2 a_offset; // 인스턴스별 오프셋
+  varying vec3 v_color;
+  void main() {
+    gl_Position = vec4(a_position + a_offset, 0.0, 1.0);
+    v_color = a_color;
+  }
+`;
+
+const fragmentShaderSource = `
+  precision mediump float;
+  varying vec3 v_color;
+  void main() {
+    gl_FragColor = vec4(v_color, 1.0);
+  }
+`;
+
+// 쉐이더 컴파일 및 프로그램 생성
+function createShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('Shader 컴파일 실패:', gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  return shader;
+}
+
+function createProgram(gl, vertexShader, fragmentShader) {
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program 링크 실패:', gl.getProgramInfoLog(program));
+    return null;
+  }
+  return program;
+}
+
+const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+const program = createProgram(gl, vertexShader, fragmentShader);
+
+gl.useProgram(program);
+
+// 삼각형 정점 데이터 (2D 위치와 색상)
+const positions = [
+  // 삼각형 1
+  -0.1, -0.1,  // vertex 1
+   0.1, -0.1,  // vertex 2
+   0.0,  0.1,  // vertex 3
+];
+const colors = [
+  1.0, 0.0, 0.0, // 빨강
+  0.0, 1.0, 0.0, // 초록
+  0.0, 0.0, 1.0, // 파랑
+];
+const indices = [0, 1, 2]; // 삼각형 인덱스
+
+// 인스턴스별 오프셋 (5개의 삼각형 위치)
+const offsets = [
+  -0.4, -0.4,
+   0.0, -0.4,
+   0.4, -0.4,
+  -0.2,  0.0,
+   0.2,  0.0,
+];
+
+// 버퍼 생성 및 데이터 업로드
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+const colorBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+
+const offsetBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, offsetBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(offsets), gl.STATIC_DRAW);
+
+const indexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+// 속성 설정
+const positionLoc = gl.getAttribLocation(program, 'a_position');
+gl.enableVertexAttribArray(positionLoc);
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+
+const colorLoc = gl.getAttribLocation(program, 'a_color');
+gl.enableVertexAttribArray(colorLoc);
+gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+gl.vertexAttribPointer(colorLoc, 3, gl.FLOAT, false, 0, 0);
+
+const offsetLoc = gl.getAttribLocation(program, 'a_offset');
+gl.enableVertexAttribArray(offsetLoc);
+gl.bindBuffer(gl.ARRAY_BUFFER, offsetBuffer);
+gl.vertexAttribPointer(offsetLoc, 2, gl.FLOAT, false, 0, 0);
+
+// 인스턴싱 설정: 오프셋은 인스턴스당 한 번씩만 업데이트
+ext.vertexAttribDivisorANGLE(offsetLoc, 1);
+
+// 렌더링
+gl.clearColor(0, 0, 0, 1);
+gl.clear(gl.COLOR_BUFFER_BIT);
+
+// 인스턴싱된 삼각형 그리기
+ext.drawElementsInstancedANGLE(
+  gl.TRIANGLES, // mode
+  indices.length, // count
+  gl.UNSIGNED_SHORT, // type
+  0, // offset
+  5 // instanceCount
+);
