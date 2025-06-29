@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Line Image Along vs Texture Style (Toggle)</title>
+  <style>
+    body { background: #222; color: #fff; margin:0;}
+    #ui { margin:12px; }
+    canvas { display:block; margin:auto; background:#111; }
+  </style>
+</head>
+<body>
+<div id="ui">
+  <label>
+    <input type="checkbox" id="along" checked>
+    Image Along Line (체크 해제시 Texture Style)
+  </label>
+</div>
+<canvas id="glcanvas" width="900" height="600"></canvas>
+<script>
+const canvas = document.getElementById("glcanvas");
+const gl = canvas.getContext("webgl");
+if (!gl) throw "WebGL 미지원";
+
+// === 샘플 라인
+const points = [
+  [100, 150], [200, 400], [300, 200], [450, 450], [700, 300]
+];
+const thickness = 36.0;
+
+// === (1) 라인 길이/누적거리 계산 (image along용)
+let totalLen = 0;
+const lengths = [0];
+for (let i = 1; i < points.length; ++i) {
+  const dx = points[i][0] - points[i-1][0];
+  const dy = points[i][1] - points[i-1][1];
+  totalLen += Math.sqrt(dx*dx + dy*dy);
+  lengths.push(totalLen);
+}
+
+// === (2) 버텍스 + UV 생성 (두 방식 모두 지원)
+const verts = [];
+for (let i = 0; i < points.length - 1; ++i) {
+  const p0 = points[i], p1 = points[i+1];
+  const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+  const len = Math.sqrt(dx*dx + dy*dy);
+  const nx = -dy/len, ny = dx/len;
+  const u0 = lengths[i] / totalLen;
+  const u1 = lengths[i+1] / totalLen;
+  // 4개 정점: (위/아래) x (시작/끝)
+  verts.push(
+    // p0 위, p0 아래, p1 위, p1 아래
+    // pos.x, pos.y, alongU, localV, worldU, worldV
+    p0[0]+nx*thickness/2, p0[1]+ny*thickness/2,  u0, 0,  (p0[0]+nx*thickness/2)*0.025, (p0[1]+ny*thickness/2)*0.025,
+    p0[0]-nx*thickness/2, p0[1]-ny*thickness/2,  u0, 1,  (p0[0]-nx*thickness/2)*0.025, (p0[1]-ny*thickness/2)*0.025,
+    p1[0]+nx*thickness/2, p1[1]+ny*thickness/2,  u1, 0,  (p1[0]+nx*thickness/2)*0.025, (p1[1]+ny*thickness/2)*0.025,
+    p1[0]-nx*thickness/2, p1[1]-ny*thickness/2,  u1, 1,  (p1[0]-nx*thickness/2)*0.025, (p1[1]-ny*thickness/2)*0.025
+  );
+}
+const indices = [];
+for (let i = 0; i < points.length-1; ++i) {
+  let k = i*4;
+  indices.push(
+    k, k+1, k+2,
+    k+1, k+3, k+2
+  );
+}
+
+// === 쉐이더 (두 스타일 지원)
+const vsrc = `
+attribute vec2 a_pos;
+attribute vec2 a_alongUV;
+attribute vec2 a_worldUV;
+varying vec2 v_alongUV;
+varying vec2 v_worldUV;
+void main() {
+  gl_Position = vec4(
+    (a_pos.x/450.0 - 1.0),
+    (1.0 - a_pos.y/300.0),
+    0, 1);
+  v_alongUV = a_alongUV;
+  v_worldUV = a_worldUV;
+}`;
+const fsrc = `
+precision mediump float;
+varying vec2 v_alongUV;
+varying vec2 v_worldUV;
+uniform sampler2D u_tex;
+uniform bool u_mode_along; // true=along, false=texture style
+
+void main() {
+  // 패턴 반복 조절값(더 크게/작게)
+  float repeat = 12.0;
+
+  vec2 uv = u_mode_along
+      ? vec2(v_alongUV.x * repeat, v_alongUV.y)
+      : v_worldUV;
+
+  // 체크패턴
+  vec4 color = texture2D(u_tex, uv);
+  // 라인 외곽 부드럽게(필요시)
+  float dist = u_mode_along ? abs(v_alongUV.y-0.5)*2.0 : abs(v_worldUV.y-0.5)*2.0;
+  float alpha = smoothstep(1.0, 0.85, dist);
+  gl_FragColor = vec4(color.rgb, color.a * alpha);
+}`;
+
+// === 버퍼/프로그램
+function buf(data, target, usage) {
+  const b = gl.createBuffer();
+  gl.bindBuffer(target, b);
+  gl.bufferData(target, data, usage);
+  return b;
+}
+const vbuf = buf(new Float32Array(verts), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+const ibuf = buf(new Uint16Array(indices), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+function shader(src,type){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(s);return s;}
+const prog=gl.createProgram();
+gl.attachShader(prog,shader(vsrc,gl.VERTEX_SHADER));
+gl.attachShader(prog,shader(fsrc,gl.FRAGMENT_SHADER));
+gl.linkProgram(prog);gl.useProgram(prog);
+
+// === 속성 연결
+gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+const a_pos = gl.getAttribLocation(prog,"a_pos");
+gl.enableVertexAttribArray(a_pos);
+gl.vertexAttribPointer(a_pos,2,gl.FLOAT,false,24,0);
+const a_alongUV = gl.getAttribLocation(prog,"a_alongUV");
+gl.enableVertexAttribArray(a_alongUV);
+gl.vertexAttribPointer(a_alongUV,2,gl.FLOAT,false,24,8);
+const a_worldUV = gl.getAttribLocation(prog,"a_worldUV");
+gl.enableVertexAttribArray(a_worldUV);
+gl.vertexAttribPointer(a_worldUV,2,gl.FLOAT,false,24,16);
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibuf);
+
+// === 체크 텍스처 생성
+function makePatternTex() {
+  const sz=32, data=new Uint8Array(sz*sz*4);
+  for(let y=0;y<sz;++y)for(let x=0;x<sz;++x){
+    const c=(((x>>3)^(y>>3))&1)?220:60;
+    const i=(y*sz+x)*4;
+    data[i]=c;data[i+1]=c;data[i+2]=c;data[i+3]=255;
+  }
+  const t=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,sz,sz,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+  return t;
+}
+const tex = makePatternTex();
+gl.activeTexture(gl.TEXTURE0);
+gl.bindTexture(gl.TEXTURE_2D, tex);
+
+// === 유니폼 ===
+gl.uniform1i(gl.getUniformLocation(prog, "u_tex"), 0);
+const u_mode_along = gl.getUniformLocation(prog, "u_mode_along");
+
+// === DRAW 함수
+function draw(mode_along) {
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(prog);
+  gl.uniform1i(u_mode_along, mode_along ? 1 : 0);
+  gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+}
+draw(true);
+
+// === UI 체크박스 이벤트
+document.getElementById("along").addEventListener("change", e => {
+  draw(e.target.checked);
+});
+</script>
+</body>
+</html>
