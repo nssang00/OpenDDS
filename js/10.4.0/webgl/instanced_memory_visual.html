@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>OpenLayers vs Instanced GPU 메모리 절감 시각화</title>
+  <style>
+    body { font-family: 'Pretendard', 'Malgun Gothic', sans-serif; background: #191919; color: #fff; margin: 0; }
+    .container { max-width: 720px; margin: 36px auto; padding: 24px 24px 48px 24px; background: #232323; border-radius: 16px; box-shadow: 0 2px 16px #000a; }
+    h2 { margin: 0 0 16px 0; color: #4dc8ff; }
+    canvas { background: #222; margin: 32px 0 12px 0; border-radius: 12px; display: block; }
+    table { width: 100%; border-collapse: collapse; background: #242424; margin-bottom: 16px; }
+    th, td { text-align: right; padding: 4px 10px; }
+    th { color: #97e4ff; font-weight: bold; border-bottom: 1px solid #333; }
+    td { border-bottom: 1px solid #222; }
+    tr:last-child td { border-bottom: none; }
+    .bar { height: 18px; border-radius: 5px; }
+    .ol { background: linear-gradient(90deg, #8ff1e8 60%, #62c1fa 100%);}
+    .ins { background: linear-gradient(90deg, #b1ffba 80%, #5fff8d 100%);}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>OpenLayers vs Instanced GPU 메모리 절감<br><small style="font-size:15px;color:#b9f6ff;">세그먼트 100,000개, 추가 attribute 0~10개</small></h2>
+    <canvas id="chart" width="620" height="300"></canvas>
+    <table>
+      <thead>
+        <tr>
+          <th>N</th>
+          <th>OL(MB)</th>
+          <th>Instanced(MB)</th>
+          <th>절감률(%)</th>
+        </tr>
+      </thead>
+      <tbody id="tbl"></tbody>
+    </table>
+    <div style="font-size:13px;color:#9af;">
+      OL(MB) = 400,000 × (14+N) × 4 ÷ 1,048,576<br>
+      Instanced(MB) = 100,000 × 8 × 4 ÷ 1,048,576 ≈ 3.05<br>
+      절감률 = ((OL − Instanced)/OL)×100
+    </div>
+  </div>
+  <script>
+    // 데이터 준비
+    const chartData = [];
+    for(let N=0;N<=10;N++) {
+      const ol = 400000*(14+N)*4/1048576;
+      const ins = 100000*8*4/1048576;
+      const saving = ((ol-ins)/ol)*100;
+      chartData.push({N, ol, ins, saving});
+    }
+
+    // 표 렌더링
+    const tbl = document.getElementById('tbl');
+    chartData.forEach(d => {
+      tbl.innerHTML += `<tr>
+        <td>${d.N}</td>
+        <td>${d.ol.toFixed(2)}</td>
+        <td>${d.ins.toFixed(2)}</td>
+        <td>${d.saving.toFixed(1)}</td>
+      </tr>`;
+    });
+
+    // 그래프 렌더링
+    const ctx = document.getElementById('chart').getContext('2d');
+    ctx.clearRect(0,0,620,300);
+
+    // Y축(메모리) 자동 max
+    const maxY = Math.ceil(chartData[chartData.length-1].ol/5)*5; // 40MB
+
+    // 축/눈금
+    ctx.font = "13px Pretendard,Malgun Gothic,sans-serif";
+    ctx.fillStyle="#8cf";
+    for(let y=0;y<=maxY;y+=5) {
+      const py = 250-y*5; // y축 픽셀
+      ctx.beginPath();
+      ctx.moveTo(40,py); ctx.lineTo(610,py);
+      ctx.strokeStyle = y===0?"#888":"#393d42";
+      ctx.lineWidth = y===0?2:1;
+      ctx.stroke();
+      ctx.fillText(y+"MB", 3, py+6);
+    }
+    ctx.save();
+    ctx.translate(40,0);
+    // 바그래프
+    for(let i=0;i<chartData.length;i++) {
+      const {ol, ins} = chartData[i];
+      const x = i*52+10, w=36;
+      // OL bar
+      ctx.fillStyle="#5fd2e6";
+      ctx.fillRect(x, 250-ol*5, w, ol*5);
+      ctx.fillStyle="#fff";
+      ctx.fillText(ol.toFixed(1), x+2, 245-ol*5);
+      // Instanced bar
+      ctx.fillStyle="#75ff87";
+      ctx.fillRect(x+w+4, 250-ins*5, 9, ins*5);
+      ctx.fillStyle="#fff";
+      ctx.fillText(ins.toFixed(1), x+w+7, 245-ins*5);
+      // x축 레이블
+      ctx.fillStyle="#a6e4ff";
+      ctx.fillText(i, x+8, 268);
+      if(i===0) ctx.fillText("N(추가 attr)", x+8, 285);
+    }
+    ctx.restore();
+
+    // 범례
+    ctx.fillStyle="#5fd2e6"; ctx.fillRect(360, 270, 18,12);
+    ctx.fillStyle="#fff"; ctx.fillText("OpenLayers", 380, 280);
+    ctx.fillStyle="#75ff87"; ctx.fillRect(470, 270, 18,12);
+    ctx.fillStyle="#fff"; ctx.fillText("Instanced", 492, 280);
+  </script>
+</body>
+</html>
