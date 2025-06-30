@@ -32,6 +32,10 @@ uniform float u_pixelRatio;
 uniform float u_globalAlpha;
 uniform float u_halfWidth;
 
+const float PI = 3.141592653589793238;
+const float TWO_PI = 2.0 * PI;
+float currentLineMetric = 0.;
+
 varying vec2  v_segmentStart;
 varying vec2  v_segmentEnd;
 varying float v_distance;
@@ -39,11 +43,16 @@ varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
 varying float v_angleTangentSum;
 
-// ---- 추가함수 ----
+vec2 worldToPx(vec2 worldPos) {
+  vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
+  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
+}
+
 vec2 pxToScreen(vec2 pxPos) {
   vec2 screenPos = 2.0 * pxPos / u_viewportSizePx - 1.0;
-  return screenPos;
+  return vec4(screenPos, u_depth, 1.0);
 }
+
 bool isCap(float ang){ return ang < -0.1; }
 vec2 getJoinOffsetDirection(vec2 n,float ang){
   float h = ang*0.5;
@@ -94,12 +103,6 @@ void main(){
   v_joinAngles   = a_joinAngles;
   v_hitColor     = colorEncodeId(a_id);
   v_angleTangentSum = a_angleTangentSum;
-}
-float PI = 3.141592653589793238;
-vec2 worldToPx(vec2 worldPos) {
-  vec4 clip = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
-  vec2 ndc = clip.xy / clip.w;
-  return (0.5 * ndc + 0.5) * u_viewportSizePx;
 }
 `;
 
