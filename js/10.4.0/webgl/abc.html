@@ -9,7 +9,7 @@
   </style>
 </head>
 <body>
-  <canvas id="glcanvas" width="960" height="640"></canvas>
+  <canvas id="glcanvas" width="1024" height="768"></canvas>
   <script>
     const canvas = document.getElementById("glcanvas");
     const gl = canvas.getContext("webgl");
@@ -486,7 +486,7 @@ void main() {
     gl.uniform1f(gl.getUniformLocation(program, "u_gapLength"), 0.0);
     gl.uniform1i(gl.getUniformLocation(program, "u_usePattern"), 0);
     gl.uniform3f(gl.getUniformLocation(program, "u_color"), 0.08, 0.8, 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_capType"), 4.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_capType"), 0.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_joinType"), 0.0); // 7: miter, 6: bevel, etc.
     gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
