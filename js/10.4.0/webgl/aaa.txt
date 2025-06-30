@@ -183,3 +183,22 @@ function setupDashUniforms(gl, program, dashPattern, dashPatternLength) {
   gl.uniform1fv(dashPatternLocation, paddedPattern);
   gl.uniform1i(dashPatternLengthLocation, dashPatternLength);
 }
+
+//////////
+////////
+float dashDistanceField(float distance, float radius, float capType, float lineWidth, float dashOffset, float dashPattern[${dashPattern.length}], int dashPatternLength) {
+  float totalDashLength = 0.0;
+  for (int i = 0; i < dashPatternLength; ++i) {
+    totalDashLength += dashPattern[i];
+  }
+  float result = 1e20; // Initialize to a large value
+  float currentDashOffset = 0.0;
+  for (int i = 0; i < dashPatternLength; i += 2) {
+    result = min(result, getSingleDashDistance(distance, radius, currentDashOffset + dashOffset, dashPattern[i], totalDashLength, capType, lineWidth));
+    if (i + 1 < dashPatternLength) {
+      currentDashOffset += dashPattern[i] + dashPattern[i + 1];
+    }
+  }
+  return result;
+}`;
+
