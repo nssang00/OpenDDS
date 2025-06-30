@@ -1,0 +1,67 @@
+#define MAX_DASH 8
+
+uniform float u_dashArray[MAX_DASH]; // [on, off, on, off, ...]
+uniform int   u_dashCount;           // 실제 패턴 길이(짝수)
+uniform float u_dashOffset;
+
+// 기존 OpenLayers dash 필드 함수와 동일
+float getSingleDashDistance(
+  float distance, float radius, float dashOffset, float dashLength,
+  float dashLengthTotal, float capType, float lineWidth
+) {
+  float localDistance = mod(distance, dashLengthTotal);
+  float distanceSegment = abs(localDistance - dashOffset - dashLength * 0.5) - dashLength * 0.5;
+  distanceSegment = min(distanceSegment, dashLengthTotal - localDistance);
+
+  if (capType == 5.0) { // square cap
+    distanceSegment -= lineWidth * 0.5;
+  } else if (capType == 6.0) { // round cap
+    distanceSegment = min(
+      distanceSegment,
+      sqrt(distanceSegment * distanceSegment + radius * radius) - lineWidth * 0.5
+    );
+  }
+  return distanceSegment;
+}
+
+// dashDistanceField는 dash 패턴 전체에서 getSingleDashDistance만 반복 호출 (최소값 리턴)
+float dashDistanceField(
+  float distance, float radius, float capType, float lineWidth
+) {
+  // dash 전체 길이 합
+  float totalDashLength = 0.0;
+  for(int i=0; i<MAX_DASH; ++i) {
+    if(i >= u_dashCount) break;
+    totalDashLength += u_dashArray[i];
+  }
+
+  float minDist = 1e6; // 충분히 큰 값
+  float dashOffset = 0.0;
+  for(int i=0; i<MAX_DASH; i+=2) {
+    if(i+1 >= u_dashCount) break; // on/off 쌍
+    float dashLength = u_dashArray[i];
+    // offLen := u_dashArray[i+1]; // 필요시
+    float d = getSingleDashDistance(
+      distance + u_dashOffset, radius,
+      dashOffset, dashLength, totalDashLength, capType, lineWidth
+    );
+    minDist = min(minDist, d);
+    dashOffset += u_dashArray[i] + u_dashArray[i+1];
+  }
+  return minDist;
+}
+
+/////
+const MAX_DASH = 8;
+const dashArray = style.dashArray || [5, 3]; // 또는 원하는 패턴
+const paddedDashArray = new Float32Array(MAX_DASH);
+paddedDashArray.set(dashArray);
+gl.uniform1fv(gl.getUniformLocation(program, "u_dashArray"), paddedDashArray);
+gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), dashArray.length);
+gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), style.dashOffset || 0.0);
+
+///////
+float dashDist = dashDistanceField(currentLengthPx, currentRadiusPx, u_capType, v_width);
+float alpha = smoothstep(0.5, -0.5, dashDist);
+// ...
+gl_FragColor = vec4(u_color, alpha * u_globalAlpha);
