@@ -46,7 +46,8 @@ varying float v_angleTangentSum;
 
 vec2 worldToPx(vec2 worldPos) {
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
-  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
+  // NDC -> Pixel
+  return (0.5 * (screenPos.xy / screenPos.w) + 0.5) * u_viewportSizePx;
 }
 
 vec4 pxToScreen(vec2 pxPos) {
@@ -62,14 +63,12 @@ vec2 getJoinOffsetDirection(vec2 n, float ang) {
   return bis * (1.0 / s);
 }
 
-// 오프셋 적용
 vec2 getOffsetPoint(vec2 point, vec2 normal, float joinAngle, float offsetPx) {
   if (cos(joinAngle) > 0.998 || isCap(joinAngle))
     return point - normal * offsetPx;
   return point - getJoinOffsetDirection(normal, joinAngle) * offsetPx;
 }
 
-// id를 색상값으로 인코딩 (OpenLayers와 동일)
 vec4 colorEncodeId(float id) {
   float r = floor(id / 16777216.0);
   float g = floor(mod(id, 16777216.0) / 65536.0);
@@ -82,11 +81,9 @@ void main() {
   vec2 p0 = worldToPx(a_segmentStart);
   vec2 p1 = worldToPx(a_segmentEnd);
 
-  // 조인/노멀/탠젠트 벡터 계산
   vec2 t = normalize(p1 - p0);
   vec2 n = vec2(-t.y, t.x);
 
-  // 좌표 쿼드의 네 모서리 분기
   float s = (a_position.x + 1.0) * 0.5;
   float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
@@ -100,11 +97,9 @@ void main() {
     joinDir = getJoinOffsetDirection(n * normalDir, ang);
   }
 
-  // 오프셋 및 clip space 변환
   vec2 posPx = basePos + joinDir * (u_halfWidth + 1.0);
   gl_Position = pxToScreen(posPx);
 
-  // Varying 전달
   v_segmentStart = p0;
   v_segmentEnd   = p1;
   v_distance     = a_distance + distance(p1, p0) * s;
@@ -114,7 +109,6 @@ void main() {
 }
 `;
 
-    // ====== Fragment shader (함수명 OL 스타일) ======
     const fragmentShaderSource = `
 precision mediump float;
 varying vec2  v_segmentStart;
@@ -209,7 +203,6 @@ void main() {
 }
 `;
 
-    // ====== Shader program ======
     function compileShader(type, source) {
       const shader = gl.createShader(type);
       gl.shaderSource(shader, source);
@@ -225,7 +218,6 @@ void main() {
     gl.linkProgram(program);
     gl.useProgram(program);    
     
-    // ====== Attribute 구조 정의 및 자동 stride ======
     const instanceAttributes = [
       { name: "a_segmentStart", size: 2 },
       { name: "a_segmentEnd",   size: 2 },
@@ -236,7 +228,6 @@ void main() {
     ];
     const STRIDE = instanceAttributes.reduce((sum, a) => sum + a.size, 0) * 4;
 
-    // ====== 지도(월드) 좌표 ======
     const coordinates = [
       [-122.48369693756104, 37.83381888486939],
       [-122.48348236083984, 37.83317489144141],
