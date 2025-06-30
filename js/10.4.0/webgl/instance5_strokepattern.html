@@ -544,9 +544,9 @@ void main() {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 
-        gl.activeTexture(gl.TEXTURE1);
+        gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, patternTexture);
-        gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), 1);
+        gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), 0);
 
         gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSize"), patternCanvas.width, patternCanvas.height);
         gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), 0, 0);
