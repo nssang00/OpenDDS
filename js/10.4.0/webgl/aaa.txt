@@ -1,3 +1,30 @@
+float dashDistanceField(
+  float distance, float radius, float capType, float lineWidth,
+  float dashArray[8], int dashCount, float dashOffsetUniform
+) {
+  float totalDashLength = 0.0;
+  for (int i = 0; i < 8; ++i) {
+    if (i >= dashCount) break;
+    totalDashLength += dashArray[i];
+  }
+
+  float minDist = 1e6;
+  float dashOffset = 0.0;
+  for (int i = 0; i < 8; i += 2) {
+    if (i + 1 >= dashCount) break;
+    float dashLength = dashArray[i];
+    float d = getSingleDashDistance(
+      distance + dashOffsetUniform, radius,
+      dashOffset, dashLength, totalDashLength, capType, lineWidth
+    );
+    minDist = min(minDist, d);
+    dashOffset += dashArray[i] + dashArray[i + 1];
+  }
+  return minDist;
+}
+
+///////////////
+
 #define MAX_DASH 8
 
 uniform float u_dashArray[MAX_DASH]; // [on, off, on, off, ...]
