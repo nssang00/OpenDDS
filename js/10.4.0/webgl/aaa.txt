@@ -1,27 +1,37 @@
 float dashDistanceField(
   float distance, float radius, float capType, float lineWidth,
-  float dashArray[8], int dashCount, float dashOffsetUniform
+  float dashArray[8], int dashLength, float dashOffset
 ) {
   float totalDashLength = 0.0;
   for (int i = 0; i < 8; ++i) {
-    if (i >= dashCount) break;
+    if (i >= dashLength) break;
     totalDashLength += dashArray[i];
   }
 
   float minDist = 1e6;
-  float dashOffset = 0.0;
+  float localOffset = 0.0;
   for (int i = 0; i < 8; i += 2) {
-    if (i + 1 >= dashCount) break;
-    float dashLength = dashArray[i];
+    if (i + 1 >= dashLength) break;
+    float dashSegment = dashArray[i];
     float d = getSingleDashDistance(
-      distance + dashOffsetUniform, radius,
-      dashOffset, dashLength, totalDashLength, capType, lineWidth
+      distance + dashOffset, radius,
+      localOffset, dashSegment, totalDashLength, capType, lineWidth
     );
     minDist = min(minDist, d);
-    dashOffset += dashArray[i] + dashArray[i + 1];
+    localOffset += dashArray[i] + dashArray[i + 1];
   }
   return minDist;
 }
+
+float dashDist = dashDistanceField(
+  v_distance,
+  currentRadiusPx,
+  u_capType,
+  v_width,
+  u_dashArray,
+  u_dashLength,  // <- int형
+  u_dashOffset   // <- float형
+);
 
 ///////////////
 
