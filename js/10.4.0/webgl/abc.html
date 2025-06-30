@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -17,7 +18,11 @@
 
     // ====== Vertex shader ======
     const vertexShaderSource = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 
 attribute vec2  a_segmentStart;
 attribute vec2  a_segmentEnd;
@@ -31,22 +36,26 @@ uniform mat4  u_projectionMatrix;
 uniform vec2  u_viewportSizePx;
 uniform float u_pixelRatio;
 uniform float u_globalAlpha;
-uniform float u_halfWidth;
+uniform float u_lineWidth;
 uniform float u_depth;
+uniform float u_resolution;
 
 const float PI = 3.141592653589793238;
 const float TWO_PI = 2.0 * PI;
 
 varying vec2  v_segmentStart;
 varying vec2  v_segmentEnd;
+varying float v_angleStart;
+varying float v_angleEnd;
 varying float v_distance;
+varying float v_distanceOffsetPx;
 varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
 varying float v_angleTangentSum;
 
+
 vec2 worldToPx(vec2 worldPos) {
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
-  // NDC -> Pixel
   return (0.5 * (screenPos.xy / screenPos.w) + 0.5) * u_viewportSizePx;
 }
 
@@ -55,12 +64,16 @@ vec4 pxToScreen(vec2 pxPos) {
   return vec4(screen, u_depth, 1.0);
 }
 
-bool isCap(float ang) { return ang < -0.1; }
-vec2 getJoinOffsetDirection(vec2 n, float ang) {
-  float h = ang * 0.5;
-  float c = cos(h), s = sin(h);
-  vec2 bis = vec2(s*n.x + c*n.y, -c*n.x + s*n.y);
-  return bis * (1.0 / s);
+bool isCap(float joinAngle) {
+  return joinAngle < -0.1;
+}
+vec2 getJoinOffsetDirection(vec2 normalPx, float joinAngle) {
+  float halfAngle = joinAngle / 2.0;
+  float c = cos(halfAngle);
+  float s = sin(halfAngle);
+  vec2 angleBisectorNormal = vec2(s * normalPx.x + c * normalPx.y, -c * normalPx.x + s * normalPx.y);
+  float length = 1.0 / s;
+  return angleBisectorNormal * length;
 }
 
 vec2 getOffsetPoint(vec2 point, vec2 normal, float joinAngle, float offsetPx) {
@@ -78,31 +91,36 @@ vec4 colorEncodeId(float id) {
 }
 
 void main() {
-  vec2 p0 = worldToPx(a_segmentStart);
-  vec2 p1 = worldToPx(a_segmentEnd);
+  v_angleStart = a_joinAngles.x;
+  v_angleEnd = a_joinAngles.y;
 
-  vec2 t = normalize(p1 - p0);
-  vec2 n = vec2(-t.y, t.x);
+  float lineOffsetPx = 0.0;
 
-  float s = (a_position.x + 1.0) * 0.5;
-  float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
+  vec2 segmentStartPx = worldToPx(a_segmentStart);
+  vec2 segmentEndPx = worldToPx(a_segmentEnd);  
+  vec2 tangentPx = normalize(segmentEndPx - segmentStartPx);
+  vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
+  segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, lineOffsetPx),
+  segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, lineOffsetPx);
+  
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
-  float ang        = a_position.x < 0.0 ? a_joinAngles.x : a_joinAngles.y;
-  vec2  basePos    = a_position.x < 0.0 ? p0 : p1;
+  float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
+  float angle        = a_position.x < 0.0 ? v_angleStart : v_angleEnd;
+  vec2  positionPx    = a_position.x < 0.0 ? segmentStartPx : segmentEndPx;
 
-  vec2 joinDir;
-  if (cos(ang) > 0.985 || isCap(ang)) {
-    joinDir = n * normalDir - t * tangentDir;
+  vec2 joinDirection;
+  if (cos(angle) > 0.985 || isCap(angle)) {
+    joinDirection = normalPx * normalDir - tangentPx * tangentDir;
   } else {
-    joinDir = getJoinOffsetDirection(n * normalDir, ang);
+    joinDirection = getJoinOffsetDirection(normalPx * normalDir, angle);
   }
 
-  vec2 posPx = basePos + joinDir * (u_halfWidth + 1.0);
-  gl_Position = pxToScreen(posPx);
+  positionPx = positionPx + joinDirection * (u_lineWidth * 0.5 + 1.);
+  gl_Position = pxToScreen(positionPx);
 
-  v_segmentStart = p0;
-  v_segmentEnd   = p1;
-  v_distance     = a_distance + distance(p1, p0) * s;
+  v_segmentStart = segmentStartPx;
+  v_segmentEnd   = segmentEndPx;
+  v_distanceOffsetPx = a_distance / u_resolution - (lineOffsetPx * a_angleTangentSum);
   v_joinAngles   = a_joinAngles;
   v_hitColor     = colorEncodeId(a_id);
   v_angleTangentSum = a_angleTangentSum;
@@ -110,14 +128,21 @@ void main() {
 `;
 
     const fragmentShaderSource = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 varying vec2  v_segmentStart;
 varying vec2  v_segmentEnd;
-varying float v_distance;
+varying float v_angleStart;
+varying float v_angleEnd;
+//varying float v_distance;
 varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
+varying float v_distanceOffsetPx;
 varying float v_angleTangentSum;
-uniform float u_halfWidth;
+uniform float u_lineWidth;
 uniform float u_dashLength;
 uniform float u_gapLength;
 uniform bool  u_usePattern;
@@ -127,6 +152,55 @@ uniform float u_pixelRatio;
 uniform float u_globalAlpha;
 uniform float u_capType;
 uniform float u_joinType;
+
+uniform float u_dashPattern[8];
+uniform int u_dashCount;
+uniform float u_dashOffset;
+
+float getSingleDashDistance(float distance, float radius, float dashOffset, float dashLength, float dashLengthTotal, float capType, float lineWidth) {
+  float localDistance = mod(distance, dashLengthTotal);
+  float distanceSegment = abs(localDistance - dashOffset - dashLength * 0.5) - dashLength * 0.5;
+  distanceSegment = min(distanceSegment, dashLengthTotal - localDistance);
+  if (capType == 5.0) {
+    distanceSegment -= lineWidth * 0.5;
+  } else if (capType == 0.0) {
+    distanceSegment = min(distanceSegment, sqrt(distanceSegment * distanceSegment + radius * radius) - lineWidth * 0.5);
+  }
+  return distanceSegment;
+}
+
+float dashDistanceField(float distance, float radius, float capType, float lineWidth,
+  float dashPattern[8], int dashCount, float dashOffset) {
+
+  float totalDashLength = 0.0;
+  for (int i = 0; i < 8; ++i) {
+    if (i >= dashCount) break;
+    totalDashLength += dashPattern[i];
+  }
+
+  float minDistance = 1e6;
+  float currentOffset = 0.0;
+  for (int i = 0; i < 8; i += 2) {
+    if (i + 1 >= dashCount) break;
+    float dashSegment = dashPattern[i];
+    float singleDashDist = getSingleDashDistance(
+      distance + dashOffset, radius,
+      currentOffset, dashSegment, totalDashLength, capType, lineWidth
+    );
+    minDistance = min(minDistance, singleDashDist);
+    currentOffset += dashPattern[i] + dashPattern[i + 1];
+  }
+  return minDistance;
+
+  /*
+  float dashLength0 = 20.0;
+  float dashLength1 = 5.0;
+  float dashLength2 = 20.0;
+  float dashLength3 = 5.0;
+  float totalDashLength = dashLength0 + dashLength1 + dashLength2 + dashLength3;
+  return min(getSingleDashDistance(distance, radius, 0., dashLength0, totalDashLength, capType, lineWidth), getSingleDashDistance(distance, radius, 0. + dashLength0 + dashLength1, dashLength2, totalDashLength, capType, lineWidth)); 
+*/
+}
 
 bool isCap(float a) { return a < -0.1; }
 float segmentDistanceField(vec2 point, vec2 start, vec2 end, float width) {
@@ -147,9 +221,14 @@ float roundCapDistanceField(vec2 point, vec2 start, vec2 end, float width) {
   float onSegment = max(0., 1000. * dot(point - start, end - start));
   return length(point - start) - width * 0.5 - onSegment;
 }
-float bevelJoinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle) {
-  vec2 tangent = normalize(end - start);
+
+float roundJoinDistanceField(vec2 point, vec2 start, vec2 end, float width) {
+  return roundCapDistanceField(point, start, end, width);
+}
+
+float bevelJoinField(vec2 point, vec2 start, vec2 end, float width, float joinAngle) {
   vec2 startToPoint = point - start;
+  vec2 tangent = normalize(end - start);
   float c = cos(joinAngle * 0.5);
   float s = sin(joinAngle * 0.5);
   float direction = -sign(sin(joinAngle));
@@ -157,49 +236,95 @@ float bevelJoinDistanceField(vec2 point, vec2 start, vec2 end, float width, floa
   float radius = width * 0.5 * s;
   return dot(startToPoint, bisector * direction) - radius;
 }
+
 float miterJoinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle) {
-  if (cos(joinAngle) > 0.985) return bevelJoinDistanceField(point, start, end, width, joinAngle);
-  float miterLength = 1.0 / sin(joinAngle * 0.5);
-  float miterLimit = 10.0;
-  if (miterLength > miterLimit) return bevelJoinDistanceField(point, start, end, width, joinAngle);
-  return -1000.0;
+  if (cos(joinAngle) > 0.985) { // avoid risking a division by zero
+    return bevelJoinField(point, start, end, width, joinAngle);
+  }
+  float miterLength = 1. / sin(joinAngle * 0.5);
+  float miterLimit = 10.;
+  if (miterLength > miterLimit) {
+    return bevelJoinField(point, start, end, width, joinAngle);
+  }
+  return -1000.;
 }
+
 float capDistanceField(vec2 point, vec2 start, vec2 end, float width, float capType) {
-  if (capType == 4.0) return buttCapDistanceField(point, start, end);
-  if (capType == 5.0) return squareCapDistanceField(point, start, end, width);
+   if (capType == 4.0) {
+    return buttCapDistanceField(point, start, end);
+  } else if (capType == 5.0) {
+    return squareCapDistanceField(point, start, end, width);
+  }
   return roundCapDistanceField(point, start, end, width);
 }
+
 float joinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle, float joinType) {
-  if (joinType == 6.0) return bevelJoinDistanceField(point, start, end, width, joinAngle);
-  if (joinType == 7.0) return miterJoinDistanceField(point, start, end, width, joinAngle);
-  return roundCapDistanceField(point, start, end, width);
+  if (joinType == 6.0) {
+    return bevelJoinField(point, start, end, width, joinAngle);
+  } else if (joinType == 7.0) {
+    return miterJoinDistanceField(point, start, end, width, joinAngle);
+  }
+  return roundJoinDistanceField(point, start, end, width);
 }
+
 float computeSegmentPointDistance(vec2 point, vec2 start, vec2 end, float width, float joinAngle, float capType, float joinType) {
-  return isCap(joinAngle) ?
-    capDistanceField(point, start, end, width, capType) :
-    joinDistanceField(point, start, end, width, joinAngle, joinType);
+  if (isCap(joinAngle)) {
+    return capDistanceField(point, start, end, width, capType);
+  }
+  return joinDistanceField(point, start, end, width, joinAngle, joinType);
+}
+
+float distanceFromSegment(vec2 point, vec2 start, vec2 end) {
+  vec2 tangent = end - start;
+  vec2 startToPoint = point - start;
+  // inspire by capsule fn in https://iquilezles.org/articles/distfunctions/
+  float h = clamp(dot(startToPoint, tangent) / dot(tangent, tangent), 0.0, 1.0);
+  return length(startToPoint - tangent * h);
 }
 
 void main() {
-  vec2  p     = gl_FragCoord.xy / u_pixelRatio;
-  float w     = u_halfWidth*2.0;
-  float d0    = computeSegmentPointDistance(p, v_segmentStart, v_segmentEnd, w, v_joinAngles.x, u_capType, u_joinType);
-  float d1    = computeSegmentPointDistance(p, v_segmentEnd  , v_segmentStart, w, v_joinAngles.y, u_capType, u_joinType);
-  float dLine = segmentDistanceField(p, v_segmentStart, v_segmentEnd, w);
-  float dist  = max(max(d0, d1), dLine);
-  float alpha = smoothstep(0.5, -0.5, dist);
-  if (alpha <= 0.0) discard;
-  float patLen = u_dashLength + u_gapLength;
-  float pos    = mod(v_distance, patLen);
+  vec2  currentPoint     = gl_FragCoord.xy / u_pixelRatio;
+
+
+  float segmentLength = length(v_segmentEnd - v_segmentStart);
+  vec2 segmentTangent = (v_segmentEnd - v_segmentStart) / segmentLength;
+  vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
+  vec2 startToPoint = currentPoint - v_segmentStart;
+  float lengthToPoint = max(0., min(dot(segmentTangent, startToPoint), segmentLength));
+  float currentLengthPx = lengthToPoint + v_distanceOffsetPx; 
+  float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
+  float currentRadiusRatio = dot(segmentNormal, startToPoint) * 2. / u_lineWidth;  
+
+  float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_lineWidth, v_angleStart, u_capType, u_joinType);
+  float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_lineWidth, v_angleEnd, u_capType, u_joinType);
+  float distanceField = max(
+    segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_lineWidth),
+    max(segmentStartDistance, segmentEndDistance)
+  );
+  //distanceField = max(distanceField, -1000.);
+  distanceField = max(distanceField, dashDistanceField(currentLengthPx, currentRadiusPx, u_capType, u_lineWidth, u_dashPattern, u_dashCount, u_dashOffset));
+  float alpha = smoothstep(0.5, -0.5, distanceField);  
+  if(alpha < 0.1) discard;
+
+  //float patLen = u_dashLength + u_gapLength;
+  //float pos    = mod(v_distance, patLen);
+
+  vec4 color = vec4(u_color, alpha * u_globalAlpha);
+
   // v_angleTangentSum를 패턴 보정 등에 활용 가능
+    gl_FragColor = color;
+  /*
   if (!u_usePattern) {
     if (u_gapLength > 0.0 && pos > u_dashLength) discard;
-    gl_FragColor = vec4(u_color, alpha * u_globalAlpha);
+    gl_FragColor = color;
+    gl_FragColor.a *= u_globalAlpha;
+    gl_FragColor.rgb *= gl_FragColor.a;
   } else {
     float uu = mod(v_distance, 64.0) / 64.0;
     if (texture2D(u_pattern, vec2(uu, 0.5)).r < 0.5) discard;
-    gl_FragColor = vec4(u_color, alpha * u_globalAlpha);
+    gl_FragColor = vec4(u_color, gl_FragColor.a * u_globalAlpha);
   }
+    */
 }
 `;
 
@@ -356,14 +481,20 @@ void main() {
     gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
     gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
     gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_halfWidth"), 12.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_lineWidth"), 12.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_dashLength"), 1.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_gapLength"), 0.0);
     gl.uniform1i(gl.getUniformLocation(program, "u_usePattern"), 0);
     gl.uniform3f(gl.getUniformLocation(program, "u_color"), 0.08, 0.8, 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_capType"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_joinType"), 7.0); // 7: miter, 6: bevel, etc.
+    gl.uniform1f(gl.getUniformLocation(program, "u_capType"), 4.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_joinType"), 0.0); // 7: miter, 6: bevel, etc.
     gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+
+    const dashArray = [20,5,20,5];
+    gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(dashArray));
+    gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), dashArray.length);
+    gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), 0);
 
     // ====== Draw ======
     gl.viewport(0, 0, canvas.width, canvas.height);
