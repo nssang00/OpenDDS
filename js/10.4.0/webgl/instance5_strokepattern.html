@@ -158,20 +158,24 @@ uniform float u_dashOffset;
 
 uniform bool u_useStrokePattern;
 uniform sampler2D u_strokePatternTexture;
-uniform vec2      u_strokePatternTextureSize;
-uniform vec2      u_strokePatternTextureOffset;
-uniform vec2      u_strokePatternTextureSampleSize;
-uniform float     u_strokePatternTextureSpacing;
+uniform vec2  u_strokePatternTextureSize;
+uniform vec2  u_strokePatternTextureOffset;
+uniform vec2 u_strokePatternTextureSampleSize;
+uniform float u_strokePatternTextureSpacing;
+uniform float u_strokePatternTextureStartOffset;
 
-vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
+vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float startOffsetPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
   float currentLengthScaled = currentLengthPx * sampleSize.y / lineWidth;
   float spacingScaled = spacingPx * sampleSize.y / lineWidth;
-  float uCoordPx = mod(currentLengthScaled, (sampleSize.x + spacingScaled));
+  float uCoordPx = mod(currentLengthScaled + startOffsetPx, spacingScaled);
   // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
   uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
-  float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
+  if (uCoordPx > sampleSize.x - 1.0) {
+    return vec4(0.0);
+  }  
+  float vCoordPx = (0.5 - currentRadiusRatio * 0.5) * sampleSize.y;
   vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
-  return texture2D(texture, texCoord);
+  return samplePremultiplied(texture, texCoord);
 }
 
 float getSingleDashDistance(float distance, float radius, float dashOffset, float dashLength, float dashLengthTotal, float capType, float lineWidth) {
@@ -333,19 +337,16 @@ void main() {
   //vec4 color = vec4(0.0, 0.0, 1.0, 1.0) * sampleStrokePattern(u_texture1269122425, u_texture1269122425_size, vec2(0.), u_texture1269122425_size, 40.0, currentLengthPx, currentRadiusRatio, u_lineWidth);
 
     vec4 color = u_useStrokePattern
-    ? (1.0 *
-        sampleStrokePattern(
+    ? (1.0 * sampleStrokePattern(
             u_strokePatternTexture,
             u_strokePatternTextureSize,
             u_strokePatternTextureOffset,
             u_strokePatternTextureSampleSize,
             u_strokePatternTextureSpacing,
+            u_strokePatternTextureStartOffset,
             currentLengthPx,
             currentRadiusRatio,
-            u_lineWidth
-        )
-        )
-    : u_strokeColor;
+            u_lineWidth)) : u_strokeColor;
   color.a *= smoothstep(0.5, -0.5, distanceField);
   gl_FragColor = color;
   gl_FragColor.a *= u_globalAlpha;
@@ -551,7 +552,7 @@ void main() {
         gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), 0, 0);
         gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSampleSize"), patternCanvas.width, patternCanvas.height);
         gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), 0.0);
-
+        gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), 0.0);
         gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
     } else {
         gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
