@@ -18,6 +18,7 @@
     // ====== Vertex shader ======
     const vertexShaderSource = `
 precision mediump float;
+
 attribute vec2  a_segmentStart;
 attribute vec2  a_segmentEnd;
 attribute vec2  a_position;
@@ -35,7 +36,6 @@ uniform float u_depth;
 
 const float PI = 3.141592653589793238;
 const float TWO_PI = 2.0 * PI;
-float currentLineMetric = 0.;
 
 varying vec2  v_segmentStart;
 varying vec2  v_segmentEnd;
@@ -44,63 +44,75 @@ varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
 varying float v_angleTangentSum;
 
+// 월드좌표를 픽셀좌표로 변환 (OpenLayers 구조)
 vec2 worldToPx(vec2 worldPos) {
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
-  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
+  // NDC -> Pixel
+  return (0.5 * (screenPos.xy / screenPos.w) + 0.5) * u_viewportSizePx;
 }
 
-vec2 pxToScreen(vec2 pxPos) {
-  vec2 screenPos = 2.0 * pxPos / u_viewportSizePx - 1.0;
-  return vec4(screenPos, u_depth, 1.0);
+// 픽셀좌표를 clip(-1~1) 공간 + depth로 변환
+vec4 pxToScreen(vec2 pxPos) {
+  vec2 screen = 2.0 * pxPos / u_viewportSizePx - 1.0;
+  return vec4(screen, u_depth, 1.0);
 }
 
-bool isCap(float ang){ return ang < -0.1; }
-vec2 getJoinOffsetDirection(vec2 n,float ang){
-  float h = ang*0.5;
+// 조인 각도에 따라 방향 벡터
+bool isCap(float ang) { return ang < -0.1; }
+vec2 getJoinOffsetDirection(vec2 n, float ang) {
+  float h = ang * 0.5;
   float c = cos(h), s = sin(h);
-  vec2 bis = vec2(s*n.x + c*n.y , -c*n.x + s*n.y);
-  return bis * (1.0/s);
+  vec2 bis = vec2(s*n.x + c*n.y, -c*n.x + s*n.y);
+  return bis * (1.0 / s);
 }
+
+// 오프셋 적용
 vec2 getOffsetPoint(vec2 point, vec2 normal, float joinAngle, float offsetPx) {
-  // if on a cap or the join angle is too high, offset the line along the segment normal
-  if (cos(joinAngle) > 0.998 || isCap(joinAngle)) {
+  if (cos(joinAngle) > 0.998 || isCap(joinAngle))
     return point - normal * offsetPx;
-  }
-  // offset is applied along the inverted normal (positive offset goes "right" relative to line direction)
   return point - getJoinOffsetDirection(normal, joinAngle) * offsetPx;
 }
-vec4 colorEncodeId(float id){
+
+// id를 색상값으로 인코딩 (OpenLayers와 동일)
+vec4 colorEncodeId(float id) {
   float r = floor(id / 16777216.0);
-  float g = floor(mod(id , 16777216.0) / 65536.0);
-  float b = floor(mod(id , 65536.0)    / 256.0);
-  float a = floor(mod(id , 256.0));
-  return vec4(r,g,b,a)/255.0;
+  float g = floor(mod(id, 16777216.0) / 65536.0);
+  float b = floor(mod(id, 65536.0) / 256.0);
+  float a = floor(mod(id, 256.0));
+  return vec4(r, g, b, a) / 255.0;
 }
 
-void main(){
+void main() {
+  // 월드좌표 -> 픽셀좌표
   vec2 p0 = worldToPx(a_segmentStart);
   vec2 p1 = worldToPx(a_segmentEnd);
 
-  vec2 t  = normalize(p1-p0);
-  vec2 n  = vec2(-t.y , t.x);
-  float s = (a_position.x+1.0)*0.5;
+  // 조인/노멀/탠젠트 벡터 계산
+  vec2 t = normalize(p1 - p0);
+  vec2 n = vec2(-t.y, t.x);
+
+  // 좌표 쿼드의 네 모서리 분기
+  float s = (a_position.x + 1.0) * 0.5;
   float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
-  float ang        = a_position.x < 0.0 ?  a_joinAngles.x : a_joinAngles.y;
-  vec2  basePos    = a_position.x < 0.0 ?  p0 : p1;
-  vec2 joinDir;
-  if(cos(ang) > 0.985 || isCap(ang)){
-    joinDir = n*normalDir - t*tangentDir;
-  }else{
-    joinDir = getJoinOffsetDirection(n*normalDir , ang);
-  }
-  vec2 posPx = basePos + joinDir*(u_halfWidth + 1.0);
-  vec2 clip  = pxToScreen(posPx);
-  gl_Position = vec4(clip,0.0,1.0);
+  float ang        = a_position.x < 0.0 ? a_joinAngles.x : a_joinAngles.y;
+  vec2  basePos    = a_position.x < 0.0 ? p0 : p1;
 
+  vec2 joinDir;
+  if (cos(ang) > 0.985 || isCap(ang)) {
+    joinDir = n * normalDir - t * tangentDir;
+  } else {
+    joinDir = getJoinOffsetDirection(n * normalDir, ang);
+  }
+
+  // 오프셋 및 clip space 변환
+  vec2 posPx = basePos + joinDir * (u_halfWidth + 1.0);
+  gl_Position = pxToScreen(posPx);
+
+  // Varying 전달
   v_segmentStart = p0;
   v_segmentEnd   = p1;
-  v_distance     = a_distance + distance(p1,p0)*s;
+  v_distance     = a_distance + distance(p1, p0) * s;
   v_joinAngles   = a_joinAngles;
   v_hitColor     = colorEncodeId(a_id);
   v_angleTangentSum = a_angleTangentSum;
