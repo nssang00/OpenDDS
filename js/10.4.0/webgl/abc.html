@@ -44,20 +44,16 @@ varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
 varying float v_angleTangentSum;
 
-// 월드좌표를 픽셀좌표로 변환 (OpenLayers 구조)
 vec2 worldToPx(vec2 worldPos) {
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
-  // NDC -> Pixel
-  return (0.5 * (screenPos.xy / screenPos.w) + 0.5) * u_viewportSizePx;
+  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
 }
 
-// 픽셀좌표를 clip(-1~1) 공간 + depth로 변환
 vec4 pxToScreen(vec2 pxPos) {
   vec2 screen = 2.0 * pxPos / u_viewportSizePx - 1.0;
   return vec4(screen, u_depth, 1.0);
 }
 
-// 조인 각도에 따라 방향 벡터
 bool isCap(float ang) { return ang < -0.1; }
 vec2 getJoinOffsetDirection(vec2 n, float ang) {
   float h = ang * 0.5;
@@ -83,7 +79,6 @@ vec4 colorEncodeId(float id) {
 }
 
 void main() {
-  // 월드좌표 -> 픽셀좌표
   vec2 p0 = worldToPx(a_segmentStart);
   vec2 p1 = worldToPx(a_segmentEnd);
 
