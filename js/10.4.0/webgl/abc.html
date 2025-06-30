@@ -31,6 +31,7 @@ uniform vec2  u_viewportSizePx;
 uniform float u_pixelRatio;
 uniform float u_globalAlpha;
 uniform float u_halfWidth;
+uniform float u_depth;
 
 const float PI = 3.141592653589793238;
 const float TWO_PI = 2.0 * PI;
@@ -312,11 +313,9 @@ void main() {
       instanceData[idx+7]   = i; // a_id
       instanceData[idx+8]   = angleTangentSum; // a_angleTangentSum (실제 보정값 누적 계산시 갱신)
 
-// 각도 누적 보정 실제 로직 예시 (OpenLayers 참고, 필요시 활성화)
       if (i > 0 && Math.cos(angle0) <= 0.98) {
         angleTangentSum += Math.tan((angle0 - Math.PI) / 2);
       }
-      // 다음 거리로 이동
       distances += segmentLength;
     }
 
@@ -366,6 +365,7 @@ void main() {
     gl.uniform3f(gl.getUniformLocation(program, "u_color"), 0.08, 0.8, 1.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_capType"), 0.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_joinType"), 7.0); // 7: miter, 6: bevel, etc.
+    gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
 
     // ====== Draw ======
     gl.viewport(0, 0, canvas.width, canvas.height);
