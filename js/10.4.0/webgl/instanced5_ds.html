@@ -323,8 +323,8 @@ void main() {
 
   float dashField = -1000.0;
   if (u_dashCount > 0) {
-      float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
-      dashField = dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset);
+    float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
+    dashField = dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset);
   }
   distanceField = max(distanceField, dashField);
 
