@@ -107,8 +107,8 @@ void main() {
   
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
   float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
-  float angle        = a_position.x < 0.0 ? v_angleStart : v_angleEnd;
-  vec2  positionPx    = a_position.x < 0.0 ? segmentStartPx : segmentEndPx;
+  float angle = a_position.x < 0.0 ? v_angleStart : v_angleEnd;
+  vec2  positionPx = a_position.x < 0.0 ? segmentStartPx : segmentEndPx;
 
   vec2 joinDirection;
   if (cos(angle) > 0.985 || isCap(angle)) {
@@ -326,19 +326,18 @@ void main() {
   );
   distanceField = max(distanceField,(u_dashCount == 0) ? -1000.0 : dashDistanceField(currentLengthPx, currentRadiusPx, u_capType, u_lineWidth, u_dashPattern, u_dashCount, u_dashOffset));
 
-  //vec4 color = u_strokeColor;
-  //vec4 color = vec4(0.0, 0.0, 1.0, 1.0) * sampleStrokePattern(u_texture1269122425, u_texture1269122425_size, vec2(0.), u_texture1269122425_size, 40.0, currentLengthPx, currentRadiusRatio, u_lineWidth);
-
-    vec4 color = u_useStrokePattern ? (1.0 * sampleStrokePattern(
-            u_strokePatternTexture,
-            u_strokePatternTextureSize,
-            u_strokePatternTextureOffset,
-            u_strokePatternTextureSampleSize,
-            u_strokePatternTextureSpacing,
-            u_strokePatternTextureStartOffset,
-            currentLengthPx,
-            currentRadiusRatio,
-            u_lineWidth)) : u_strokeColor;
+  vec4 color = u_useStrokePattern ? u_strokeColor
+    : u_strokeColor * sampleStrokePattern(
+        u_strokePatternTexture,
+        u_strokePatternTextureSize,
+        u_strokePatternTextureOffset,
+        u_strokePatternTextureSampleSize,
+        u_strokePatternTextureSpacing,
+        u_strokePatternTextureStartOffset,
+        currentLengthPx,
+        currentRadiusRatio,
+        u_lineWidth);
+        
   color.a *= smoothstep(0.5, -0.5, distanceField);
   gl_FragColor = color;
   gl_FragColor.a *= u_globalAlpha;
