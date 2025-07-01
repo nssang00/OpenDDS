@@ -206,10 +206,7 @@ float dashDistanceField(float distance, float radius, float capType, float lineW
     if (i + 1 >= dashCount) break;
     float dashLength = dashPattern[i];
     float gapLength = dashPattern[i+1];
-    float dashDist = getSingleDashDistance(
-      distance + dashOffset, radius,
-      currentOffset, dashLength, totalDashLength, capType, lineWidth
-    );
+    float dashDist = getSingleDashDistance(distance + dashOffset, radius, currentOffset, dashLength, totalDashLength, capType, lineWidth);
     minDistance = min(minDistance, dashDist);
     currentOffset += dashLength + gapLength;
   }
