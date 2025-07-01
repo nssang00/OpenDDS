@@ -526,37 +526,38 @@ void main() {
 
     // --- uniform 등록
     if (useStrokePattern) {
-        const patternCanvas = document.createElement("canvas");
-        patternCanvas.width = 32;
-        patternCanvas.height = 8;
-        const ctx = patternCanvas.getContext("2d");
-        ctx.fillStyle = "red";
-        ctx.fillRect(0, 0, 32, 8);
-        ctx.fillStyle = "green";
-        ctx.fillRect(0, 0, 16, 8);
+      const patternCanvas = document.createElement("canvas");
+      patternCanvas.width = 20;
+      patternCanvas.height = 20;
+      const ctx = patternCanvas.getContext("2d");
+      ctx.fillStyle = "green";
+      ctx.fillRect(0, 0, 20, 20);
+      ctx.fillStyle = "red";
+      ctx.fillRect(8, 0, 4, 20);
+      ctx.fillRect(0, 8, 20, 4);
 
-        const patternTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, patternTexture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, patternCanvas);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      const patternTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, patternTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, patternCanvas);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, patternTexture);
-        gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, patternTexture);
+      gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), 0);
 
-        gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSize"), patternCanvas.width, patternCanvas.height);
-        gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), 0, 0);
-        gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSampleSize"), patternCanvas.width, patternCanvas.height);
-        gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), 0.0);
-        gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), 0.0);
-        gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
-        gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 1.0, 1.0, 1.0, 1.0);
+      gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSize"), patternCanvas.width, patternCanvas.height);
+      gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), 0, 0);
+      gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSampleSize"), patternCanvas.width, patternCanvas.height);
+      gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), 20.0);
+      gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), 10.0);
+      gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
+      gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 1.0, 1.0, 1.0, 1.0);
     } else {
-        gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
-        gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
+      gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
+      gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
     }
 
 
