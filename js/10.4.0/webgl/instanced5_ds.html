@@ -317,8 +317,8 @@ void main() {
   float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth, v_angleStart, u_strokeCap, u_strokeJoin);
   float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_strokeWidth, v_angleEnd, u_strokeCap, u_strokeJoin);
   float distanceField = max(
-      segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth),
-      max(segmentStartDistance, segmentEndDistance)
+    segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth),
+    max(segmentStartDistance, segmentEndDistance)
   );
 
   float dashField = -1000.0;
