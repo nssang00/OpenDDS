@@ -101,9 +101,7 @@ void main() {
   vec2 segmentStartPx = worldToPx(a_segmentStart);
   vec2 segmentEndPx = worldToPx(a_segmentEnd);  
   vec2 tangentPx = normalize(segmentEndPx - segmentStartPx);
-
   vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
-
   segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset);
   segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_strokeOffset);
 
@@ -112,9 +110,9 @@ void main() {
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
   float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
   float angle = a_position.x < 0.0 ? v_angleStart : v_angleEnd;
+  vec2 joinDirection;  
   vec2  positionPx = a_position.x < 0.0 ? segmentStartPx : segmentEndPx;
 
-  vec2 joinDirection;
   if (cos(angle) > 0.985 || isCap(angle)) {
     joinDirection = normalPx * normalDir - tangentPx * tangentDir;
   } else {
