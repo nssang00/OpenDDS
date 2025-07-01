@@ -508,7 +508,7 @@ void main() {
 
     gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), 0.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), 12.0);
-    gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
+    //gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), 0.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), 0.0); // 7: miter, 6: bevel, etc.
     gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), 10.0);
@@ -516,15 +516,18 @@ void main() {
     gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
 
     const dashArray = [20,5,20,5];
-    gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(dashArray));
-    gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), dashArray.length);
-    gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), 0);
+    if(dashArrya.length)
+    {
+      gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(dashArray));
+      gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), dashArray.length);
+      gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), 0);
+    }
 
 ///////////////
-    const patternTexture = false; // 패턴 텍스처 사용 여부
+    const useStrokePattern = false; // 패턴 텍스처 사용 여부
 
     // --- uniform 등록
-    if (patternTexture) {
+    if (useStrokePattern) {
         const patternCanvas = document.createElement("canvas");
         patternCanvas.width = 32;
         patternCanvas.height = 8;
@@ -552,7 +555,9 @@ void main() {
         gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), 0.0);
         gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), 0.0);
         gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
+      gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 1.0, 1.0, 1.0, 1.0);
     } else {
+        gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
         gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
     }
 
