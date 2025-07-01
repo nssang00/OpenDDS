@@ -166,18 +166,16 @@ uniform float u_strokePatternTextureSpacing;
 uniform float u_strokePatternTextureStartOffset;
 
 vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float startOffsetPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
-  float scaleFactor = sampleSize.y / lineWidth;
-  float currentLengthScaled = currentLengthPx * scaleFactor;
-  float spacingScaled = spacingPx * scaleFactor;
-  float uCoordPx = mod(currentLengthScaled + (sampleSize.x * 0.5 - startOffsetPx * scaleFactor), spacingScaled);
-  // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
-  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
-  if (uCoordPx > sampleSize.x - 1.0) {
-    return vec4(0.0);
-  }  
-  float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
-  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
-  return texture2D(texture, texCoord);
+    float scaleFactor = sampleSize.y / lineWidth;
+    float currentLengthScaled = currentLengthPx * scaleFactor;
+    float spacingScaled = max(spacingPx * scaleFactor, sampleSize.x);
+    float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor + sampleSize.x, spacingScaled);
+    // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
+    uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+    if (uCoordPx > sampleSize.x - 1.0) return vec4(0.0);
+    float vCoordPx = (0.5 - 0.5 * currentRadiusRatio) * sampleSize.y;
+    vec2  texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize; 
+    return texture2D(texture, texCoord);
 }
 
 float getSingleDashDistance(float distance, float radius, float dashOffset, float dashLength, float dashLengthTotal, float capType, float lineWidth) {
@@ -524,7 +522,7 @@ void main() {
     }
 
 ///////////////
-    const useStrokePattern = false; // 패턴 텍스처 사용 여부
+    const useStrokePattern = true;
 
     // --- uniform 등록
     if (useStrokePattern) {
@@ -532,9 +530,9 @@ void main() {
         patternCanvas.width = 32;
         patternCanvas.height = 8;
         const ctx = patternCanvas.getContext("2d");
-        ctx.fillStyle = "#fff";
+        ctx.fillStyle = "red";
         ctx.fillRect(0, 0, 32, 8);
-        ctx.fillStyle = "#1cc7ff";
+        ctx.fillStyle = "green";
         ctx.fillRect(0, 0, 16, 8);
 
         const patternTexture = gl.createTexture();
@@ -542,8 +540,8 @@ void main() {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, patternCanvas);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, patternTexture);
