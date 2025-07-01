@@ -300,7 +300,7 @@ float distanceFromSegment(vec2 point, vec2 start, vec2 end) {
 }
 
 void main() {
-  vec2  currentPoint     = gl_FragCoord.xy / u_pixelRatio;
+  vec2  currentPoint = gl_FragCoord.xy / u_pixelRatio;
 
   //dash, sampleStrokePattern
   float segmentLength = length(v_segmentEnd - v_segmentStart);
@@ -325,7 +325,6 @@ void main() {
   if (u_useStrokePattern) {
     vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
     float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
-    
     color = u_strokeColor * sampleStrokePattern(
       u_strokePatternTexture,
       u_strokePatternTextureSize,
