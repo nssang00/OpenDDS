@@ -323,12 +323,7 @@ void main() {
     segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_lineWidth),
     max(segmentStartDistance, segmentEndDistance)
   );
-  distanceField = max(
-    distanceField,
-    (u_dashCount == 0)
-      ? -1000.0
-      : dashDistanceField(currentLengthPx, currentRadiusPx, u_capType, u_lineWidth, u_dashPattern, u_dashCount, u_dashOffset)
-  );
+  distanceField = max(distanceField,(u_dashCount == 0) ? -1000.0 : dashDistanceField(currentLengthPx, currentRadiusPx, u_capType, u_lineWidth, u_dashPattern, u_dashCount, u_dashOffset));
 
   float alpha = smoothstep(0.5, -0.5, distanceField);  
   if(alpha < 0.1) discard;
