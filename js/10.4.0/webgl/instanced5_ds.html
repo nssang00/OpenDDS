@@ -309,49 +309,49 @@ float distanceFromSegment(vec2 point, vec2 start, vec2 end) {
 }
 
 void main() {
-    vec2  currentPoint = gl_FragCoord.xy / u_pixelRatio;
+  vec2  currentPoint = gl_FragCoord.xy / u_pixelRatio;
 
-    float segmentLength = v_segmentLength;
-    vec2 segmentTangent = v_segmentTangent;
+  float segmentLength = v_segmentLength;
+  vec2 segmentTangent = v_segmentTangent;
 
-    float currentLengthPx = max(0., min(dot(segmentTangent, currentPoint - v_segmentStart), segmentLength)) + v_distanceOffsetPx;
+  float currentLengthPx = max(0., min(dot(segmentTangent, currentPoint - v_segmentStart), segmentLength)) + v_distanceOffsetPx;
 
-    float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth, v_angleStart, u_strokeCap, u_strokeJoin);
-    float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_strokeWidth, v_angleEnd, u_strokeCap, u_strokeJoin);
-    float distanceField = max(
-        segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth),
-        max(segmentStartDistance, segmentEndDistance)
-    );
+  float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth, v_angleStart, u_strokeCap, u_strokeJoin);
+  float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_strokeWidth, v_angleEnd, u_strokeCap, u_strokeJoin);
+  float distanceField = max(
+      segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth),
+      max(segmentStartDistance, segmentEndDistance)
+  );
 
-    float dashField = -1000.0;
-    if (u_dashCount > 0) {
-        float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
-        dashField = dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset);
-    }
-    distanceField = max(distanceField, dashField);
+  float dashField = -1000.0;
+  if (u_dashCount > 0) {
+      float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
+      dashField = dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset);
+  }
+  distanceField = max(distanceField, dashField);
 
-    vec4 color = u_strokeColor;
-    if (u_useStrokePattern) {
-        vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
-        float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
-        color = u_strokeColor * sampleStrokePattern(
-            u_strokePatternTexture,
-            u_strokePatternTextureSize,
-            u_strokePatternTextureOffset,
-            u_strokePatternTextureSampleSize,
-            u_strokePatternTextureSpacing,
-            u_strokePatternTextureStartOffset,
-            currentLengthPx,
-            currentRadiusRatio,
-            u_strokeWidth
-        );
-    }
-    color.a *= smoothstep(0.5, -0.5, distanceField);
-    gl_FragColor = color;
-    gl_FragColor.a *= u_globalAlpha;
-    gl_FragColor.rgb *= gl_FragColor.a;
+  vec4 color = u_strokeColor;
+  if (u_useStrokePattern) {
+      vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
+      float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
+      color = u_strokeColor * sampleStrokePattern(
+          u_strokePatternTexture,
+          u_strokePatternTextureSize,
+          u_strokePatternTextureOffset,
+          u_strokePatternTextureSampleSize,
+          u_strokePatternTextureSpacing,
+          u_strokePatternTextureStartOffset,
+          currentLengthPx,
+          currentRadiusRatio,
+          u_strokeWidth
+      );
+  }
+  color.a *= smoothstep(0.5, -0.5, distanceField);
+  gl_FragColor = color;
+  gl_FragColor.a *= u_globalAlpha;
+  gl_FragColor.rgb *= gl_FragColor.a;
 
-    if (gl_FragColor.a < 0.1) { discard; }
+  if (gl_FragColor.a < 0.1) { discard; }
 }
 `;
 
