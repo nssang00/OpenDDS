@@ -328,7 +328,7 @@ void main() {
   vec4 color = u_strokeColor;
   if (u_useStrokePattern) {
     vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
-    float currentRadiusRatio = dot(segmentNormal, startToPoint) * 2. / u_strokeWidth;  
+    float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
     
     color = u_strokeColor * sampleStrokePattern(
       u_strokePatternTexture,
