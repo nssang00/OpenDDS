@@ -326,15 +326,10 @@ void main() {
   );
   distanceField = max(distanceField,(u_dashCount == 0) ? -1000.0 : dashDistanceField(currentLengthPx, currentRadiusPx, u_capType, u_lineWidth, u_dashPattern, u_dashCount, u_dashOffset));
 
-  float alpha = smoothstep(0.5, -0.5, distanceField);  
-  if(alpha < 0.1) discard;
-
-
   //vec4 color = u_strokeColor;
   //vec4 color = vec4(0.0, 0.0, 1.0, 1.0) * sampleStrokePattern(u_texture1269122425, u_texture1269122425_size, vec2(0.), u_texture1269122425_size, 40.0, currentLengthPx, currentRadiusRatio, u_lineWidth);
 
-    vec4 color = u_useStrokePattern
-    ? (1.0 * sampleStrokePattern(
+    vec4 color = u_useStrokePattern ? (1.0 * sampleStrokePattern(
             u_strokePatternTexture,
             u_strokePatternTextureSize,
             u_strokePatternTextureOffset,
@@ -344,11 +339,12 @@ void main() {
             currentLengthPx,
             currentRadiusRatio,
             u_lineWidth)) : u_strokeColor;
-  color.a *= alpha;
+  color.a *= smoothstep(0.5, -0.5, distanceField);
   gl_FragColor = color;
   gl_FragColor.a *= u_globalAlpha;
   gl_FragColor.rgb *= gl_FragColor.a;  
 
+  if(gl_FragColor.a < 0.1) { discard; };
 }
 `;
 
@@ -561,7 +557,7 @@ void main() {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ZERO); // 필요시 gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA 등으로 교체
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
   </script>
