@@ -326,12 +326,27 @@ void main() {
 
   float dashField = -1000.0;
   if (u_dashCount > 0) {
+    float segmentLength = length(v_segmentEnd - v_segmentStart);
+    vec2 segmentTangent = (v_segmentEnd - v_segmentStart) / segmentLength;
+    vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
+    vec2 startToPoint = currentPoint - v_segmentStart;
+    float lengthToPoint = max(0., min(dot(segmentTangent, startToPoint), segmentLength));
+    float currentLengthPx = lengthToPoint + v_distanceOffsetPx; 
+    float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);  
     dashField = dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset);
   }
   distanceField = max(distanceField, dashField);
 
   vec4 color = u_strokeColor;
   if (u_useStrokePattern) {
+    float segmentLength = length(v_segmentEnd - v_segmentStart);
+    vec2 segmentTangent = (v_segmentEnd - v_segmentStart) / segmentLength;
+    //vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
+    vec2 startToPoint = currentPoint - v_segmentStart;
+    float lengthToPoint = max(0., min(dot(segmentTangent, startToPoint), segmentLength));
+    float currentLengthPx = lengthToPoint + v_distanceOffsetPx; 
+    float currentRadiusRatio = dot(segmentNormal, startToPoint) * 2. / u_strokeWidth;   
+    
     color = u_strokeColor * sampleStrokePattern(
       u_strokePatternTexture,
       u_strokePatternTextureSize,
