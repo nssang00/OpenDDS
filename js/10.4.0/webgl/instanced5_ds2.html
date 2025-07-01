@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>최적화된 WebGL 라인 렌더링</title>
+  <title>최적화된 WebGL 라인 렌더링 (a_angleTangentSum 유지)</title>
   <style>
     html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
   </style>
@@ -15,7 +15,7 @@
     const ext = gl.getExtension("ANGLE_instanced_arrays");
     if (!ext) throw "ANGLE_instanced_arrays 미지원";
 
-    // ====== 최적화된 Vertex Shader ======
+    // ====== 최적화된 Vertex Shader (a_angleTangentSum 유지) ======
     const vertexShaderSource = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -29,6 +29,7 @@ attribute vec2  a_position;
 attribute float a_distance;
 attribute vec2  a_joinAngles;
 attribute float a_id;
+attribute float a_angleTangentSum; // 유지
 
 uniform mat4  u_projectionMatrix;
 uniform vec2  u_viewportSizePx;
@@ -49,10 +50,11 @@ varying float v_angleStart;
 varying float v_angleEnd;
 varying float v_distance;
 varying vec4  v_hitColor;
-varying float v_segmentLength;  // 추가: 세그먼트 길이
-varying vec2  v_tangent;        // 추가: 접선 벡터
-varying vec2  v_normal;         // 추가: 법선 벡터
-varying vec2  v_joinDirection;  // 추가: 조인 방향
+varying float v_angleTangentSum; // 유지
+varying float v_segmentLength;   // 최적화: 세그먼트 길이
+varying vec2  v_tangent;         // 최적화: 접선 벡터
+varying vec2  v_normal;          // 최적화: 법선 벡터
+varying vec2  v_joinDirection;   // 최적화: 조인 방향
 
 vec2 worldToPx(vec2 worldPos) {
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
@@ -88,6 +90,7 @@ vec4 colorEncodeId(float id) {
 void main() {
   v_angleStart = a_joinAngles.x;
   v_angleEnd = a_joinAngles.y;
+  v_angleTangentSum = a_angleTangentSum; // 유지
 
   vec2 segmentStartPx = worldToPx(a_segmentStart);
   vec2 segmentEndPx = worldToPx(a_segmentEnd);  
@@ -132,7 +135,7 @@ void main() {
 }
 `;
 
-    // ====== 최적화된 Fragment Shader ======
+    // ====== 최적화된 Fragment Shader (a_angleTangentSum 유지) ======
     const fragmentShaderSource = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -145,10 +148,11 @@ varying float v_angleStart;
 varying float v_angleEnd;
 varying float v_distance;
 varying vec4  v_hitColor;
-varying float v_segmentLength;  // 추가: 세그먼트 길이
-varying vec2  v_tangent;        // 추가: 접선 벡터
-varying vec2  v_normal;         // 추가: 법선 벡터
-varying vec2  v_joinDirection;  // 추가: 조인 방향
+varying float v_angleTangentSum; // 유지
+varying float v_segmentLength;   // 최적화: 세그먼트 길이
+varying vec2  v_tangent;         // 최적화: 접선 벡터
+varying vec2  v_normal;          // 최적화: 법선 벡터
+varying vec2  v_joinDirection;   // 최적화: 조인 방향
 
 uniform float u_strokeWidth;
 uniform sampler2D u_pattern;
@@ -237,28 +241,29 @@ float distanceFromSegment(vec2 point, vec2 start, vec2 end) {
 void main() {
   vec2  currentPoint     = gl_FragCoord.xy / u_pixelRatio;
   
-  // Vertex Shader에서 전달된 값 사용
+  // Vertex Shader에서 전달된 값 사용 (최적화)
   vec2 segmentTangent = v_tangent;
   float segmentLength = v_segmentLength;
   
-  // 현재 길이 계산 (픽셀 위치에 의존적)
+  // 거리 오프셋 계산 (a_angleTangentSum 사용)
+  float v_distanceOffsetPx = v_distance / u_resolution - (u_strokeOffset * v_angleTangentSum);
+  
+  // 현재 길이 계산
   float currentLengthPx = dot(segmentTangent, currentPoint - v_segmentStart);
-  currentLengthPx = clamp(currentLengthPx, 0.0, segmentLength) + (v_distance / u_resolution - u_strokeOffset * (v_angleStart + v_angleEnd) * 0.5);
+  currentLengthPx = clamp(currentLengthPx, 0.0, segmentLength) + v_distanceOffsetPx;
   
   // 거리 필드 계산: 주 라인
   float distToLine = segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth);
   
-  // Cap/Join 거리 계산: Vertex Shader에서 계산된 v_joinDirection 사용
+  // Cap/Join 거리 계산: Vertex Shader에서 계산된 v_joinDirection 사용 (최적화)
   float distToStart = -1000.0;
   float distToEnd = -1000.0;
   
   if (currentLengthPx < u_strokeWidth * 0.5) {
-    // 시작점에서의 거리 (조인 방향을 이용한 단순화)
     distToStart = dot(currentPoint - v_segmentStart, v_joinDirection);
   }
   
   if (segmentLength - currentLengthPx < u_strokeWidth * 0.5) {
-    // 끝점에서의 거리 (조인 방향을 이용한 단순화)
     distToEnd = dot(currentPoint - v_segmentEnd, v_joinDirection);
   }
   
@@ -363,13 +368,14 @@ void main() {
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
     const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat);
 
-    // 인스턴스 데이터 생성
+    // 인스턴스 데이터 생성 (a_angleTangentSum 포함)
     const instanceAttributes = [
       { name: "a_segmentStart", size: 2 },
       { name: "a_segmentEnd",   size: 2 },
       { name: "a_distance",     size: 1 },
       { name: "a_joinAngles",   size: 2 },
-      { name: "a_id",           size: 1 }
+      { name: "a_id",           size: 1 },
+      { name: "a_angleTangentSum", size: 1 } // 유지
     ];
     const STRIDE = instanceAttributes.reduce((sum, a) => sum + a.size, 0) * 4;
     const instanceCount = coordinates.length - 1;
@@ -390,6 +396,7 @@ void main() {
     }
     
     let distances = 0;
+    let angleTangentSum = 0; // a_angleTangentSum 계산을 위한 변수
     for (let i = 0; i < instanceCount; i++) {
       const idx = i * STRIDE / 4;
       const p0 = coordinates[i];
@@ -402,6 +409,11 @@ void main() {
       const angle0 = i > 0 ? angle(p0, p1, prev) : -1.0;
       const angle1 = i < instanceCount - 1 ? angle(p1, p0, next) : -1.0;
 
+      // a_angleTangentSum 계산
+      if (i > 0 && Math.cos(angle0) <= 0.98) {
+        angleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+      }
+
       instanceData[idx]     = p0[0];
       instanceData[idx+1]   = p0[1];
       instanceData[idx+2]   = p1[0];
@@ -410,6 +422,7 @@ void main() {
       instanceData[idx+5]   = angle0;
       instanceData[idx+6]   = angle1;
       instanceData[idx+7]   = i;
+      instanceData[idx+8]   = angleTangentSum; // a_angleTangentSum 값 설정
 
       distances += segmentLength;
     }
