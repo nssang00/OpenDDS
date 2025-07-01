@@ -516,7 +516,7 @@ void main() {
     gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
 
     const dashArray = [20,5,20,5];
-    if(dashArrya.length)
+    if(dashArray.length)
     {
       gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(dashArray));
       gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), dashArray.length);
@@ -555,7 +555,7 @@ void main() {
         gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), 0.0);
         gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), 0.0);
         gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
-      gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 1.0, 1.0, 1.0, 1.0);
+        gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 1.0, 1.0, 1.0, 1.0);
     } else {
         gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
         gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
