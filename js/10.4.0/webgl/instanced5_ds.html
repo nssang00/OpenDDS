@@ -101,11 +101,13 @@ void main() {
   vec2 segmentStartPx = worldToPx(a_segmentStart);
   vec2 segmentEndPx = worldToPx(a_segmentEnd);  
   vec2 tangentPx = normalize(segmentEndPx - segmentStartPx);
-  float segmentLength = length(segmentEndPx - segmentStartPx);
+
   vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
 
   segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset);
   segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_strokeOffset);
+
+  float segmentLength = length(segmentEndPx - segmentStartPx);
   
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
   float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
@@ -332,19 +334,19 @@ void main() {
 
   vec4 color = u_strokeColor;
   if (u_useStrokePattern) {
-      vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
-      float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
-      color = u_strokeColor * sampleStrokePattern(
-          u_strokePatternTexture,
-          u_strokePatternTextureSize,
-          u_strokePatternTextureOffset,
-          u_strokePatternTextureSampleSize,
-          u_strokePatternTextureSpacing,
-          u_strokePatternTextureStartOffset,
-          currentLengthPx,
-          currentRadiusRatio,
-          u_strokeWidth
-      );
+    vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
+    float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
+    color = u_strokeColor * sampleStrokePattern(
+        u_strokePatternTexture,
+        u_strokePatternTextureSize,
+        u_strokePatternTextureOffset,
+        u_strokePatternTextureSampleSize,
+        u_strokePatternTextureSpacing,
+        u_strokePatternTextureStartOffset,
+        currentLengthPx,
+        currentRadiusRatio,
+        u_strokeWidth
+    );
   }
   color.a *= smoothstep(0.5, -0.5, distanceField);
   gl_FragColor = color;
