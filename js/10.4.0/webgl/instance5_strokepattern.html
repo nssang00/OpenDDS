@@ -306,15 +306,17 @@ float distanceFromSegment(vec2 point, vec2 start, vec2 end) {
 
 void main() {
   vec2  currentPoint     = gl_FragCoord.xy / u_pixelRatio;
+
+  //dash, sampleStrokePattern
   float segmentLength = length(v_segmentEnd - v_segmentStart);
   vec2 segmentTangent = (v_segmentEnd - v_segmentStart) / segmentLength;
   vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
   vec2 startToPoint = currentPoint - v_segmentStart;
-  
   float lengthToPoint = max(0., min(dot(segmentTangent, startToPoint), segmentLength));
   float currentLengthPx = lengthToPoint + v_distanceOffsetPx; 
   float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
   float currentRadiusRatio = dot(segmentNormal, startToPoint) * 2. / u_lineWidth;  
+
 
   float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_lineWidth, v_angleStart, u_capType, u_joinType);
   float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_lineWidth, v_angleEnd, u_capType, u_joinType);
