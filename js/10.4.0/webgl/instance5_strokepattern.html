@@ -347,7 +347,7 @@ void main() {
             currentLengthPx,
             currentRadiusRatio,
             u_lineWidth)) : u_strokeColor;
-  color.a *= smoothstep(0.5, -0.5, distanceField);
+  color.a *= alpha;
   gl_FragColor = color;
   gl_FragColor.a *= u_globalAlpha;
   gl_FragColor.rgb *= gl_FragColor.a;  
