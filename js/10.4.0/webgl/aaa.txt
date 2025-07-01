@@ -9,16 +9,13 @@ vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset
   float scaleFactor = sampleSize.y / lineWidth;
   float currentLengthScaled = currentLengthPx * scaleFactor;
   float spacingScaled = spacingPx * scaleFactor;
-  
-  // 패턴 반복 주기(spacingScaled)를 기준으로 좌표 계산
   float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor, spacingScaled);
   uCoordPx = (uCoordPx / spacingScaled) * sampleSize.x;
   float vCoordPx = (-currentRadiusRatio * 0.5 + 0.5) * sampleSize.y;
   
-  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset;
-  texCoord /= textureSize;
-  
+  vec2 texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize;
   return texture2D(texture, texCoord);
 }
+
 
 
