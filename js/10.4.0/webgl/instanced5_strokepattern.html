@@ -100,7 +100,8 @@ void main() {
   vec2 segmentEndPx = worldToPx(a_segmentEnd);  
   vec2 tangentPx = normalize(segmentEndPx - segmentStartPx);
   vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
-  segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset),
+  
+  segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset);
   segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_strokeOffset);
   
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
