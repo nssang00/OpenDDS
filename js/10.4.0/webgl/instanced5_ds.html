@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>OpenLayers-style Join/Cap (최적화 버전)</title>
+  <title>OpenLayers-style Join/Cap (OL 함수명 + angleTangentSum)</title>
   <style>
     html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
   </style>
@@ -15,7 +15,7 @@
     const ext = gl.getExtension("ANGLE_instanced_arrays");
     if (!ext) throw "ANGLE_instanced_arrays 미지원";
 
-    // ====== Vertex shader (최적화 버전) ======
+    // ====== Vertex shader ======
     const vertexShaderSource = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -29,6 +29,7 @@ attribute vec2  a_position;
 attribute float a_distance;
 attribute vec2  a_joinAngles;
 attribute float a_id;
+attribute float a_angleTangentSum;
 
 uniform mat4  u_projectionMatrix;
 uniform vec2  u_viewportSizePx;
@@ -42,13 +43,17 @@ uniform float u_strokeWidth;
 uniform float u_strokeOffset;
 
 const float PI = 3.141592653589793238;
+const float TWO_PI = 2.0 * PI;
 
 varying vec2  v_segmentStart;
 varying vec2  v_segmentEnd;
 varying float v_angleStart;
 varying float v_angleEnd;
 varying float v_distance;
+varying float v_distanceOffsetPx;
+varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
+varying float v_angleTangentSum;
 
 vec2 worldToPx(vec2 worldPos) {
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
@@ -63,7 +68,6 @@ vec4 pxToScreen(vec2 pxPos) {
 bool isCap(float joinAngle) {
   return joinAngle < -0.1;
 }
-
 vec2 getJoinOffsetDirection(vec2 normalPx, float joinAngle) {
   float halfAngle = joinAngle / 2.0;
   float c = cos(halfAngle);
@@ -71,6 +75,12 @@ vec2 getJoinOffsetDirection(vec2 normalPx, float joinAngle) {
   vec2 angleBisectorNormal = vec2(s * normalPx.x + c * normalPx.y, -c * normalPx.x + s * normalPx.y);
   float length = 1.0 / s;
   return angleBisectorNormal * length;
+}
+
+vec2 getOffsetPoint(vec2 point, vec2 normal, float joinAngle, float offsetPx) {
+  if (cos(joinAngle) > 0.998 || isCap(joinAngle))
+    return point - normal * offsetPx;
+  return point - getJoinOffsetDirection(normal, joinAngle) * offsetPx;
 }
 
 vec4 colorEncodeId(float id) {
@@ -85,40 +95,36 @@ void main() {
   v_angleStart = a_joinAngles.x;
   v_angleEnd = a_joinAngles.y;
 
+  float lineOffsetPx = 0.0;
+
   vec2 segmentStartPx = worldToPx(a_segmentStart);
   vec2 segmentEndPx = worldToPx(a_segmentEnd);  
   vec2 tangentPx = normalize(segmentEndPx - segmentStartPx);
   vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
+  segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset),
+  segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_strokeOffset);
   
-  // 오프셋 적용: CPU에서 미리 계산된 법선 벡터 사용
-  segmentStartPx += normalPx * u_strokeOffset;
-  segmentEndPx += normalPx * u_strokeOffset;
-  
-  vec2 positionPx;
-  if (a_position.x < 0.0) {
-    positionPx = segmentStartPx;
-  } else {
-    positionPx = segmentEndPx;
-  }
-  
-  vec2 joinDirection;
-  float normalDir = a_position.y < 0.0 ? 1.0 : -1.0;
-  float tangentDir = a_position.x < 0.0 ? 1.0 : -1.0;
+  float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
+  float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
   float angle = a_position.x < 0.0 ? v_angleStart : v_angleEnd;
-  
-  if (isCap(angle) || abs(cos(angle)) > 0.985) {
+  vec2  positionPx = a_position.x < 0.0 ? segmentStartPx : segmentEndPx;
+
+  vec2 joinDirection;
+  if (cos(angle) > 0.985 || isCap(angle)) {
     joinDirection = normalPx * normalDir - tangentPx * tangentDir;
   } else {
     joinDirection = getJoinOffsetDirection(normalPx * normalDir, angle);
   }
-  
-  positionPx += joinDirection * (u_strokeWidth * 0.5 + 1.);
+
+  positionPx = positionPx + joinDirection * (u_strokeWidth * 0.5 + 1.);
   gl_Position = pxToScreen(positionPx);
 
   v_segmentStart = segmentStartPx;
   v_segmentEnd   = segmentEndPx;
-  v_distance     = a_distance;
+  v_distanceOffsetPx = a_distance / u_resolution - (u_strokeOffset * a_angleTangentSum);
+  v_joinAngles   = a_joinAngles;
   v_hitColor     = colorEncodeId(a_id);
+  v_angleTangentSum = a_angleTangentSum;
 }
 `;
 
@@ -133,8 +139,10 @@ varying vec2  v_segmentEnd;
 varying float v_angleStart;
 varying float v_angleEnd;
 
+varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
-varying float v_distance;
+varying float v_distanceOffsetPx;
+varying float v_angleTangentSum;
 uniform float u_strokeWidth;
 uniform sampler2D u_pattern;
 uniform vec4 u_strokeColor;
@@ -143,7 +151,6 @@ uniform float u_globalAlpha;
 uniform float u_strokeCap;
 uniform float u_strokeJoin;
 uniform float u_strokeMiterLimit;
-uniform float u_strokeOffset;
 
 uniform float u_dashPattern[8];
 uniform int u_dashCount;
@@ -156,13 +163,13 @@ uniform vec2  u_strokePatternTextureOffset;
 uniform vec2 u_strokePatternTextureSampleSize;
 uniform float u_strokePatternTextureSpacing;
 uniform float u_strokePatternTextureStartOffset;
-uniform float u_resolution;
 
 vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float startOffsetPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
     float scaleFactor = sampleSize.y / lineWidth;
     float currentLengthScaled = currentLengthPx * scaleFactor;
     float spacingScaled = max(spacingPx * scaleFactor, sampleSize.x);
     float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor + sampleSize.x, spacingScaled);
+    // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
     uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
     if (uCoordPx > sampleSize.x - 1.0) return vec4(0.0);
     float vCoordPx = (0.5 - 0.5 * currentRadiusRatio) * sampleSize.y;
@@ -202,6 +209,15 @@ float dashDistanceField(float distance, float radius, float capType, float lineW
     currentOffset += dashLength + gapLength;
   }
   return minDistance;
+
+  /*
+  float dashLength0 = 20.0;
+  float dashLength1 = 5.0;
+  float dashLength2 = 20.0;
+  float dashLength3 = 5.0;
+  float totalDashLength = dashLength0 + dashLength1 + dashLength2 + dashLength3;
+  return min(getSingleDashDistance(distance, radius, 0., dashLength0, totalDashLength, capType, lineWidth), getSingleDashDistance(distance, radius, 0. + dashLength0 + dashLength1, dashLength2, totalDashLength, capType, lineWidth)); 
+*/
 }
 
 bool isCap(float a) { return a < -0.1; }
@@ -220,8 +236,8 @@ float squareCapDistanceField(vec2 point, vec2 start, vec2 end, float width) {
   return buttCapDistanceField(point, start, end) - width * 0.5;
 }
 float roundCapDistanceField(vec2 point, vec2 start, vec2 end, float width) {
-  float onSegment = max(0., dot(point - start, end - start));
-  return length(point - start) - width * 0.5 - onSegment * 0.001;
+  float onSegment = max(0., 1000. * dot(point - start, end - start));
+  return length(point - start) - width * 0.5 - onSegment;
 }
 
 float roundJoinDistanceField(vec2 point, vec2 start, vec2 end, float width) {
@@ -240,7 +256,7 @@ float bevelJoinField(vec2 point, vec2 start, vec2 end, float width, float joinAn
 }
 
 float miterJoinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle) {
-  if (abs(cos(joinAngle)) > 0.985) {
+  if (cos(joinAngle) > 0.985) { // avoid risking a division by zero
     return bevelJoinField(point, start, end, width, joinAngle);
   }
   float miterLength = 1. / sin(joinAngle * 0.5);
@@ -269,38 +285,35 @@ float joinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joi
   return roundJoinDistanceField(point, start, end, width);
 }
 
+float computeSegmentPointDistance(vec2 point, vec2 start, vec2 end, float width, float joinAngle, float capType, float joinType) {
+  if (isCap(joinAngle)) {
+    return capDistanceField(point, start, end, width, capType);
+  }
+  return joinDistanceField(point, start, end, width, joinAngle, joinType);
+}
+
 float distanceFromSegment(vec2 point, vec2 start, vec2 end) {
   vec2 tangent = end - start;
   vec2 startToPoint = point - start;
+  // inspire by capsule fn in https://iquilezles.org/articles/distfunctions/
   float h = clamp(dot(startToPoint, tangent) / dot(tangent, tangent), 0.0, 1.0);
   return length(startToPoint - tangent * h);
 }
 
 void main() {
   vec2  currentPoint     = gl_FragCoord.xy / u_pixelRatio;
-  vec2 segmentTangent = normalize(v_segmentEnd - v_segmentStart);
-  float segmentLength = length(v_segmentEnd - v_segmentStart);
-  
-  float currentLengthPx = dot(segmentTangent, currentPoint - v_segmentStart);
-  currentLengthPx = clamp(currentLengthPx, 0.0, segmentLength) + (v_distance / u_resolution);
-  
-  // 오프셋 적용된 거리 계산
-  currentLengthPx -= u_strokeOffset * (v_angleStart + v_angleEnd) * 0.5;
 
-  float distToLine = segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth);
-  
-  float distToStart = -1000.0;
-  float distToEnd = -1000.0;
-  
-  if (currentLengthPx < u_strokeWidth * 0.5) {
-    distToStart = joinDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth, v_angleStart, u_strokeJoin);
-  }
-  
-  if (segmentLength - currentLengthPx < u_strokeWidth * 0.5) {
-    distToEnd = joinDistanceField(currentPoint, v_segmentEnd, v_segmentStart, u_strokeWidth, v_angleEnd, u_strokeJoin);
-  }
-  
-  float distanceField = max(distToLine, max(distToStart, distToEnd));
+  //dash, sampleStrokePattern
+  float segmentLength = length(v_segmentEnd - v_segmentStart);
+  vec2 segmentTangent = (v_segmentEnd - v_segmentStart) / segmentLength;
+  float currentLengthPx = max(0., min(dot(segmentTangent, currentPoint - v_segmentStart), segmentLength)) + v_distanceOffsetPx; 
+
+  float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth, v_angleStart, u_strokeCap, u_strokeJoin);
+  float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_strokeWidth, v_angleEnd, u_strokeCap, u_strokeJoin);
+  float distanceField = max(
+    segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth),
+    max(segmentStartDistance, segmentEndDistance)
+  );
 
   float dashField = -1000.0;
   if (u_dashCount > 0) {
@@ -327,10 +340,12 @@ void main() {
     );
   }
         
-  float alpha = smoothstep(0.5, -0.5, distanceField) * u_globalAlpha;
-  if (alpha < 0.1) discard;
-  
-  gl_FragColor = vec4(color.rgb * alpha, alpha);
+  color.a *= smoothstep(0.5, -0.5, distanceField);
+  gl_FragColor = color;
+  gl_FragColor.a *= u_globalAlpha;
+  gl_FragColor.rgb *= gl_FragColor.a;  
+
+  if(gl_FragColor.a < 0.1) { discard; };
 }
 `;
 
@@ -343,18 +358,22 @@ void main() {
       }
       return shader;
     }
-    
-    // 프로그램 생성 및 컴파일
     const program = gl.createProgram();
     gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vertexShaderSource));
     gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource));
     gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      throw gl.getProgramInfoLog(program);
-    }
     gl.useProgram(program);    
     
-    // 데이터 준비
+    const instanceAttributes = [
+      { name: "a_segmentStart", size: 2 },
+      { name: "a_segmentEnd",   size: 2 },
+      { name: "a_distance",     size: 1 },
+      { name: "a_joinAngles",   size: 2 },
+      { name: "a_id",           size: 1 },
+      { name: "a_angleTangentSum", size: 1 } // 추가!
+    ];
+    const STRIDE = instanceAttributes.reduce((sum, a) => sum + a.size, 0) * 4;
+
     const coordinates = [
       [-122.48369693756104, 37.83381888486939],
       [-122.48348236083984, 37.83317489144141],
@@ -379,7 +398,7 @@ void main() {
       [-122.49378204345702, 37.83368330777276]
     ];
 
-    // 투영 행렬 생성
+    // ====== 투영행렬 생성 (2D 직교 투영) ======
     function makeOrthoProjectionMatrix(minX, minY, maxX, maxY) {
       const sx = 2 / (maxX - minX);
       const sy = 2 / (maxY - minY);
@@ -398,18 +417,9 @@ void main() {
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
     const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat);
 
-    // 인스턴스 데이터 생성
-    const instanceAttributes = [
-      { name: "a_segmentStart", size: 2 },
-      { name: "a_segmentEnd",   size: 2 },
-      { name: "a_distance",     size: 1 },
-      { name: "a_joinAngles",   size: 2 },
-      { name: "a_id",           size: 1 }
-    ];
-    const STRIDE = instanceAttributes.reduce((sum, a) => sum + a.size, 0) * 4;
+    // ====== 인스턴스 데이터 ======
     const instanceCount = coordinates.length - 1;
     const instanceData = new Float32Array(instanceCount * STRIDE / 4);
-    
     function angle(p0, pA, pB) {
       const v0x = pA[0] - p0[0];
       const v0y = pA[1] - p0[1];
@@ -423,8 +433,8 @@ void main() {
       const cross = v0x * v1y - v0y * v1x;
       return cross < 0 ? -ang : ang;
     }
-    
     let distances = 0;
+    let angleTangentSum = 0; // 예시: 실제 각도 누적 로직 넣어도 됨
     for (let i = 0; i < instanceCount; i++) {
       const idx = i * STRIDE / 4;
       const p0 = coordinates[i];
@@ -437,43 +447,43 @@ void main() {
       const angle0 = i > 0 ? angle(p0, p1, prev) : -1.0;
       const angle1 = i < instanceCount - 1 ? angle(p1, p0, next) : -1.0;
 
-      instanceData[idx]     = p0[0];
-      instanceData[idx+1]   = p0[1];
-      instanceData[idx+2]   = p1[0];
-      instanceData[idx+3]   = p1[1];
-      instanceData[idx+4]   = distances;
-      instanceData[idx+5]   = angle0;
-      instanceData[idx+6]   = angle1;
-      instanceData[idx+7]   = i;
+      instanceData[idx]     = p0[0]; // a_segmentStart.x
+      instanceData[idx+1]   = p0[1]; // a_segmentStart.y
+      instanceData[idx+2]   = p1[0]; // a_segmentEnd.x
+      instanceData[idx+3]   = p1[1]; // a_segmentEnd.y
+      instanceData[idx+4]   = distances; // a_distance
+      instanceData[idx+5]   = angle0; // a_joinAngles.x
+      instanceData[idx+6]   = angle1; // a_joinAngles.y
+      instanceData[idx+7]   = i; // a_id
+      instanceData[idx+8]   = angleTangentSum; // a_angleTangentSum (실제 보정값 누적 계산시 갱신)
 
+      if (i > 0 && Math.cos(angle0) <= 0.98) {
+        angleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+      }
       distances += segmentLength;
     }
 
-    // Static quad 데이터
+    // ====== Static quad ======
     const quadVertices = new Float32Array([-1, -1, -1, 1, 1, -1, 1, 1]);
     const quadVertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
-    
     const quadIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
     const quadIndexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
 
-    // 인스턴스 버퍼 생성
+    // ====== GPU buffers & attrib binding ======
     const instanceBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
 
-    // 속성 바인딩 함수
     function bindAttrib(name, size, stride, offset, div) {
       const location = gl.getAttribLocation(program, name);
-      if (location === -1) return;
       gl.enableVertexAttribArray(location);
       gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, offset);
       ext.vertexAttribDivisorANGLE(location, div);
     }
-    
     function bindInstanceAttributes(attribs, divisor = 1) {
       const stride = attribs.reduce((sum, a) => sum + a.size, 0) * 4;
       let offset = 0;
@@ -482,39 +492,38 @@ void main() {
         offset += attr.size * 4;
       }
     }
-    
-    // 버퍼 바인딩
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     bindInstanceAttributes(instanceAttributes, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     bindAttrib("a_position", 2, 0, 0, 0);
 
-    // 유니폼 설정
+    // ====== Uniforms ======
     gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
     gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
     gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
     gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
 
-    // 오프셋 설정 (0이 아닌 값으로 설정)
-    const strokeOffset = 5.0; // 픽셀 단위 오프셋
-    gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), strokeOffset);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), 0.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), 12.0);
+    //gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), 0.0); // 7: miter, 6: bevel, etc.
     gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), 10.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
 
     const dashArray = [20,5,20,5];
-    if(dashArray.length) {
+    if(dashArray.length)
+    {
       gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(dashArray));
       gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), dashArray.length);
       gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), 0);
     }
 
-    // 패턴 텍스처 생성
-    const useStrokePattern = false; // 오프셋 테스트를 위해 패턴 비활성화
-    
+///////////////
+    const useStrokePattern = true;
+
+    // --- uniform 등록
     if (useStrokePattern) {
       const patternCanvas = document.createElement("canvas");
       patternCanvas.width = 20;
@@ -546,31 +555,19 @@ void main() {
       gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
       gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 1.0, 1.0, 1.0, 1.0);
     } else {
-      // 오프셋 테스트를 위해 파란색으로 설정
       gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
       gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
     }
 
-    // 렌더링
+
+    // ====== Draw ======
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    // 인스턴스 드로우 호출
     ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
-    
-    // 리소스 정리
-    function cleanup() {
-      gl.deleteBuffer(quadVertexBuffer);
-      gl.deleteBuffer(quadIndexBuffer);
-      gl.deleteBuffer(instanceBuffer);
-      gl.deleteProgram(program);
-    }
-    
-    // 창 닫힐 때 정리
-    window.addEventListener('beforeunload', cleanup);
   </script>
 </body>
 </html>
