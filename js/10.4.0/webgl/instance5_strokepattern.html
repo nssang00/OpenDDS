@@ -40,8 +40,8 @@ uniform float u_globalAlpha;
 uniform float u_depth;
 uniform float u_resolution;
 
-uniform float u_lineWidth;
-uniform float u_lineOffset;
+uniform float u_strokeWidth;
+uniform float u_strokeOffset;
 
 const float PI = 3.141592653589793238;
 const float TWO_PI = 2.0 * PI;
@@ -102,8 +102,8 @@ void main() {
   vec2 segmentEndPx = worldToPx(a_segmentEnd);  
   vec2 tangentPx = normalize(segmentEndPx - segmentStartPx);
   vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
-  segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_lineOffset),
-  segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_lineOffset);
+  segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset),
+  segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_strokeOffset);
   
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
   float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
@@ -117,12 +117,12 @@ void main() {
     joinDirection = getJoinOffsetDirection(normalPx * normalDir, angle);
   }
 
-  positionPx = positionPx + joinDirection * (u_lineWidth * 0.5 + 1.);
+  positionPx = positionPx + joinDirection * (u_strokeWidth * 0.5 + 1.);
   gl_Position = pxToScreen(positionPx);
 
   v_segmentStart = segmentStartPx;
   v_segmentEnd   = segmentEndPx;
-  v_distanceOffsetPx = a_distance / u_resolution - (u_lineOffset * a_angleTangentSum);
+  v_distanceOffsetPx = a_distance / u_resolution - (u_strokeOffset * a_angleTangentSum);
   v_joinAngles   = a_joinAngles;
   v_hitColor     = colorEncodeId(a_id);
   v_angleTangentSum = a_angleTangentSum;
@@ -144,13 +144,14 @@ varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
 varying float v_distanceOffsetPx;
 varying float v_angleTangentSum;
-uniform float u_lineWidth;
+uniform float u_strokeWidth;
 uniform sampler2D u_pattern;
 uniform vec4 u_strokeColor;
 uniform float u_pixelRatio;
 uniform float u_globalAlpha;
-uniform float u_capType;
-uniform float u_joinType;
+uniform float u_strokeCap;
+uniform float u_strokeJoin;
+uniform float u_strokeMiterLimit;
 
 uniform float u_dashPattern[8];
 uniform int u_dashCount;
@@ -262,7 +263,7 @@ float miterJoinDistanceField(vec2 point, vec2 start, vec2 end, float width, floa
     return bevelJoinField(point, start, end, width, joinAngle);
   }
   float miterLength = 1. / sin(joinAngle * 0.5);
-  float miterLimit = 10.;
+  float miterLimit = u_strokeMiterLimit;
   if (miterLength > miterLimit) {
     return bevelJoinField(point, start, end, width, joinAngle);
   }
@@ -313,16 +314,16 @@ void main() {
   float lengthToPoint = max(0., min(dot(segmentTangent, startToPoint), segmentLength));
   float currentLengthPx = lengthToPoint + v_distanceOffsetPx; 
   float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
-  float currentRadiusRatio = dot(segmentNormal, startToPoint) * 2. / u_lineWidth;  
+  float currentRadiusRatio = dot(segmentNormal, startToPoint) * 2. / u_strokeWidth;  
 
 
-  float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_lineWidth, v_angleStart, u_capType, u_joinType);
-  float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_lineWidth, v_angleEnd, u_capType, u_joinType);
+  float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth, v_angleStart, u_strokeCap, u_strokeJoin);
+  float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_strokeWidth, v_angleEnd, u_strokeCap, u_strokeJoin);
   float distanceField = max(
-    segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_lineWidth),
+    segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth),
     max(segmentStartDistance, segmentEndDistance)
   );
-  distanceField = max(distanceField,(u_dashCount == 0) ? -1000.0 : dashDistanceField(currentLengthPx, currentRadiusPx, u_capType, u_lineWidth, u_dashPattern, u_dashCount, u_dashOffset));
+  distanceField = max(distanceField,(u_dashCount == 0) ? -1000.0 : dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset));
 
   vec4 color = u_useStrokePattern ? u_strokeColor
     : u_strokeColor * sampleStrokePattern(
@@ -334,7 +335,7 @@ void main() {
         u_strokePatternTextureStartOffset,
         currentLengthPx,
         currentRadiusRatio,
-        u_lineWidth);
+        u_strokeWidth);
         
   color.a *= smoothstep(0.5, -0.5, distanceField);
   gl_FragColor = color;
@@ -499,11 +500,12 @@ void main() {
     gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
     gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
 
-    gl.uniform1f(gl.getUniformLocation(program, "u_lineOffset"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_lineWidth"), 12.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), 12.0);
     gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_capType"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_joinType"), 0.0); // 7: miter, 6: bevel, etc.
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), 0.0); // 7: miter, 6: bevel, etc.
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), 10.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
 
