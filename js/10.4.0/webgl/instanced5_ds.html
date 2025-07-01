@@ -49,11 +49,12 @@ varying vec2  v_segmentStart;
 varying vec2  v_segmentEnd;
 varying float v_angleStart;
 varying float v_angleEnd;
-varying float v_distance;
 varying float v_distanceOffsetPx;
 varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
 varying float v_angleTangentSum;
+varying float v_segmentLength;
+varying vec2  v_segmentTangent;
 
 vec2 worldToPx(vec2 worldPos) {
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
@@ -100,8 +101,10 @@ void main() {
   vec2 segmentStartPx = worldToPx(a_segmentStart);
   vec2 segmentEndPx = worldToPx(a_segmentEnd);  
   vec2 tangentPx = normalize(segmentEndPx - segmentStartPx);
+  float segmentLength = length(segmentEndPx - segmentStartPx);
   vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
-  segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset),
+
+  segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset);
   segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_strokeOffset);
   
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
@@ -125,6 +128,8 @@ void main() {
   v_joinAngles   = a_joinAngles;
   v_hitColor     = colorEncodeId(a_id);
   v_angleTangentSum = a_angleTangentSum;
+  v_segmentLength = segmentLength;
+  v_segmentTangent = tangentPx;
 }
 `;
 
@@ -143,6 +148,9 @@ varying vec2  v_joinAngles;
 varying vec4  v_hitColor;
 varying float v_distanceOffsetPx;
 varying float v_angleTangentSum;
+varying float v_segmentLength;
+varying vec2  v_segmentTangent;
+
 uniform float u_strokeWidth;
 uniform sampler2D u_pattern;
 uniform vec4 u_strokeColor;
@@ -164,12 +172,15 @@ uniform vec2 u_strokePatternTextureSampleSize;
 uniform float u_strokePatternTextureSpacing;
 uniform float u_strokePatternTextureStartOffset;
 
-vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float startOffsetPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
+vec4 sampleStrokePattern(
+    sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize,
+    float spacingPx, float startOffsetPx, float currentLengthPx,
+    float currentRadiusRatio, float lineWidth
+) {
     float scaleFactor = sampleSize.y / lineWidth;
     float currentLengthScaled = currentLengthPx * scaleFactor;
     float spacingScaled = max(spacingPx * scaleFactor, sampleSize.x);
     float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor + sampleSize.x, spacingScaled);
-    // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
     uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
     if (uCoordPx > sampleSize.x - 1.0) return vec4(0.0);
     float vCoordPx = (0.5 - 0.5 * currentRadiusRatio) * sampleSize.y;
@@ -177,175 +188,175 @@ vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset
     return texture2D(texture, texCoord);
 }
 
-float getSingleDashDistance(float distance, float radius, float dashOffset, float dashLength, float dashLengthTotal, float capType, float lineWidth) {
-  float localDistance = mod(distance, dashLengthTotal);
-  float distanceSegment = abs(localDistance - dashOffset - dashLength * 0.5) - dashLength * 0.5;
-  distanceSegment = min(distanceSegment, dashLengthTotal - localDistance);
-  if (capType == 5.0) {
-    distanceSegment -= lineWidth * 0.5;
-  } else if (capType == 0.0) {
-    distanceSegment = min(distanceSegment, sqrt(distanceSegment * distanceSegment + radius * radius) - lineWidth * 0.5);
-  }
-  return distanceSegment;
+float getSingleDashDistance(
+    float distance, float radius, float dashOffset,
+    float dashLength, float dashLengthTotal,
+    float capType, float lineWidth
+) {
+    float localDistance = mod(distance, dashLengthTotal);
+    float distanceSegment = abs(localDistance - dashOffset - dashLength * 0.5) - dashLength * 0.5;
+    distanceSegment = min(distanceSegment, dashLengthTotal - localDistance);
+    if (capType == 5.0) {
+        distanceSegment -= lineWidth * 0.5;
+    } else if (capType == 0.0) {
+        distanceSegment = min(distanceSegment, sqrt(distanceSegment * distanceSegment + radius * radius) - lineWidth * 0.5);
+    }
+    return distanceSegment;
 }
 
-float dashDistanceField(float distance, float radius, float capType, float lineWidth,
-  float dashPattern[8], int dashCount, float dashOffset) {
+float dashDistanceField(
+    float distance, float radius, float capType, float lineWidth,
+    float dashPattern[8], int dashCount, float dashOffset
+) {
+    float totalDashLength = 0.0;
+    for (int i = 0; i < 8; ++i) {
+        if (i >= dashCount) break;
+        totalDashLength += dashPattern[i];
+    }
 
-  float totalDashLength = 0.0;
-  for (int i = 0; i < 8; ++i) {
-    if (i >= dashCount) break;
-    totalDashLength += dashPattern[i];
-  }
-
-  float minDistance = 1e6;
-  float currentOffset = 0.0;
-  for (int i = 0; i < 8; i += 2) {
-    if (i + 1 >= dashCount) break;
-    float dashLength = dashPattern[i];
-    float gapLength = dashPattern[i+1];
-    float dashDist = getSingleDashDistance(distance + dashOffset, radius, currentOffset, dashLength, totalDashLength, capType, lineWidth);
-    minDistance = min(minDistance, dashDist);
-    currentOffset += dashLength + gapLength;
-  }
-  return minDistance;
-
-  /*
-  float dashLength0 = 20.0;
-  float dashLength1 = 5.0;
-  float dashLength2 = 20.0;
-  float dashLength3 = 5.0;
-  float totalDashLength = dashLength0 + dashLength1 + dashLength2 + dashLength3;
-  return min(getSingleDashDistance(distance, radius, 0., dashLength0, totalDashLength, capType, lineWidth), getSingleDashDistance(distance, radius, 0. + dashLength0 + dashLength1, dashLength2, totalDashLength, capType, lineWidth)); 
-*/
+    float minDistance = 1e6;
+    float currentOffset = 0.0;
+    for (int i = 0; i < 8; i += 2) {
+        if (i + 1 >= dashCount) break;
+        float dashLength = dashPattern[i];
+        float gapLength = dashPattern[i+1];
+        float dashDist = getSingleDashDistance(distance + dashOffset, radius, currentOffset, dashLength, totalDashLength, capType, lineWidth);
+        minDistance = min(minDistance, dashDist);
+        currentOffset += dashLength + gapLength;
+    }
+    return minDistance;
 }
 
 bool isCap(float a) { return a < -0.1; }
 float segmentDistanceField(vec2 point, vec2 start, vec2 end, float width) {
-  vec2 tangent = normalize(end - start);
-  vec2 normal = vec2(-tangent.y, tangent.x);
-  vec2 startToPoint = point - start;
-  return abs(dot(startToPoint, normal)) - width * 0.5;
+    vec2 tangent = normalize(end - start);
+    vec2 normal = vec2(-tangent.y, tangent.x);
+    vec2 startToPoint = point - start;
+    return abs(dot(startToPoint, normal)) - width * 0.5;
 }
 float buttCapDistanceField(vec2 point, vec2 start, vec2 end) {
-  vec2 startToPoint = point - start;
-  vec2 tangent = normalize(end - start);
-  return dot(startToPoint, -tangent);
+    vec2 startToPoint = point - start;
+    vec2 tangent = normalize(end - start);
+    return dot(startToPoint, -tangent);
 }
 float squareCapDistanceField(vec2 point, vec2 start, vec2 end, float width) {
-  return buttCapDistanceField(point, start, end) - width * 0.5;
+    return buttCapDistanceField(point, start, end) - width * 0.5;
 }
 float roundCapDistanceField(vec2 point, vec2 start, vec2 end, float width) {
-  float onSegment = max(0., 1000. * dot(point - start, end - start));
-  return length(point - start) - width * 0.5 - onSegment;
+    float onSegment = max(0., 1000. * dot(point - start, end - start));
+    return length(point - start) - width * 0.5 - onSegment;
 }
 
 float roundJoinDistanceField(vec2 point, vec2 start, vec2 end, float width) {
-  return roundCapDistanceField(point, start, end, width);
+    return roundCapDistanceField(point, start, end, width);
 }
 
 float bevelJoinField(vec2 point, vec2 start, vec2 end, float width, float joinAngle) {
-  vec2 startToPoint = point - start;
-  vec2 tangent = normalize(end - start);
-  float c = cos(joinAngle * 0.5);
-  float s = sin(joinAngle * 0.5);
-  float direction = -sign(sin(joinAngle));
-  vec2 bisector = vec2(c * tangent.x - s * tangent.y, s * tangent.x + c * tangent.y);
-  float radius = width * 0.5 * s;
-  return dot(startToPoint, bisector * direction) - radius;
+    vec2 startToPoint = point - start;
+    vec2 tangent = normalize(end - start);
+    float c = cos(joinAngle * 0.5);
+    float s = sin(joinAngle * 0.5);
+    float direction = -sign(sin(joinAngle));
+    vec2 bisector = vec2(c * tangent.x - s * tangent.y, s * tangent.x + c * tangent.y);
+    float radius = width * 0.5 * s;
+    return dot(startToPoint, bisector * direction) - radius;
 }
 
 float miterJoinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle) {
-  if (cos(joinAngle) > 0.985) { // avoid risking a division by zero
-    return bevelJoinField(point, start, end, width, joinAngle);
-  }
-  float miterLength = 1. / sin(joinAngle * 0.5);
-  float miterLimit = u_strokeMiterLimit;
-  if (miterLength > miterLimit) {
-    return bevelJoinField(point, start, end, width, joinAngle);
-  }
-  return -1000.;
+    if (cos(joinAngle) > 0.985) {
+        return bevelJoinField(point, start, end, width, joinAngle);
+    }
+    float miterLength = 1. / sin(joinAngle * 0.5);
+    float miterLimit = u_strokeMiterLimit;
+    if (miterLength > miterLimit) {
+        return bevelJoinField(point, start, end, width, joinAngle);
+    }
+    return -1000.;
 }
 
 float capDistanceField(vec2 point, vec2 start, vec2 end, float width, float capType) {
-   if (capType == 4.0) {
-    return buttCapDistanceField(point, start, end);
-  } else if (capType == 5.0) {
-    return squareCapDistanceField(point, start, end, width);
-  }
-  return roundCapDistanceField(point, start, end, width);
+    if (capType == 4.0) {
+        return buttCapDistanceField(point, start, end);
+    } else if (capType == 5.0) {
+        return squareCapDistanceField(point, start, end, width);
+    }
+    return roundCapDistanceField(point, start, end, width);
 }
 
 float joinDistanceField(vec2 point, vec2 start, vec2 end, float width, float joinAngle, float joinType) {
-  if (joinType == 6.0) {
-    return bevelJoinField(point, start, end, width, joinAngle);
-  } else if (joinType == 7.0) {
-    return miterJoinDistanceField(point, start, end, width, joinAngle);
-  }
-  return roundJoinDistanceField(point, start, end, width);
+    if (joinType == 6.0) {
+        return bevelJoinField(point, start, end, width, joinAngle);
+    } else if (joinType == 7.0) {
+        return miterJoinDistanceField(point, start, end, width, joinAngle);
+    }
+    return roundJoinDistanceField(point, start, end, width);
 }
 
 float computeSegmentPointDistance(vec2 point, vec2 start, vec2 end, float width, float joinAngle, float capType, float joinType) {
-  if (isCap(joinAngle)) {
-    return capDistanceField(point, start, end, width, capType);
-  }
-  return joinDistanceField(point, start, end, width, joinAngle, joinType);
+    if (isCap(joinAngle)) {
+        return capDistanceField(point, start, end, width, capType);
+    }
+    return joinDistanceField(point, start, end, width, joinAngle, joinType);
 }
 
 float distanceFromSegment(vec2 point, vec2 start, vec2 end) {
-  vec2 tangent = end - start;
-  vec2 startToPoint = point - start;
-  // inspire by capsule fn in https://iquilezles.org/articles/distfunctions/
-  float h = clamp(dot(startToPoint, tangent) / dot(tangent, tangent), 0.0, 1.0);
-  return length(startToPoint - tangent * h);
+    vec2 tangent = end - start;
+    vec2 startToPoint = point - start;
+    float h = clamp(dot(startToPoint, tangent) / dot(tangent, tangent), 0.0, 1.0);
+    return length(startToPoint - tangent * h);
 }
 
 void main() {
-  vec2  currentPoint     = gl_FragCoord.xy / u_pixelRatio;
+    vec2  currentPoint = gl_FragCoord.xy / u_pixelRatio;
 
-  //dash, sampleStrokePattern
-  float segmentLength = length(v_segmentEnd - v_segmentStart);
-  vec2 segmentTangent = (v_segmentEnd - v_segmentStart) / segmentLength;
-  float currentLengthPx = max(0., min(dot(segmentTangent, currentPoint - v_segmentStart), segmentLength)) + v_distanceOffsetPx; 
+    float segmentLength = v_segmentLength;
+    vec2 segmentTangent = v_segmentTangent;
 
-  float segmentStartDistance = computeSegmentPointDistance(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth, v_angleStart, u_strokeCap, u_strokeJoin);
-  float segmentEndDistance = computeSegmentPointDistance(currentPoint, v_segmentEnd, v_segmentStart, u_strokeWidth, v_angleEnd, u_strokeCap, u_strokeJoin);
-  float distanceField = max(
-    segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth),
-    max(segmentStartDistance, segmentEndDistance)
-  );
+    float currentLengthPx = max(0., min(dot(segmentTangent, currentPoint - v_segmentStart), segmentLength)) + v_distanceOffsetPx;
 
-  float dashField = -1000.0;
-  if (u_dashCount > 0) {
-    float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
-    dashField = dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset);
-  }
-  distanceField = max(distanceField, dashField);
-
-  vec4 color = u_strokeColor;
-  if (u_useStrokePattern) {
-    vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
-    float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
-    
-    color = u_strokeColor * sampleStrokePattern(
-      u_strokePatternTexture,
-      u_strokePatternTextureSize,
-      u_strokePatternTextureOffset,
-      u_strokePatternTextureSampleSize,
-      u_strokePatternTextureSpacing,
-      u_strokePatternTextureStartOffset,
-      currentLengthPx,
-      currentRadiusRatio,
-      u_strokeWidth
+    float segmentStartDistance = computeSegmentPointDistance(
+        currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth, v_angleStart, u_strokeCap, u_strokeJoin
     );
-  }
-        
-  color.a *= smoothstep(0.5, -0.5, distanceField);
-  gl_FragColor = color;
-  gl_FragColor.a *= u_globalAlpha;
-  gl_FragColor.rgb *= gl_FragColor.a;  
+    float segmentEndDistance = computeSegmentPointDistance(
+        currentPoint, v_segmentEnd, v_segmentStart, u_strokeWidth, v_angleEnd, u_strokeCap, u_strokeJoin
+    );
+    float distanceField = max(
+        segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth),
+        max(segmentStartDistance, segmentEndDistance)
+    );
 
-  if(gl_FragColor.a < 0.1) { discard; };
+    float dashField = -1000.0;
+    if (u_dashCount > 0) {
+        float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
+        dashField = dashDistanceField(
+            currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth,
+            u_dashPattern, u_dashCount, u_dashOffset
+        );
+    }
+    distanceField = max(distanceField, dashField);
+
+    vec4 color = u_strokeColor;
+    if (u_useStrokePattern) {
+        vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
+        float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
+        color = u_strokeColor * sampleStrokePattern(
+            u_strokePatternTexture,
+            u_strokePatternTextureSize,
+            u_strokePatternTextureOffset,
+            u_strokePatternTextureSampleSize,
+            u_strokePatternTextureSpacing,
+            u_strokePatternTextureStartOffset,
+            currentLengthPx,
+            currentRadiusRatio,
+            u_strokeWidth
+        );
+    }
+    color.a *= smoothstep(0.5, -0.5, distanceField);
+    gl_FragColor = color;
+    gl_FragColor.a *= u_globalAlpha;
+    gl_FragColor.rgb *= gl_FragColor.a;
+
+    if (gl_FragColor.a < 0.1) { discard; }
 }
 `;
 
