@@ -104,8 +104,6 @@ void main() {
   vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
   segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset);
   segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_strokeOffset);
-
-  float segmentLength = length(segmentEndPx - segmentStartPx);
   
   float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
   float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
@@ -128,7 +126,7 @@ void main() {
   v_joinAngles   = a_joinAngles;
   v_hitColor     = colorEncodeId(a_id);
   v_angleTangentSum = a_angleTangentSum;
-  v_segmentLength = segmentLength;
+  v_segmentLength = length(segmentEndPx - segmentStartPx);
   v_segmentTangent = tangentPx;
 }
 `;
