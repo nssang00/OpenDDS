@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>최적화된 WebGL 라인 렌더링</title>
+  <style>
+    html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
+  </style>
+</head>
+<body>
+  <canvas id="glcanvas" width="1024" height="768"></canvas>
+  <script>
+    const canvas = document.getElementById("glcanvas");
+    const gl = canvas.getContext("webgl");
+    const ext = gl.getExtension("ANGLE_instanced_arrays");
+    if (!ext) throw "ANGLE_instanced_arrays 미지원";
+
+    // ====== 최적화된 Vertex Shader ======
+    const vertexShaderSource = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+
+attribute vec2  a_segmentStart;
+attribute vec2  a_segmentEnd;
+attribute vec2  a_position;
+attribute float a_distance;
+attribute vec2  a_joinAngles;
+attribute float a_id;
+
+uniform mat4  u_projectionMatrix;
+uniform vec2  u_viewportSizePx;
+uniform float u_pixelRatio;
+uniform float u_globalAlpha;
+
+uniform float u_depth;
+uniform float u_resolution;
+
+uniform float u_strokeWidth;
+uniform float u_strokeOffset;
+
+const float PI = 3.141592653589793238;
+
+varying vec2  v_segmentStart;
+varying vec2  v_segmentEnd;
+varying float v_angleStart;
+varying float v_angleEnd;
+varying float v_distance;
+varying vec4  v_hitColor;
+varying float v_segmentLength;  // 추가: 세그먼트 길이
+varying vec2  v_tangent;        // 추가: 접선 벡터
+varying vec2  v_normal;         // 추가: 법선 벡터
+varying vec2  v_joinDirection;  // 추가: 조인 방향
+
+vec2 worldToPx(vec2 worldPos) {
+  vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
+  return (0.5 * (screenPos.xy / screenPos.w) + 0.5) * u_viewportSizePx;
+}
+
+vec4 pxToScreen(vec2 pxPos) {
+  vec2 screen = 2.0 * pxPos / u_viewportSizePx - 1.0;
+  return vec4(screen, u_depth, 1.0);
+}
+
+bool isCap(float joinAngle) {
+  return joinAngle < -0.1;
+}
+
+vec2 getJoinOffsetDirection(vec2 normalPx, float joinAngle) {
+  float halfAngle = joinAngle / 2.0;
+  float c = cos(halfAngle);
+  float s = sin(halfAngle);
+  vec2 angleBisectorNormal = vec2(s * normalPx.x + c * normalPx.y, -c * normalPx.x + s * normalPx.y);
+  float length = 1.0 / s;
+  return angleBisectorNormal * length;
+}
+
+vec4 colorEncodeId(float id) {
+  float r = floor(id / 16777216.0);
+  float g = floor(mod(id, 16777216.0) / 65536.0);
+  float b = floor(mod(id, 65536.0) / 256.0);
+  float a = floor(mod(id, 256.0));
+  return vec4(r, g, b, a) / 255.0;
+}
+
+void main() {
+  v_angleStart = a_joinAngles.x;
+  v_angleEnd = a_joinAngles.y;
+
+  vec2 segmentStartPx = worldToPx(a_segmentStart);
+  vec2 segmentEndPx = worldToPx(a_segmentEnd);  
+  vec2 tangentPx = normalize(segmentEndPx - segmentStartPx);
+  vec2 normalPx = vec2(-tangentPx.y, tangentPx.x);
+  
+  // 오프셋 적용
+  segmentStartPx += normalPx * u_strokeOffset;
+  segmentEndPx += normalPx * u_strokeOffset;
+  
+  // 세그먼트 길이 계산 (픽셀 단위)
+  v_segmentLength = length(segmentEndPx - segmentStartPx);
+  
+  // 조인 방향 계산
+  float normalDir = a_position.y < 0.0 ? 1.0 : -1.0;
+  float tangentDir = a_position.x < 0.0 ? 1.0 : -1.0;
+  float angle = a_position.x < 0.0 ? v_angleStart : v_angleEnd;
+  
+  if (isCap(angle) || abs(cos(angle)) > 0.985) {
+    v_joinDirection = normalPx * normalDir - tangentPx * tangentDir;
+  } else {
+    v_joinDirection = getJoinOffsetDirection(normalPx * normalDir, angle);
+  }
+  
+  // 정점 위치 계산
+  vec2 positionPx;
+  if (a_position.x < 0.0) {
+    positionPx = segmentStartPx;
+  } else {
+    positionPx = segmentEndPx;
+  }
+  positionPx += v_joinDirection * (u_strokeWidth * 0.5 + 1.);
+  gl_Position = pxToScreen(positionPx);
+
+  // 프래그먼트 셰이더로 전달
+  v_segmentStart = segmentStartPx;
+  v_segmentEnd   = segmentEndPx;
+  v_tangent      = tangentPx;
+  v_normal       = normalPx;
+  v_distance     = a_distance;
+  v_hitColor     = colorEncodeId(a_id);
+}
+`;
+
+    // ====== 최적화된 Fragment Shader ======
+    const fragmentShaderSource = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2  v_segmentStart;
+varying vec2  v_segmentEnd;
+varying float v_angleStart;
+varying float v_angleEnd;
+varying float v_distance;
+varying vec4  v_hitColor;
+varying float v_segmentLength;  // 추가: 세그먼트 길이
+varying vec2  v_tangent;        // 추가: 접선 벡터
+varying vec2  v_normal;         // 추가: 법선 벡터
+varying vec2  v_joinDirection;  // 추가: 조인 방향
+
+uniform float u_strokeWidth;
+uniform sampler2D u_pattern;
+uniform vec4 u_strokeColor;
+uniform float u_pixelRatio;
+uniform float u_globalAlpha;
+uniform float u_strokeCap;
+uniform float u_strokeJoin;
+uniform float u_strokeMiterLimit;
+uniform float u_strokeOffset;
+uniform float u_resolution;
+
+uniform float u_dashPattern[8];
+uniform int u_dashCount;
+uniform float u_dashOffset;
+
+uniform bool u_useStrokePattern;
+uniform sampler2D u_strokePatternTexture;
+uniform vec2  u_strokePatternTextureSize;
+uniform vec2  u_strokePatternTextureOffset;
+uniform vec2 u_strokePatternTextureSampleSize;
+uniform float u_strokePatternTextureSpacing;
+uniform float u_strokePatternTextureStartOffset;
+
+vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float startOffsetPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
+    float scaleFactor = sampleSize.y / lineWidth;
+    float currentLengthScaled = currentLengthPx * scaleFactor;
+    float spacingScaled = max(spacingPx * scaleFactor, sampleSize.x);
+    float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor + sampleSize.x, spacingScaled);
+    uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+    if (uCoordPx > sampleSize.x - 1.0) return vec4(0.0);
+    float vCoordPx = (0.5 - 0.5 * currentRadiusRatio) * sampleSize.y;
+    vec2  texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize; 
+    return texture2D(texture, texCoord);
+}
+
+float getSingleDashDistance(float distance, float radius, float dashOffset, float dashLength, float dashLengthTotal, float capType, float lineWidth) {
+  float localDistance = mod(distance, dashLengthTotal);
+  float distanceSegment = abs(localDistance - dashOffset - dashLength * 0.5) - dashLength * 0.5;
+  distanceSegment = min(distanceSegment, dashLengthTotal - localDistance);
+  if (capType == 5.0) {
+    distanceSegment -= lineWidth * 0.5;
+  } else if (capType == 0.0) {
+    distanceSegment = min(distanceSegment, sqrt(distanceSegment * distanceSegment + radius * radius) - lineWidth * 0.5);
+  }
+  return distanceSegment;
+}
+
+float dashDistanceField(float distance, float radius, float capType, float lineWidth,
+  float dashPattern[8], int dashCount, float dashOffset) {
+
+  float totalDashLength = 0.0;
+  for (int i = 0; i < 8; ++i) {
+    if (i >= dashCount) break;
+    totalDashLength += dashPattern[i];
+  }
+
+  float minDistance = 1e6;
+  float currentOffset = 0.0;
+  for (int i = 0; i < 8; i += 2) {
+    if (i + 1 >= dashCount) break;
+    float dashLength = dashPattern[i];
+    float gapLength = dashPattern[i+1];
+    float dashDist = getSingleDashDistance(distance + dashOffset, radius, currentOffset, dashLength, totalDashLength, capType, lineWidth);
+    minDistance = min(minDistance, dashDist);
+    currentOffset += dashLength + gapLength;
+  }
+  return minDistance;
+}
+
+bool isCap(float a) { return a < -0.1; }
+float segmentDistanceField(vec2 point, vec2 start, vec2 end, float width) {
+  vec2 tangent = normalize(end - start);
+  vec2 normal = vec2(-tangent.y, tangent.x);
+  vec2 startToPoint = point - start;
+  return abs(dot(startToPoint, normal)) - width * 0.5;
+}
+
+float distanceFromSegment(vec2 point, vec2 start, vec2 end) {
+  vec2 tangent = end - start;
+  vec2 startToPoint = point - start;
+  float h = clamp(dot(startToPoint, tangent) / dot(tangent, tangent), 0.0, 1.0);
+  return length(startToPoint - tangent * h);
+}
+
+void main() {
+  vec2  currentPoint     = gl_FragCoord.xy / u_pixelRatio;
+  
+  // Vertex Shader에서 전달된 값 사용
+  vec2 segmentTangent = v_tangent;
+  float segmentLength = v_segmentLength;
+  
+  // 현재 길이 계산 (픽셀 위치에 의존적)
+  float currentLengthPx = dot(segmentTangent, currentPoint - v_segmentStart);
+  currentLengthPx = clamp(currentLengthPx, 0.0, segmentLength) + (v_distance / u_resolution - u_strokeOffset * (v_angleStart + v_angleEnd) * 0.5);
+  
+  // 거리 필드 계산: 주 라인
+  float distToLine = segmentDistanceField(currentPoint, v_segmentStart, v_segmentEnd, u_strokeWidth);
+  
+  // Cap/Join 거리 계산: Vertex Shader에서 계산된 v_joinDirection 사용
+  float distToStart = -1000.0;
+  float distToEnd = -1000.0;
+  
+  if (currentLengthPx < u_strokeWidth * 0.5) {
+    // 시작점에서의 거리 (조인 방향을 이용한 단순화)
+    distToStart = dot(currentPoint - v_segmentStart, v_joinDirection);
+  }
+  
+  if (segmentLength - currentLengthPx < u_strokeWidth * 0.5) {
+    // 끝점에서의 거리 (조인 방향을 이용한 단순화)
+    distToEnd = dot(currentPoint - v_segmentEnd, v_joinDirection);
+  }
+  
+  float distanceField = max(distToLine, max(distToStart, distToEnd));
+
+  // 대시 패턴 적용
+  float dashField = -1000.0;
+  if (u_dashCount > 0) {
+    float currentRadiusPx = distanceFromSegment(currentPoint, v_segmentStart, v_segmentEnd);
+    dashField = dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset);
+  }
+  distanceField = max(distanceField, dashField);
+
+  // 패턴 텍스처 샘플링
+  vec4 color = u_strokeColor;
+  if (u_useStrokePattern) {
+    vec2 segmentNormal = v_normal;
+    float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
+    
+    color = u_strokeColor * sampleStrokePattern(
+      u_strokePatternTexture,
+      u_strokePatternTextureSize,
+      u_strokePatternTextureOffset,
+      u_strokePatternTextureSampleSize,
+      u_strokePatternTextureSpacing,
+      u_strokePatternTextureStartOffset,
+      currentLengthPx,
+      currentRadiusRatio,
+      u_strokeWidth
+    );
+  }
+        
+  // 알파 계산
+  float alpha = smoothstep(0.5, -0.5, distanceField) * u_globalAlpha;
+  if (alpha < 0.1) discard;
+  
+  gl_FragColor = vec4(color.rgb * alpha, alpha);
+}
+`;
+
+    function compileShader(type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        throw gl.getShaderInfoLog(shader);
+      }
+      return shader;
+    }
+    
+    // 프로그램 생성 및 컴파일
+    const program = gl.createProgram();
+    gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vertexShaderSource));
+    gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw gl.getProgramInfoLog(program);
+    }
+    gl.useProgram(program);    
+    
+    // 데이터 준비
+    const coordinates = [
+      [-122.48369693756104, 37.83381888486939],
+      [-122.48348236083984, 37.83317489144141],
+      [-122.48339653015138, 37.83270036637107],
+      [-122.48356819152832, 37.832056363179625],
+      [-122.48404026031496, 37.83114119107971],
+      [-122.48404026031496, 37.83049717427869],
+      [-122.48348236083984, 37.829920943955045],
+      [-122.48356819152832, 37.82954808664175],
+      [-122.48507022857666, 37.82944639795659],
+      [-122.48610019683838, 37.82880236636284],
+      [-122.48695850372314, 37.82931081282506],
+      [-122.48700141906738, 37.83080223556934],
+      [-122.48751640319824, 37.83168351665737],
+      [-122.48803138732912, 37.832158048267786],
+      [-122.48888969421387, 37.83297152392784],
+      [-122.48987674713133, 37.83263257682617],
+      [-122.49043464660643, 37.832937629287755],
+      [-122.49125003814696, 37.832429207817725],
+      [-122.49163627624512, 37.832564787218985],
+      [-122.49223709106445, 37.83337825839438],
+      [-122.49378204345702, 37.83368330777276]
+    ];
+
+    // 투영 행렬 생성
+    function makeOrthoProjectionMatrix(minX, minY, maxX, maxY) {
+      const sx = 2 / (maxX - minX);
+      const sy = 2 / (maxY - minY);
+      const tx = -(maxX + minX) / (maxX - minX);
+      const ty = -(maxY + minY) / (maxY - minY);
+      return new Float32Array([
+        sx,  0, 0, 0,
+         0, sy, 0, 0,
+         0,  0, 1, 0,
+        tx, ty, 0, 1
+      ]);
+    }
+    const lons = coordinates.map(c => c[0]);
+    const lats = coordinates.map(c => c[1]);
+    const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat);
+
+    // 인스턴스 데이터 생성
+    const instanceAttributes = [
+      { name: "a_segmentStart", size: 2 },
+      { name: "a_segmentEnd",   size: 2 },
+      { name: "a_distance",     size: 1 },
+      { name: "a_joinAngles",   size: 2 },
+      { name: "a_id",           size: 1 }
+    ];
+    const STRIDE = instanceAttributes.reduce((sum, a) => sum + a.size, 0) * 4;
+    const instanceCount = coordinates.length - 1;
+    const instanceData = new Float32Array(instanceCount * STRIDE / 4);
+    
+    function angle(p0, pA, pB) {
+      const v0x = pA[0] - p0[0];
+      const v0y = pA[1] - p0[1];
+      const v1x = pB[0] - p0[0];
+      const v1y = pB[1] - p0[1];
+      const l0 = Math.sqrt(v0x * v0x + v0y * v0y);
+      const l1 = Math.sqrt(v1x * v1x + v1y * v1y);
+      if (l0 === 0.0 || l1 === 0.0) return -1.0;
+      const dot = (v0x * v1x + v0y * v1y) / (l0 * l1);
+      const ang = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
+      const cross = v0x * v1y - v0y * v1x;
+      return cross < 0 ? -ang : ang;
+    }
+    
+    let distances = 0;
+    for (let i = 0; i < instanceCount; i++) {
+      const idx = i * STRIDE / 4;
+      const p0 = coordinates[i];
+      const p1 = coordinates[i + 1];
+      const dx = p1[0] - p0[0];
+      const dy = p1[1] - p0[1];
+      const segmentLength = Math.sqrt(dx * dx + dy * dy);
+      const prev = i > 0 ? coordinates[i - 1] : p0;
+      const next = i < instanceCount - 1 ? coordinates[i + 2] : p1;
+      const angle0 = i > 0 ? angle(p0, p1, prev) : -1.0;
+      const angle1 = i < instanceCount - 1 ? angle(p1, p0, next) : -1.0;
+
+      instanceData[idx]     = p0[0];
+      instanceData[idx+1]   = p0[1];
+      instanceData[idx+2]   = p1[0];
+      instanceData[idx+3]   = p1[1];
+      instanceData[idx+4]   = distances;
+      instanceData[idx+5]   = angle0;
+      instanceData[idx+6]   = angle1;
+      instanceData[idx+7]   = i;
+
+      distances += segmentLength;
+    }
+
+    // Static quad 데이터
+    const quadVertices = new Float32Array([-1, -1, -1, 1, 1, -1, 1, 1]);
+    const quadVertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+    
+    const quadIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
+    const quadIndexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
+
+    // 인스턴스 버퍼 생성
+    const instanceBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+
+    // 속성 바인딩 함수
+    function bindAttrib(name, size, stride, offset, div) {
+      const location = gl.getAttribLocation(program, name);
+      if (location === -1) return;
+      gl.enableVertexAttribArray(location);
+      gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, offset);
+      ext.vertexAttribDivisorANGLE(location, div);
+    }
+    
+    function bindInstanceAttributes(attribs, divisor = 1) {
+      const stride = attribs.reduce((sum, a) => sum + a.size, 0) * 4;
+      let offset = 0;
+      for (const attr of attribs) {
+        bindAttrib(attr.name, attr.size, stride, offset, divisor);
+        offset += attr.size * 4;
+      }
+    }
+    
+    // 버퍼 바인딩
+    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+    bindInstanceAttributes(instanceAttributes, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+    bindAttrib("a_position", 2, 0, 0, 0);
+
+    // 유니폼 설정
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
+    gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
+    gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
+    gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+
+    // 오프셋 설정 (0이 아닌 값으로 설정)
+    const strokeOffset = 5.0; // 픽셀 단위 오프셋
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), strokeOffset);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), 12.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), 10.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
+
+    const dashArray = [20,5,20,5];
+    if(dashArray.length) {
+      gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(dashArray));
+      gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), dashArray.length);
+      gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), 0);
+    }
+
+    // 패턴 텍스처 생성
+    const useStrokePattern = false; // 오프셋 테스트를 위해 패턴 비활성화
+    
+    if (useStrokePattern) {
+      const patternCanvas = document.createElement("canvas");
+      patternCanvas.width = 20;
+      patternCanvas.height = 20;
+      const ctx = patternCanvas.getContext("2d");
+      ctx.fillStyle = "green";
+      ctx.fillRect(0, 0, 20, 20);
+      ctx.fillStyle = "red";
+      ctx.fillRect(8, 0, 4, 20);
+      ctx.fillRect(0, 8, 20, 4);
+
+      const patternTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, patternTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, patternCanvas);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, patternTexture);
+      gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), 0);
+
+      gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSize"), patternCanvas.width, patternCanvas.height);
+      gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), 0, 0);
+      gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSampleSize"), patternCanvas.width, patternCanvas.height);
+      gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), 20.0);
+      gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), 10.0);
+      gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
+      gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 1.0, 1.0, 1.0, 1.0);
+    } else {
+      // 오프셋 테스트를 위해 파란색으로 설정
+      gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
+      gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
+    }
+
+    // 렌더링
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+    // 인스턴스 드로우 호출
+    ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
+    
+    // 리소스 정리
+    function cleanup() {
+      gl.deleteBuffer(quadVertexBuffer);
+      gl.deleteBuffer(quadIndexBuffer);
+      gl.deleteBuffer(instanceBuffer);
+      gl.deleteProgram(program);
+    }
+    
+    // 창 닫힐 때 정리
+    window.addEventListener('beforeunload', cleanup);
+  </script>
+</body>
+</html>
