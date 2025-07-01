@@ -333,15 +333,15 @@ void main() {
     vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
     float currentRadiusRatio = dot(segmentNormal, currentPoint - v_segmentStart) * 2. / u_strokeWidth;  
     color = u_strokeColor * sampleStrokePattern(
-        u_strokePatternTexture,
-        u_strokePatternTextureSize,
-        u_strokePatternTextureOffset,
-        u_strokePatternTextureSampleSize,
-        u_strokePatternTextureSpacing,
-        u_strokePatternTextureStartOffset,
-        currentLengthPx,
-        currentRadiusRatio,
-        u_strokeWidth
+      u_strokePatternTexture,
+      u_strokePatternTextureSize,
+      u_strokePatternTextureOffset,
+      u_strokePatternTextureSampleSize,
+      u_strokePatternTextureSpacing,
+      u_strokePatternTextureStartOffset,
+      currentLengthPx,
+      currentRadiusRatio,
+      u_strokeWidth
     );
   }
   color.a *= smoothstep(0.5, -0.5, distanceField);
