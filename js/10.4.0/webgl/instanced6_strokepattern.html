@@ -422,6 +422,18 @@ void main() {
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
     const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat);
 
+    function mirrorCoordinates(coords, axis = 'lat') {
+      const lons = coords.map(c => c[0]);
+      const lats = coords.map(c => c[1]);
+      if (axis === 'lat') {
+        const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+        return coords.map(([lon, lat]) => [lon, centerLat - (lat - centerLat)]);
+      } else {
+        const centerLon = (Math.min(...lons) + Math.max(...lons)) / 2;
+        return coords.map(([lon, lat]) => [centerLon - (lon - centerLon), lat]);
+      }
+    }
+
     // ====== 인스턴스 데이터 ======
     function createInstanceData(coords) {
       function angle(p0, pA, pB) {
@@ -473,13 +485,13 @@ void main() {
       
       return { instanceData, instanceCount };
     }
-    const {instanceData, instanceCount } = createInstanceData(coordinates);
-
+ 
     // ====== Static quad ======
     const quadVertices = new Float32Array([-1, -1, -1, 1, 1, -1, 1, 1]);
     const quadVertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+
     const quadIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
     const quadIndexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
@@ -487,8 +499,15 @@ void main() {
 
     // ====== GPU buffers & attrib binding ======
     const instanceBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+    //gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+    //gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+
+    function updateInstanceData(coordinates) {
+      const {instanceData, instanceCount } = createInstanceData(coordinates);
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW); // 또는 gl.bufferSubData
+      return instanceCount;
+    }
 
     function bindAttrib(name, size, stride, offset, div) {
       const location = gl.getAttribLocation(program, name);
@@ -577,7 +596,7 @@ void main() {
     const lineStyles = [
       {//solid
         strokeColor: [0.08, 0.8, 1.0, 1.0],
-        strokeWidth: 12.0,
+        strokeWidth: 6.0,
         strokeOffset: 0.0,
         strokeCap: 0.0,//Round
         strokeJoin: 0.0,//Round
@@ -585,7 +604,7 @@ void main() {
       },
       {//dash
         strokeColor: [1.0, 0.0, 0.0, 1.0],
-        strokeWidth: 12.0,
+        strokeWidth: 6.0,
         strokeOffset: 5.0,
         strokeCap: 4.0,//Round
         strokeJoin: 0.0,//Round
@@ -614,10 +633,18 @@ void main() {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    lineStyles.forEach((style) => {
-      setLineUniforms(style);//Dynamic Uniforms
-      ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
-    });
+    const coordinateSets = [
+      coordinates,
+      mirrorCoordinates(coordinates),
+    ];
+
+    coordinateSets.forEach((coordinates) => {
+      const instanceCount = updateInstanceData(coordinates);
+      lineStyles.forEach((style) => {
+        setLineUniforms(style);//Dynamic Uniforms
+        ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
+      });
+    });      
 
   </script>
 </body>
