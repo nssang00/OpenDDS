@@ -509,7 +509,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     bindAttrib("a_position", 2, 0, 0, 0);
 
-    // ====== Uniforms ======
+    // ====== Static Uniforms ======
     gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
     gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
     gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
@@ -565,7 +565,7 @@ void main() {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   
         gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSize"), width, height);
-        gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), style.strokePatternTextureOffset);
+        gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), ...style.strokePatternTextureOffset);
         gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSampleSize"),width, height);
         gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), style.strokePatternTextureSpacing);
         gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), style.strokePatternTextureStartOffset);
@@ -603,7 +603,7 @@ void main() {
         useStrokePattern: true,
         strokePatternTextureSpacing: 20,
         strokePatternTextureStartOffset: 10,
-        strokePatternTextureOffset: 0,        
+        strokePatternTextureOffset: [0, 0],        
       },         
     ];
     
@@ -615,7 +615,7 @@ void main() {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     lineStyles.forEach((style) => {
-      setLineUniforms(style);
+      setLineUniforms(style);//Dynamic Uniforms
       ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
     });
 
