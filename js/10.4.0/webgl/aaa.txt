@@ -1,5 +1,189 @@
-// ... (인스턴스 데이터/버퍼 셋팅은 그대로!)
+// 여러 라인의 스타일 정의
+const lineStyles = [
+  {
+    strokeColor: [0.08, 0.8, 1.0, 1.0], // 파란색
+    strokeWidth: 12.0,
+    dashArray: [20, 5, 20, 5],
+    usePattern: false
+  },
+  {
+    strokeColor: [1.0, 0.2, 0.2, 1.0], // 빨간색
+    strokeWidth: 8.0,
+    dashArray: [10, 10],
+    usePattern: false
+  },
+  {
+    strokeColor: [0.2, 1.0, 0.2, 1.0], // 초록색
+    strokeWidth: 15.0,
+    dashArray: [],
+    usePattern: true
+  },
+  {
+    strokeColor: [1.0, 1.0, 0.2, 1.0], // 노란색
+    strokeWidth: 6.0,
+    dashArray: [5, 5, 15, 5],
+    usePattern: false
+  }
+];
 
+// 패턴 텍스처 생성 함수들
+function createPatternCanvas1(width = 20, height = 20) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "green";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "red";
+  ctx.fillRect(width * 0.4, 0, width * 0.2, height);
+  ctx.fillRect(0, height * 0.4, width, height * 0.2);
+  return canvas;
+}
+
+function createPatternCanvas2(width = 16, height = 16) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ff6b6b";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#4ecdc4";
+  for(let i = 0; i < width; i += 4) {
+    for(let j = 0; j < height; j += 4) {
+      ctx.fillRect(i, j, 2, 2);
+    }
+  }
+  return canvas;
+}
+
+// 패턴 텍스처들 미리 생성
+const patternTextures = [];
+const patternCanvas1 = createPatternCanvas1(20, 20);
+const patternCanvas2 = createPatternCanvas2(16, 16);
+
+// 텍스처 1
+const texture1 = gl.createTexture();
+gl.activeTexture(gl.TEXTURE0);
+gl.bindTexture(gl.TEXTURE_2D, texture1);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, patternCanvas1);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+patternTextures.push({texture: texture1, width: 20, height: 20});
+
+// 텍스처 2
+const texture2 = gl.createTexture();
+gl.activeTexture(gl.TEXTURE1);
+gl.bindTexture(gl.TEXTURE_2D, texture2);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, patternCanvas2);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+patternTextures.push({texture: texture2, width: 16, height: 16});
+
+// uniform 설정 함수
+function setLineUniforms(style, lineIndex) {
+  // 공통 uniform들 (변경되지 않는 것들)
+  gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
+  gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
+  gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
+  gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
+  gl.uniform1f(gl.getUniformLocation(program, "u_depth"), lineIndex * 0.01); // 각 라인마다 다른 depth
+  gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+
+  // 스트로크 관련 uniform들
+  gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), ...style.strokeColor);
+  gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), style.strokeWidth);
+  gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), 0.0);
+  gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), 0.0);
+  gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), 0.0);
+  gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), 10.0);
+
+  // 대시 패턴 설정
+  if (style.dashArray && style.dashArray.length > 0) {
+    gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(style.dashArray));
+    gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), style.dashArray.length);
+    gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), 0);
+  } else {
+    gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array([]));
+    gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), 0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), 0);
+  }
+
+  // 패턴 텍스처 설정
+  gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), style.usePattern ? 1 : 0);
+  
+  if (style.usePattern && patternTextures.length > 0) {
+    const patternIndex = lineIndex % patternTextures.length;
+    const pattern = patternTextures[patternIndex];
+    
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, pattern.texture);
+    gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), 0);
+    
+    gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSize"), pattern.width, pattern.height);
+    gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), 0, 0);
+    gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureSampleSize"), pattern.width, pattern.height);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), 20.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), 10.0);
+  }
+}
+
+// 렌더링 함수
+function renderMultipleLines() {
+  // 초기 설정
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+  // 각 라인 스타일마다 그리기
+  lineStyles.forEach((style, index) => {
+    setLineUniforms(style, index);
+    ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
+  });
+}
+
+// 애니메이션이나 상호작용을 위한 업데이트 함수
+function updateLineStyle(lineIndex, newStyle) {
+  if (lineIndex >= 0 && lineIndex < lineStyles.length) {
+    lineStyles[lineIndex] = { ...lineStyles[lineIndex], ...newStyle };
+  }
+}
+
+// 새 라인 스타일 추가
+function addLineStyle(newStyle) {
+  lineStyles.push({
+    strokeColor: [1.0, 1.0, 1.0, 1.0],
+    strokeWidth: 10.0,
+    dashArray: [],
+    usePattern: false,
+    ...newStyle
+  });
+}
+
+// 사용 예시
+renderMultipleLines();
+
+// 동적으로 스타일 변경 예시
+setTimeout(() => {
+  updateLineStyle(0, { strokeColor: [1.0, 0.5, 0.0, 1.0], strokeWidth: 20.0 });
+  renderMultipleLines();
+}, 2000);
+
+// 새 라인 추가 예시
+setTimeout(() => {
+  addLineStyle({
+    strokeColor: [0.8, 0.2, 0.8, 1.0],
+    strokeWidth: 4.0,
+    dashArray: [2, 8, 2, 8],
+    usePattern: false
+  });
+  renderMultipleLines();
+}, 4000);
+
+/////
 const styles = [
   {
     color: [0.1, 0.8, 1.0, 1.0],
