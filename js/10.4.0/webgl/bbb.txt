@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>OpenLayers-style Join/Cap (OL 함수명 + angleTangentSum)</title>
+  <style>
+    html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
+    .controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 5px;
+      color: white;
+      font-family: Arial, sans-serif;
+      z-index: 100;
+    }
+    .control-group {
+      margin-bottom: 10px;
+    }
+    label {
+      display: inline-block;
+      width: 120px;
+    }
+    select, input {
+      width: 150px;
+      padding: 3px;
+    }
+    .line-preview {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      margin-left: 10px;
+      vertical-align: middle;
+      border: 1px solid #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <div class="control-group">
+      <h3>라인 스타일 선택</h3>
+      <select id="lineSelector">
+        <option value="0">메인 라인 (파란색)</option>
+        <option value="1">보조 라인 (빨간색)</option>
+        <option value="2">대시 라인 (초록색)</option>
+        <option value="3">패턴 라인 (흰색)</option>
+        <option value="4">두꺼운 라인 (노란색)</option>
+      </select>
+    </div>
+    
+    <div class="control-group">
+      <label for="capType">캡 스타일:</label>
+      <select id="capType">
+        <option value="0">둥근 캡</option>
+        <option value="4">버트 캡</option>
+        <option value="5">사각 캡</option>
+      </select>
+    </div>
+    
+    <div class="control-group">
+      <label for="joinType">조인 스타일:</label>
+      <select id="joinType">
+        <option value="0">둥근 조인</option>
+        <option value="6">베벨 조인</option>
+        <option value="7">마이터 조인</option>
+      </select>
+    </div>
+    
+    <div class="control-group">
+      <label for="lineWidth">라인 두께:</label>
+      <input type="range" id="lineWidth" min="1" max="30" value="12">
+      <span id="widthValue">12</span>
+    </div>
+    
+    <div class="control-group">
+      <label for="dashPattern">대시 패턴:</label>
+      <select id="dashPattern">
+        <option value="0">실선</option>
+        <option value="1">점선</option>
+        <option value="2">점선2</option>
+        <option value="3">대시</option>
+      </select>
+    </div>
+    
+    <div class="control-group">
+      <label for="alpha">투명도:</label>
+      <input type="range" id="alpha" min="0.1" max="1" step="0.1" value="1">
+      <span id="alphaValue">1.0</span>
+    </div>
+    
+    <button id="applyBtn">적용하기</button>
+  </div>
+  
+  <canvas id="glcanvas" width="1024" height="768"></canvas>
+  
+  <script>
+    // ====== 라인 데이터 ======
+    const lineData = [
+      // 메인 라인 (파란색)
+      {
+        coords: [
+          [-122.48369693756104, 37.83381888486939],
+          [-122.48348236083984, 37.83317489144141],
+          [-122.48339653015138, 37.83270036637107],
+          [-122.48356819152832, 37.832056363179625],
+          [-122.48404026031496, 37.83114119107971],
+          [-122.48404026031496, 37.83049717427869],
+          [-122.48348236083984, 37.829920943955045],
+          [-122.48356819152832, 37.82954808664175],
+          [-122.48507022857666, 37.82944639795659],
+          [-122.48610019683838, 37.82880236636284],
+          [-122.48695850372314, 37.82931081282506],
+          [-122.48700141906738, 37.83080223556934],
+          [-122.48751640319824, 37.83168351665737],
+          [-122.48803138732912, 37.832158048267786],
+          [-122.48888969421387, 37.83297152392784],
+          [-122.48987674713133, 37.83263257682617],
+          [-122.49043464660643, 37.832937629287755],
+          [-122.49125003814696, 37.832429207817725],
+          [-122.49163627624512, 37.832564787218985],
+          [-122.49223709106445, 37.83337825839438],
+          [-122.49378204345702, 37.83368330777276]
+        ],
+        style: {
+          color: [0.08, 0.8, 1.0, 1.0],
+          width: 12,
+          dash: [],
+          cap: 0,
+          join: 0,
+          pattern: false
+        }
+      },
+      // 보조 라인 (빨간색)
+      {
+        coords: [
+          [-122.492, 37.832],
+          [-122.491, 37.833],
+          [-122.490, 37.8325],
+          [-122.489, 37.8315],
+          [-122.488, 37.832],
+          [-122.487, 37.831],
+          [-122.486, 37.832]
+        ],
+        style: {
+          color: [1.0, 0.2, 0.2, 1.0],
+          width: 8,
+          dash: [],
+          cap: 4,
+          join: 6,
+          pattern: false
+        }
+      },
+      // 대시 라인 (초록색)
+      {
+        coords: [
+          [-122.494, 37.834],
+          [-122.493, 37.833],
+          [-122.492, 37.834],
+          [-122.491, 37.833],
+          [-122.490, 37.834],
+          [-122.489, 37.833]
+        ],
+        style: {
+          color: [0.2, 1.0, 0.2, 1.0],
+          width: 6,
+          dash: [10, 5],
+          cap: 5,
+          join: 7,
+          pattern: false
+        }
+      },
+      // 패턴 라인 (흰색)
+      {
+        coords: [
+          [-122.485, 37.830],
+          [-122.486, 37.831],
+          [-122.487, 37.830],
+          [-122.488, 37.831],
+          [-122.489, 37.830]
+        ],
+        style: {
+          color: [1.0, 1.0, 1.0, 1.0],
+          width: 10,
+          dash: [],
+          cap: 0,
+          join: 0,
+          pattern: true
+        }
+      },
+      // 두꺼운 라인 (노란색)
+      {
+        coords: [
+          [-122.484, 37.834],
+          [-122.485, 37.833],
+          [-122.486, 37.834],
+          [-122.487, 37.833],
+          [-122.488, 37.834]
+        ],
+        style: {
+          color: [1.0, 1.0, 0.0, 1.0],
+          width: 20,
+          dash: [],
+          cap: 5,
+          join: 6,
+          pattern: false
+        }
+      }
+    ];
+    
+    // ====== WebGL 초기화 ======
+    const canvas = document.getElementById("glcanvas");
+    const gl = canvas.getContext("webgl");
+    const ext = gl.getExtension("ANGLE_instanced_arrays");
+    if (!ext) throw "ANGLE_instanced_arrays 미지원";
+
+    // ====== 셰이더 소스 ======
+    const vertexShaderSource = `...`; // 동일한 정점 셰이더 소스
+    const fragmentShaderSource = `...`; // 동일한 프래그먼트 셰이더 소스
+
+    // ====== 셰이더 컴파일 ======
+    function compileShader(type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        throw gl.getShaderInfoLog(shader);
+      }
+      return shader;
+    }
+    
+    const program = gl.createProgram();
+    gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vertexShaderSource));
+    gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource));
+    gl.linkProgram(program);
+    gl.useProgram(program);    
+    
+    // ====== 버퍼 및 속성 설정 ======
+    const instanceAttributes = [
+      { name: "a_segmentStart", size: 2 },
+      { name: "a_segmentEnd",   size: 2 },
+      { name: "a_distance",     size: 1 },
+      { name: "a_joinAngles",   size: 2 },
+      { name: "a_id",           size: 1 },
+      { name: "a_angleTangentSum", size: 1 }
+    ];
+    const STRIDE = instanceAttributes.reduce((sum, a) => sum + a.size, 0) * 4;
+
+    // ====== 투영행렬 생성 ======
+    function makeOrthoProjectionMatrix(minX, minY, maxX, maxY) {
+      const sx = 2 / (maxX - minX);
+      const sy = 2 / (maxY - minY);
+      const tx = -(maxX + minX) / (maxX - minX);
+      const ty = -(maxY + minY) / (maxY - minY);
+      return new Float32Array([
+        sx,  0, 0, 0,
+         0, sy, 0, 0,
+         0,  0, 1, 0,
+        tx, ty, 0, 1
+      ]);
+    }
+    
+    // 모든 좌표를 포함하는 경계 계산
+    let allCoords = [];
+    lineData.forEach(line => {
+      allCoords = allCoords.concat(line.coords);
+    });
+    
+    const lons = allCoords.map(c => c[0]);
+    const lats = allCoords.map(c => c[1]);
+    const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    
+    // 경계를 약간 확장
+    const lonRange = maxLon - minLon;
+    const latRange = maxLat - minLat;
+    const padding = 0.1;
+    const u_projectionMatrix = makeOrthoProjectionMatrix(
+      minLon - lonRange * padding, 
+      minLat - latRange * padding, 
+      maxLon + lonRange * padding, 
+      maxLat + latRange * padding
+    );
+
+    // ====== 정적 사각형 버퍼 ======
+    const quadVertices = new Float32Array([-1, -1, -1, 1, 1, -1, 1, 1]);
+    const quadVertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+    
+    const quadIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
+    const quadIndexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
+
+    // ====== 인스턴스 버퍼 ======
+    const instanceBuffer = gl.createBuffer();
+    
+    // ====== 속성 바인딩 ======
+    function bindAttrib(name, size, stride, offset, div) {
+      const location = gl.getAttribLocation(program, name);
+      gl.enableVertexAttribArray(location);
+      gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, offset);
+      ext.vertexAttribDivisorANGLE(location, div);
+    }
+    
+    function bindInstanceAttributes(attribs, divisor = 1) {
+      const stride = attribs.reduce((sum, a) => sum + a.size, 0) * 4;
+      let offset = 0;
+      for (const attr of attribs) {
+        bindAttrib(attr.name, attr.size, stride, offset, divisor);
+        offset += attr.size * 4;
+      }
+    }
+    
+    // 인스턴스 속성 설정
+    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+    bindInstanceAttributes(instanceAttributes, 1);
+    
+    // 정적 사각형 속성 설정
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+    bindAttrib("a_position", 2, 0, 0, 0);
+    
+    // ====== 유니폼 설정 ======
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
+    gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
+    gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
+    gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+    
+    // ====== 패턴 텍스처 생성 ======
+    function createPatternCanvas(width = 20, height = 20) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      
+      // 그라디언트 배경
+      const gradient = ctx.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, "#ff0000");
+      gradient.addColorStop(0.5, "#00ff00");
+      gradient.addColorStop(1, "#0000ff");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+      
+      // 패턴 디자인
+      ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.beginPath();
+      ctx.arc(width/2, height/2, width/4, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(width, height);
+      ctx.moveTo(width, 0);
+      ctx.lineTo(0, height);
+      ctx.stroke();
+      
+      return canvas;
+    }
+    
+    const patternTexture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, patternTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, createPatternCanvas(64, 64));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), 0);
+    
+    // ====== 인스턴스 데이터 생성 함수 ======
+    function createInstanceData(coords) {
+      function angle(p0, pA, pB) {
+        const v0x = pA[0] - p0[0];
+        const v0y = pA[1] - p0[1];
+        const v1x = pB[0] - p0[0];
+        const v1y = pB[1] - p0[1];
+        const l0 = Math.sqrt(v0x * v0x + v0y * v0y);
+        const l1 = Math.sqrt(v1x * v1x + v1y * v1y);
+        if (l0 === 0.0 || l1 === 0.0) return -1.0;
+        const dot = (v0x * v1x + v0y * v1y) / (l0 * l1);
+        const ang = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
+        const cross = v0x * v1y - v0y * v1x;
+        return cross < 0 ? -ang : ang;
+      }
+      
+      const instanceCount = coords.length - 1;
+      const instanceData = new Float32Array(instanceCount * STRIDE / 4);
+      let distances = 0;
+      let angleTangentSum = 0;
+      
+      for (let i = 0; i < instanceCount; i++) {
+        const idx = i * STRIDE / 4;
+        const p0 = coords[i];
+        const p1 = coords[i + 1];
+        const dx = p1[0] - p0[0];
+        const dy = p1[1] - p0[1];
+        const segmentLength = Math.sqrt(dx * dx + dy * dy);
+        const prev = i > 0 ? coords[i - 1] : p0;
+        const next = i < instanceCount - 1 ? coords[i + 2] : p1;
+        const angle0 = i > 0 ? angle(p0, p1, prev) : -1.0;
+        const angle1 = i < instanceCount - 1 ? angle(p1, p0, next) : -1.0;
+
+        instanceData[idx]     = p0[0];
+        instanceData[idx+1]   = p0[1];
+        instanceData[idx+2]   = p1[0];
+        instanceData[idx+3]   = p1[1];
+        instanceData[idx+4]   = distances;
+        instanceData[idx+5]   = angle0;
+        instanceData[idx+6]   = angle1;
+        instanceData[idx+7]   = i;
+        instanceData[idx+8]   = angleTangentSum;
+
+        if (i > 0 && Math.cos(angle0) <= 0.98) {
+          angleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+        }
+        distances += segmentLength;
+      }
+      
+      return { data: instanceData, count: instanceCount };
+    }
+
+    // ====== 렌더링 함수 ======
+    function renderLines() {
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0.05, 0.05, 0.1, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      
+      // 각 라인 그리기
+      lineData.forEach(line => {
+        const { data, count } = createInstanceData(line.coords);
+        const style = line.style;
+        
+        // 인스턴스 데이터 업로드
+        gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        
+        // 스타일 유니폼 설정
+        gl.uniform4fv(gl.getUniformLocation(program, "u_strokeColor"), style.color);
+        gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), style.width);
+        gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), 0.0);
+        gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), style.cap);
+        gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), style.join);
+        gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), 10.0);
+        gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), style.pattern ? 1 : 0);
+        
+        // 대시 패턴 설정
+        if (style.dash && style.dash.length) {
+          gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(style.dash));
+          gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), style.dash.length);
+          gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), 0);
+        } else {
+          gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), 0);
+        }
+        
+        // 그리기
+        ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, count);
+      });
+    }
+    
+    // ====== UI 이벤트 핸들러 ======
+    document.getElementById('lineWidth').addEventListener('input', function() {
+      document.getElementById('widthValue').textContent = this.value;
+    });
+    
+    document.getElementById('alpha').addEventListener('input', function() {
+      document.getElementById('alphaValue').textContent = this.value;
+    });
+    
+    document.getElementById('applyBtn').addEventListener('click', function() {
+      const selectedLine = parseInt(document.getElementById('lineSelector').value);
+      const capType = parseInt(document.getElementById('capType').value);
+      const joinType = parseInt(document.getElementById('joinType').value);
+      const lineWidth = parseInt(document.getElementById('lineWidth').value);
+      const dashPattern = document.getElementById('dashPattern').value;
+      const alpha = parseFloat(document.getElementById('alpha').value);
+      
+      // 선택된 라인 스타일 업데이트
+      lineData[selectedLine].style.cap = capType;
+      lineData[selectedLine].style.join = joinType;
+      lineData[selectedLine].style.width = lineWidth;
+      lineData[selectedLine].style.color[3] = alpha;
+      
+      // 대시 패턴 업데이트
+      switch(dashPattern) {
+        case '0': // 실선
+          lineData[selectedLine].style.dash = [];
+          break;
+        case '1': // 점선
+          lineData[selectedLine].style.dash = [2, 5];
+          break;
+        case '2': // 점선2
+          lineData[selectedLine].style.dash = [5, 5];
+          break;
+        case '3': // 대시
+          lineData[selectedLine].style.dash = [10, 5];
+          break;
+      }
+      
+      // 패턴 라인인 경우 패턴 사용 여부 설정
+      if (selectedLine === 3) {
+        lineData[selectedLine].style.pattern = true;
+      } else {
+        lineData[selectedLine].style.pattern = false;
+      }
+      
+      // 다시 렌더링
+      renderLines();
+    });
+    
+    // ====== 초기 렌더링 ======
+    renderLines();
+  </script>
+</body>
+</html>
