@@ -507,16 +507,17 @@ void main() {
     gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
     gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
     gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
-
-    gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), 12.0);
-    gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), 0.0); // 7: miter, 6: bevel, etc.
-    gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), 10.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
     gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
 
+    
+    gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 0.08, 0.8, 1.0, 1.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), 12.0);    
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), 0.0); // 7: miter, 6: bevel, etc.
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), 10.0);
+    
     gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);    
 
     const dashArray = [20,5,20,5];
@@ -564,6 +565,7 @@ void main() {
       gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), 20.0);
       gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), 10.0);
       gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
+      
       gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), 1.0, 1.0, 1.0, 1.0);
     } 
 
