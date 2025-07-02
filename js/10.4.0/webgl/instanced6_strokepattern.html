@@ -549,7 +549,7 @@ void main() {
       let textureSlot = 0;
       
       const patternTexture = gl.createTexture();
-      gl.activeTexture(gl.TEXTURE + textureSlot);
+      gl.activeTexture(gl.TEXTURE0 + textureSlot);
       gl.bindTexture(gl.TEXTURE_2D, patternTexture);
       gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), textureSlot);
       
