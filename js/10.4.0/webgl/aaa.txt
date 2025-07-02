@@ -1,0 +1,43 @@
+// ... (인스턴스 데이터/버퍼 셋팅은 그대로!)
+
+const styles = [
+  {
+    color: [0.1, 0.8, 1.0, 1.0],
+    strokeWidth: 6,
+    usePattern: false
+  },
+  {
+    color: [1, 0.1, 0.1, 0.7],
+    strokeWidth: 15,
+    usePattern: false
+  },
+  {
+    color: [1, 1, 1, 1.0],
+    strokeWidth: 12,
+    usePattern: true, // 패턴 사용
+    patternSpacing: 20.0,
+    patternStartOffset: 10.0
+  },
+  // ... 더 추가 가능!
+];
+
+gl.viewport(0, 0, canvas.width, canvas.height);
+gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+for (const style of styles) {
+  gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), ...style.color);
+  gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), style.strokeWidth);
+
+  if (style.usePattern) {
+    gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), style.patternSpacing);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"), style.patternStartOffset);
+    // (패턴 텍스처는 위에서 이미 한 번 등록해놨으니 다시 세팅 안 해도 됨)
+  } else {
+    gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
+  }
+  // 다른 uniform도 필요시 추가로 세팅
+
+  // draw 호출!
+  ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
+}
