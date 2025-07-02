@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebGL 두꺼운 대시라인 파이프라인 시각화</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #111;
+      }
+      body {
+        font-family: sans-serif;
+      }
+      #diagram {
+        width: 1100px;
+        margin: 40px auto 0 auto;
+        background: #232846;
+        border-radius: 24px;
+        box-shadow: 0 8px 32px #000b;
+        padding: 32px 0 24px 0;
+        text-align: center;
+      }
+      .explain {
+        width: 1100px;
+        margin: 10px auto 0 auto;
+        color: #fff;
+        font-size: 20px;
+        background: #161a27;
+        border-radius: 10px;
+        padding: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="diagram"></div>
+    <div class="explain">
+      <b>설명</b><br />
+      <span style="color: #0fc; font-weight: bold">● Vertex</span>: 두꺼운 라인
+      쿼드를 이루는 네 개의 꼭짓점<br />
+      <span style="color: #49f; font-weight: bold">파란 영역</span>: Vertex
+      Shader(정점별 1번 실행, 쿼드 생성/좌표 변환/보간)<br />
+      <span style="color: #ffe058; font-weight: bold">노란 사각형</span>: 두께를
+      가진 라인 실제 쿼드<br />
+      <span style="color: #f39; font-weight: bold">● Fragment (대시)</span>:
+      대시 패턴에 해당하는 픽셀<br />
+      <span style="color: #333; font-weight: bold">● Fragment (gap)</span>: gap
+      패턴에 해당하는 픽셀<br />
+      <span style="color: #f33; font-weight: bold">빨간 영역</span>: Fragment
+      Shader(픽셀별 1번 실행, 대시/패턴/AA 등 처리)<br />
+      <b style="color: #ffd600"
+        >* WebGL에서는 fragment shader에서 각 픽셀의 '라인 위 거리'를 계산해
+        대시/갭 여부를 결정합니다.</b
+      >
+    </div>
+    <script>
+      // 라인 중심선의 두 점
+      const A = { x: 250, y: 180 }; // 시작점
+      const B = { x: 850, y: 320 }; // 끝점
+      // 두께
+      const thickness = 60;
+
+      // 대시 정보
+      const dashLength = 80; // 대시 길이
+      const gapLength = 40; // gap(빈 부분) 길이
+      const dashPatternLength = dashLength + gapLength;
+
+      // 벡터 방향
+      const dx = B.x - A.x,
+        dy = B.y - A.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      // 노멀벡터
+      const nx = -dy / len,
+        ny = dx / len;
+      // offset
+      const ox = nx * (thickness / 2),
+        oy = ny * (thickness / 2);
+
+      // 쿼드 4 정점
+      const P0 = { x: A.x + ox, y: A.y + oy };
+      const P1 = { x: B.x + ox, y: B.y + oy };
+      const P2 = { x: B.x - ox, y: B.y - oy };
+      const P3 = { x: A.x - ox, y: A.y - oy };
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1100;
+      canvas.height = 540;
+      canvas.style.background = "#232846";
+      canvas.style.borderRadius = "18px";
+      document.getElementById("diagram").appendChild(canvas);
+      const ctx = canvas.getContext("2d");
+
+      // Vertex Shader 영역 (배경)
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = "#49f";
+      ctx.fillRect(50, 80, 1000, 370);
+      ctx.restore();
+      ctx.font = "bold 22px sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.fillText(
+        "① Vertex Shader: 라인 쿼드 4개 꼭짓점 생성, 좌표 변환 (정점별 1번 실행)",
+        90,
+        110
+      );
+
+      // Fragment Shader 영역 (아래쪽)
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = "#f33";
+      ctx.fillRect(50, 470, 1000, 40);
+      ctx.restore();
+      ctx.font = "bold 22px sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.fillText(
+        "③ Fragment Shader: 픽셀별 대시/패턴/AA 등 계산 (fragment 마다 실행)",
+        120,
+        500
+      );
+
+      // 두꺼운 라인 쿼드(사각형)
+      ctx.beginPath();
+      ctx.moveTo(P0.x, P0.y);
+      ctx.lineTo(P1.x, P1.y);
+      ctx.lineTo(P2.x, P2.y);
+      ctx.lineTo(P3.x, P3.y);
+      ctx.closePath();
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = "#ffe058";
+      ctx.stroke();
+
+      // 중심선
+      ctx.setLineDash([9, 8]);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(A.x, A.y);
+      ctx.lineTo(B.x, B.y);
+      ctx.strokeStyle = "#39f9";
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 1. 네 개의 Vertex 점
+      const quadPoints = [P0, P1, P2, P3];
+      for (let i = 0; i < 4; i++) {
+        const pt = quadPoints[i];
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 15, 0, Math.PI * 2);
+        ctx.fillStyle = "#0fc";
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#000";
+        ctx.stroke();
+        ctx.font = "bold 18px sans-serif";
+        ctx.fillStyle = "#fff";
+        ctx.fillText("Vertex " + i, pt.x - 33, pt.y - 23);
+        ctx.font = "bold 15px sans-serif";
+        ctx.fillStyle = "#8ff";
+        ctx.fillText(
+          `(${Math.round(pt.x)},${Math.round(pt.y)})`,
+          pt.x - 34,
+          pt.y + 32
+        );
+      }
+
+      // Rasterizer 단계 설명
+      ctx.font = "bold 22px sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.fillText(
+        "② Rasterizer: 두꺼운 라인 쿼드 내부를 픽셀로 분할 (fragment 생성)",
+        120,
+        400
+      );
+
+      // 사각형 내부 fragment (픽셀) 그림 - 대시 패턴 적용
+      function pointInQuad(x, y, quad) {
+        function sign(a, b, c) {
+          return (a.x - b.x) * (c.y - b.y) - (c.x - b.x) * (a.y - b.y);
+        }
+        const [A, B, C, D] = quad;
+        return (
+          sign({ x, y }, A, B) * sign({ x, y }, C, D) >= 0 &&
+          sign({ x, y }, B, C) * sign({ x, y }, D, A) >= 0
+        );
+      }
+      // 중심선 단위 벡터
+      const tx = dx / len,
+        ty = dy / len;
+      for (let x = 270; x <= 830; x += 18) {
+        for (let y = 130; y <= 370; y += 10) {
+          if (pointInQuad(x, y, quadPoints)) {
+            // (x,y)에서 A까지의 projected length 계산 (중심선 투영)
+            const px = x - A.x,
+              py = y - A.y;
+            const proj = px * tx + py * ty; // A 기준 투영거리
+            // 대시 패턴 여부
+            const dist = (proj + dashPatternLength * 1000) % dashPatternLength;
+            if (dist < dashLength) {
+              ctx.beginPath();
+              ctx.arc(x, y, 7, 0, Math.PI * 2);
+              ctx.fillStyle = "#f39";
+              ctx.shadowColor = "#fff";
+              ctx.shadowBlur = 2;
+              ctx.fill();
+              ctx.shadowBlur = 0;
+            } else {
+              ctx.beginPath();
+              ctx.arc(x, y, 7, 0, Math.PI * 2);
+              ctx.fillStyle = "#333";
+              ctx.fill();
+            }
+          }
+        }
+      }
+
+      // 단계선 화살표
+      ctx.strokeStyle = "#ffe058";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(480, 150);
+      ctx.lineTo(590, 150);
+      ctx.moveTo(610, 390);
+      ctx.lineTo(610, 480);
+      ctx.stroke();
+      // 화살표 머리
+      ctx.beginPath();
+      ctx.moveTo(585, 145);
+      ctx.lineTo(605, 150);
+      ctx.lineTo(585, 155);
+      ctx.closePath();
+      ctx.fillStyle = "#ffe058";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(605, 475);
+      ctx.lineTo(610, 495);
+      ctx.lineTo(615, 475);
+      ctx.closePath();
+      ctx.fillStyle = "#ffe058";
+      ctx.fill();
+
+      // 강조 텍스트
+      ctx.font = "bold 26px sans-serif";
+      ctx.fillStyle = "#ffd600";
+      ctx.fillText(
+        "WebGL 두꺼운 라인 대시: 4개 정점 쿼드 → Rasterize → Fragment (대시/갭)",
+        130,
+        70
+      );
+
+      // 예시 fragment 텍스트
+      ctx.font = "bold 18px sans-serif";
+      ctx.fillStyle = "#fbc";
+      ctx.fillText("Fragment (대시, 분홍●)", 420, 210);
+      ctx.fillStyle = "#ccc";
+      ctx.fillText("Fragment (gap, 검정●)", 690, 310);
+    </script>
+  </body>
+</html>
