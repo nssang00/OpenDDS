@@ -1,0 +1,141 @@
+<script>
+  const canvas = document.getElementById("glcanvas");
+  const gl = canvas.getContext("webgl");
+  const ext = gl.getExtension("ANGLE_instanced_arrays");
+  if (!ext) throw "ANGLE_instanced_arrays 미지원";
+
+  // [Previous code: Shaders, compileShader, program setup, coordinates, projection matrix, instance data, and buffer setup remain unchanged]
+  // ... (Insert the existing vertexShaderSource, fragmentShaderSource, compileShader, program setup, coordinates, projection matrix, instanceData, quadVertices, quadIndices, and buffer binding code here)
+
+  // ====== Uniform Configurations ======
+  const lineConfigs = [
+    {
+      strokeColor: [0.08, 0.8, 1.0, 1.0], // Cyan
+      strokeWidth: 12.0,
+      strokeCap: 0.0, // Round cap
+      strokeJoin: 0.0, // Round join
+      strokeMiterLimit: 10.0,
+      dashPattern: [20, 5, 20, 5],
+      dashOffset: 0.0,
+      useStrokePattern: false,
+      globalAlpha: 1.0,
+    },
+    {
+      strokeColor: [1.0, 0.2, 0.2, 0.8], // Red, semi-transparent
+      strokeWidth: 8.0,
+      strokeCap: 5.0, // Square cap
+      strokeJoin: 6.0, // Bevel join
+      strokeMiterLimit: 10.0,
+      dashPattern: [10, 10],
+      dashOffset: 5.0,
+      useStrokePattern: true,
+      patternWidth: 20,
+      patternHeight: 20,
+      patternSpacing: 20.0,
+      patternStartOffset: 10.0,
+      globalAlpha: 0.8,
+    },
+    {
+      strokeColor: [0.2, 1.0, 0.2, 1.0], // Green
+      strokeWidth: 16.0,
+      strokeCap: 4.0, // Butt cap
+      strokeJoin: 7.0, // Miter join
+      strokeMiterLimit: 10.0,
+      dashPattern: [], // No dash
+      dashOffset: 0.0,
+      useStrokePattern: false,
+      globalAlpha: 1.0,
+    },
+  ];
+
+  // ====== Create Pattern Canvas Function ======
+  function createPatternCanvas(width = 20, height = 20, configIndex) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    // Customize pattern based on configIndex or other parameters
+    ctx.fillStyle = configIndex === 1 ? "yellow" : "green";
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = configIndex === 1 ? "blue" : "red";
+    ctx.fillRect(width * 0.4, 0, width * 0.2, height);
+    ctx.fillRect(0, height * 0.4, width, height * 0.2);
+    return canvas;
+  }
+
+  // ====== Set Uniforms for a Configuration ======
+  function setUniforms(config, textureSlot) {
+    gl.uniform4fv(gl.getUniformLocation(program, "u_strokeColor"), config.strokeColor);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), config.strokeWidth);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeCap"), config.strokeCap);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeJoin"), config.strokeJoin);
+    gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), config.strokeMiterLimit);
+    gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), config.globalAlpha);
+
+    if (config.dashPattern.length > 0) {
+      gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(config.dashPattern));
+      gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), config.dashPattern.length);
+      gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), config.dashOffset);
+    } else {
+      gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), 0);
+    }
+
+    if (config.useStrokePattern) {
+      const patternTexture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0 + textureSlot);
+      gl.bindTexture(gl.TEXTURE_2D, patternTexture);
+      gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), textureSlot);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        createPatternCanvas(config.patternWidth, config.patternHeight, textureSlot)
+      );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.uniform2f(
+        gl.getUniformLocation(program, "u_strokePatternTextureSize"),
+        config.patternWidth,
+        config.patternHeight
+      );
+      gl.uniform2f(gl.getUniformLocation(program, "u_strokePatternTextureOffset"), 0, 0);
+      gl.uniform2f(
+        gl.getUniformLocation(program, "u_strokePatternTextureSampleSize"),
+        config.patternWidth,
+        config.patternHeight
+      );
+      gl.uniform1f(gl.getUniformLocation(program, "u_strokePatternTextureSpacing"), config.patternSpacing);
+      gl.uniform1f(
+        gl.getUniformLocation(program, "u_strokePatternTextureStartOffset"),
+        config.patternStartOffset
+      );
+      gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 1);
+    } else {
+      gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), 0);
+    }
+  }
+
+  // ====== Static Uniforms (unchanged across configurations) ======
+  gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
+  gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
+  gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
+  gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
+  gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+
+  // ====== Draw ======
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+  // Loop through each configuration and draw
+  lineConfigs.forEach((config, index) => {
+    setUniforms(config, index); // Use index as texture slot to avoid conflicts
+    ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
+  });
+</script>
