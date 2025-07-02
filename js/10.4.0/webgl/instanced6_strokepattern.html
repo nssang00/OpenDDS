@@ -423,50 +423,57 @@ void main() {
     const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat);
 
     // ====== 인스턴스 데이터 ======
-    const instanceCount = coordinates.length - 1;
-    const instanceData = new Float32Array(instanceCount * STRIDE / 4);
-    function angle(p0, pA, pB) {
-      const v0x = pA[0] - p0[0];
-      const v0y = pA[1] - p0[1];
-      const v1x = pB[0] - p0[0];
-      const v1y = pB[1] - p0[1];
-      const l0 = Math.sqrt(v0x * v0x + v0y * v0y);
-      const l1 = Math.sqrt(v1x * v1x + v1y * v1y);
-      if (l0 === 0.0 || l1 === 0.0) return -1.0;
-      const dot = (v0x * v1x + v0y * v1y) / (l0 * l1);
-      const ang = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
-      const cross = v0x * v1y - v0y * v1x;
-      return cross < 0 ? -ang : ang;
-    }
-    let distances = 0;
-    let angleTangentSum = 0; // 예시: 실제 각도 누적 로직 넣어도 됨
-    for (let i = 0; i < instanceCount; i++) {
-      const idx = i * STRIDE / 4;
-      const p0 = coordinates[i];
-      const p1 = coordinates[i + 1];
-      const dx = p1[0] - p0[0];
-      const dy = p1[1] - p0[1];
-      const segmentLength = Math.sqrt(dx * dx + dy * dy);
-      const prev = i > 0 ? coordinates[i - 1] : p0;
-      const next = i < instanceCount - 1 ? coordinates[i + 2] : p1;
-      const angle0 = i > 0 ? angle(p0, p1, prev) : -1.0;
-      const angle1 = i < instanceCount - 1 ? angle(p1, p0, next) : -1.0;
-
-      instanceData[idx]     = p0[0]; // a_segmentStart.x
-      instanceData[idx+1]   = p0[1]; // a_segmentStart.y
-      instanceData[idx+2]   = p1[0]; // a_segmentEnd.x
-      instanceData[idx+3]   = p1[1]; // a_segmentEnd.y
-      instanceData[idx+4]   = distances; // a_distance
-      instanceData[idx+5]   = angle0; // a_joinAngles.x
-      instanceData[idx+6]   = angle1; // a_joinAngles.y
-      instanceData[idx+7]   = i; // a_id
-      instanceData[idx+8]   = angleTangentSum; // a_angleTangentSum (실제 보정값 누적 계산시 갱신)
-
-      if (i > 0 && Math.cos(angle0) <= 0.98) {
-        angleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+    function createInstanceData(coords) {
+      function angle(p0, pA, pB) {
+        const v0x = pA[0] - p0[0];
+        const v0y = pA[1] - p0[1];
+        const v1x = pB[0] - p0[0];
+        const v1y = pB[1] - p0[1];
+        const l0 = Math.sqrt(v0x * v0x + v0y * v0y);
+        const l1 = Math.sqrt(v1x * v1x + v1y * v1y);
+        if (l0 === 0.0 || l1 === 0.0) return -1.0;
+        const dot = (v0x * v1x + v0y * v1y) / (l0 * l1);
+        const ang = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
+        const cross = v0x * v1y - v0y * v1x;
+        return cross < 0 ? -ang : ang;
       }
-      distances += segmentLength;
+      
+      const instanceCount = coords.length - 1;
+      const instanceData = new Float32Array(instanceCount * STRIDE / 4);
+      let distances = 0;
+      let angleTangentSum = 0;
+      
+      for (let i = 0; i < instanceCount; i++) {
+        const idx = i * STRIDE / 4;
+        const p0 = coords[i];
+        const p1 = coords[i + 1];
+        const dx = p1[0] - p0[0];
+        const dy = p1[1] - p0[1];
+        const segmentLength = Math.sqrt(dx * dx + dy * dy);
+        const prev = i > 0 ? coords[i - 1] : p0;
+        const next = i < instanceCount - 1 ? coords[i + 2] : p1;
+        const angle0 = i > 0 ? angle(p0, p1, prev) : -1.0;
+        const angle1 = i < instanceCount - 1 ? angle(p1, p0, next) : -1.0;
+
+        instanceData[idx]     = p0[0];
+        instanceData[idx+1]   = p0[1];
+        instanceData[idx+2]   = p1[0];
+        instanceData[idx+3]   = p1[1];
+        instanceData[idx+4]   = distances;
+        instanceData[idx+5]   = angle0;
+        instanceData[idx+6]   = angle1;
+        instanceData[idx+7]   = i;
+        instanceData[idx+8]   = angleTangentSum;
+
+        if (i > 0 && Math.cos(angle0) <= 0.98) {
+          angleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+        }
+        distances += segmentLength;
+      }
+      
+      return { instanceData, instanceCount };
     }
+    const {instanceData, instanceCount } = createInstanceData(coordinates);
 
     // ====== Static quad ======
     const quadVertices = new Float32Array([-1, -1, -1, 1, 1, -1, 1, 1]);
