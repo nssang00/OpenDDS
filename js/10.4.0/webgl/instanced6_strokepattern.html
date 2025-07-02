@@ -542,10 +542,11 @@ void main() {
       ctx.fillRect(8, 0, 4, 20);
       ctx.fillRect(0, 8, 20, 4);
 
+      let textureSlot = 0;
       const patternTexture = gl.createTexture();
-      gl.activeTexture(gl.TEXTURE + slot);
+      gl.activeTexture(gl.TEXTURE + textureSlot);
       gl.bindTexture(gl.TEXTURE_2D, patternTexture);
-      gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), slot);
+      gl.uniform1i(gl.getUniformLocation(program, "u_strokePatternTexture"), textureSlot);
       
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, patternCanvas);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
