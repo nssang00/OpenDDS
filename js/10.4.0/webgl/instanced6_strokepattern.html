@@ -367,6 +367,10 @@ void main() {
     gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vertexShaderSource));
     gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource));
     gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw gl.getShaderInfoLog(program);
+    }
+    
     gl.useProgram(program);    
     
     const instanceAttributes = [
@@ -523,8 +527,8 @@ void main() {
         offset += attr.size * 4;
       }
     }
-    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    bindInstanceAttributes(instanceAttributes, 1);
+    //gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+    //bindInstanceAttributes(instanceAttributes, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     bindAttrib("a_position", 2, 0, 0, 0);
 
