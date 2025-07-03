@@ -20,3 +20,20 @@ for (let i = 0; i < instanceBuffers.length; ++i) {
     ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCounts[i]);
   }
 }
+
+
+instanceEntries.forEach(entry => {
+  gl.bindBuffer(gl.ARRAY_BUFFER, entry.buffer);
+  bindInstanceAttributes(instanceAttributes, 1);
+
+  lineStyles.forEach(style => {
+    setLineUniforms(style);
+    ext.drawElementsInstancedANGLE(
+      gl.TRIANGLES,
+      quadIndices.length,
+      gl.UNSIGNED_SHORT,
+      0,
+      entry.count
+    );
+  });
+});
