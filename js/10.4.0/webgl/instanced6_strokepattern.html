@@ -363,13 +363,18 @@ void main() {
       }
       return shader;
     }
-    const program = gl.createProgram();
-    gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vertexShaderSource));
-    gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource));
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      throw gl.getShaderInfoLog(program);
+
+    function getProgram(fragmentShaderSource, vertexShaderSource) {
+      const program = gl.createProgram();
+      gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vertexShaderSource));
+      gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource));
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw gl.getShaderInfoLog(program);
+      }
+      return program;
     }
+    const program = getProgram(fragmentShaderSource, vertexShaderSource);
     
     //gl.useProgram(program);    
     
