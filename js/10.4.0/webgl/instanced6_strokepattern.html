@@ -658,13 +658,14 @@ void main() {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    instanceBuffers.forEach(entry => {
-      gl.bindBuffer(gl.ARRAY_BUFFER, entry.instanceBuffer);
+
+    instanceBuffers.forEach(({ instanceBuffer, instanceCount }, index) => {
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
       bindInstanceAttributes(instanceAttributes, 1);
     
       lineStyles.forEach(style => {
         setLineUniforms(style);//Dynamic Uniforms
-        ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, entry.instanceCount);
+        ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
       });
     });
 
