@@ -1,312 +1,73 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGL DrawElementsInstanced Triangle Rendering</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            background: #1a1a1a;
-            color: white;
-            font-family: Arial, sans-serif;
-        }
-        canvas {
-            border: 2px solid #333;
-            background: #000;
-            display: block;
-            margin: 20px auto;
-        }
-        .controls {
-            text-align: center;
-            margin: 20px 0;
-        }
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            margin: 0 10px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-        button:hover {
-            background: #45a049;
-        }
-        .info {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #2a2a2a;
-            border-radius: 10px;
-        }
-    </style>
-</head>
-<body>
-    <div class="info">
-        <h1>WebGL DrawElementsInstanced 삼각형 렌더링</h1>
-        <p>4개의 정적 버퍼를 사용하여 여러 삼각형을 인스턴스 렌더링하는 예제입니다.</p>
-        <ul>
-            <li><strong>Vertex Buffer:</strong> 삼각형의 기본 좌표</li>
-            <li><strong>Index Buffer:</strong> 삼각형을 구성하는 인덱스</li>
-            <li><strong>Instance Position Buffer:</strong> 각 인스턴스의 위치</li>
-            <li><strong>Instance Color Buffer:</strong> 각 인스턴스의 색상</li>
-        </ul>
-    </div>
+/**
+ * 경‧위도 배열 → 인스턴스 버퍼 생성 (OpenLayers 방식 그대로)
+ * ① 각도를 **픽셀 공간**에서 0 – 2π 로 계산  
+ * ② angleTangentSum 을 “세그먼트 시작-전” 누계로 두 번(앞·뒤) 누적  
+ * ③ a_distance 도 픽셀 길이로 누적
+ */
+function createInstanceData(coords) {
+  /* ---------- (A) lon/lat → 픽셀 선형 변환 ---------- */
+  const sx = canvas.width  / (maxLon - minLon);
+  const sy = canvas.height / (maxLat - minLat);
+  const tx = -minLon * sx;
+  const ty = -minLat * sy;
+  const toPx = ([lon, lat]) => [lon * sx + tx, lat * sy + ty];
 
-    <div class="controls">
-        <button onclick="toggleAnimation()">애니메이션 토글</button>
-        <button onclick="changeInstanceCount()">인스턴스 수 변경</button>
-    </div>
+  /* ---------- (B) OpenLayers 원본 각도 함수 ---------- */
+  function angleBetweenPx(p0, pA, pB) {
+    const lenA = Math.hypot(pA[0] - p0[0], pA[1] - p0[1]);
+    const lenB = Math.hypot(pB[0] - p0[0], pB[1] - p0[1]);
+    if (lenA === 0 || lenB === 0) return -1.0;          // cap sentinel
+    const tAx = (pA[0] - p0[0]) / lenA, tAy = (pA[1] - p0[1]) / lenA;
+    const tBx = (pB[0] - p0[0]) / lenB, tBy = (pB[1] - p0[1]) / lenB;
+    const ang  = Math.acos(Math.max(-1, Math.min(1, tAx * tBx + tAy * tBy)));
+    const cross = tAx * tBy - tAy * tBx;
+    return cross < 0 ? 2 * Math.PI - ang : ang;         // 0 … 2π
+  }
 
-    <canvas id="glCanvas" width="800" height="600"></canvas>
+  const instanceCount = coords.length - 1;
+  const instanceData  = new Float32Array((instanceCount * STRIDE) / 4);
 
-    <script>
-        let gl;
-        let program;
-        let buffers = {};
-        let animationId;
-        let isAnimating = true;
-        let instanceCount = 12;
-        let time = 0;
+  let distPx = 0;           // 픽셀 누적길이
+  let angleTangentSum = 0;  // 누적 tan((π-|θ|)/2)
 
-        // 버텍스 셰이더 소스
-        const vertexShaderSource = `
-            attribute vec2 a_position;
-            attribute vec2 a_instancePosition;
-            attribute vec3 a_instanceColor;
-            
-            uniform float u_time;
-            uniform vec2 u_resolution;
-            
-            varying vec3 v_color;
-            
-            void main() {
-                // 기본 삼각형 위치에 인스턴스 오프셋 추가
-                vec2 position = a_position * 0.1 + a_instancePosition;
-                
-                // 회전 애니메이션 추가
-                float angle = u_time * 0.5 + a_instancePosition.x * 2.0;
-                float cos_a = cos(angle);
-                float sin_a = sin(angle);
-                
-                vec2 rotatedPos = vec2(
-                    position.x * cos_a - position.y * sin_a,
-                    position.x * sin_a + position.y * cos_a
-                );
-                
-                // 화면 좌표계로 변환
-                vec2 clipSpace = ((rotatedPos + 1.0) / 2.0) * u_resolution;
-                clipSpace = (clipSpace / u_resolution) * 2.0 - 1.0;
-                clipSpace.y *= -1.0;
-                
-                gl_Position = vec4(clipSpace, 0.0, 1.0);
-                v_color = a_instanceColor;
-            }
-        `;
+  for (let i = 0; i < instanceCount; i++) {
+    const idx = (i * STRIDE) / 4;
 
-        // 프래그먼트 셰이더 소스
-        const fragmentShaderSource = `
-            precision mediump float;
-            varying vec3 v_color;
-            
-            void main() {
-                gl_FragColor = vec4(v_color, 1.0);
-            }
-        `;
+    const p0 = coords[i];
+    const p1 = coords[i + 1];
+    const p0px = toPx(p0);
+    const p1px = toPx(p1);
 
-        function createShader(gl, type, source) {
-            const shader = gl.createShader(type);
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-            
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error('셰이더 컴파일 에러:', gl.getShaderInfoLog(shader));
-                gl.deleteShader(shader);
-                return null;
-            }
-            
-            return shader;
-        }
+    const prev = i              ? coords[i - 1] : p0;
+    const next = i < instanceCount - 1 ? coords[i + 2] : p1;
 
-        function createProgram(gl, vertexShader, fragmentShader) {
-            const program = gl.createProgram();
-            gl.attachShader(program, vertexShader);
-            gl.attachShader(program, fragmentShader);
-            gl.linkProgram(program);
-            
-            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                console.error('프로그램 링크 에러:', gl.getProgramInfoLog(program));
-                gl.deleteProgram(program);
-                return null;
-            }
-            
-            return program;
-        }
+    const angle0 = i              ? angleBetweenPx(p0px, p1px, toPx(prev)) : -1.0;
+    const angle1 = i < instanceCount - 1 ? angleBetweenPx(p1px, p0px, toPx(next)) : -1.0;
 
-        function createBuffers() {
-            // 1. 정점 버퍼 (기본 삼각형)
-            const vertices = new Float32Array([
-                0.0,  0.5,  // 위쪽 정점
-               -0.5, -0.5,  // 왼쪽 아래 정점
-                0.5, -0.5   // 오른쪽 아래 정점
-            ]);
-            
-            buffers.vertex = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.vertex);
-            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    /* ---------- (C) attribute 기록 ---------- */
+    instanceData.set(
+      [
+        p0[0], p0[1],            // a_segmentStart
+        p1[0], p1[1],            // a_segmentEnd
+        distPx,                  // a_distance  (픽셀)
+        angle0, angle1,          // a_joinAngles
+        i,                       // a_id
+        angleTangentSum,         // a_angleTangentSum (세그먼트 시작 시점)
+      ],
+      idx
+    );
 
-            // 2. 인덱스 버퍼
-            const indices = new Uint16Array([0, 1, 2]);
-            
-            buffers.index = gl.createBuffer();
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.index);
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+    /* ---------- (D) angleTangentSum 누적 (OL 공식) ---------- */
+    if (i && Math.abs(Math.cos(angle0)) <= 0.98) {
+      angleTangentSum += Math.tan((angle0 - Math.PI) / 2);        // 시작쪽
+    }
+    if (i < instanceCount - 1 && Math.abs(Math.cos(angle1)) <= 0.98) {
+      angleTangentSum += Math.tan((Math.PI - angle1) / 2);        // 끝쪽
+    }
 
-            // 3. 인스턴스 위치 버퍼
-            const instancePositions = new Float32Array(instanceCount * 2);
-            for (let i = 0; i < instanceCount; i++) {
-                const angle = (i / instanceCount) * Math.PI * 2;
-                const radius = 0.6;
-                instancePositions[i * 2] = Math.cos(angle) * radius;
-                instancePositions[i * 2 + 1] = Math.sin(angle) * radius;
-            }
-            
-            buffers.instancePosition = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.instancePosition);
-            gl.bufferData(gl.ARRAY_BUFFER, instancePositions, gl.STATIC_DRAW);
+    /* ---------- (E) 픽셀 길이 누적 ---------- */
+    distPx += Math.hypot(p1px[0] - p0px[0], p1px[1] - p0px[1]);
+  }
 
-            // 4. 인스턴스 색상 버퍼
-            const instanceColors = new Float32Array(instanceCount * 3);
-            for (let i = 0; i < instanceCount; i++) {
-                const hue = (i / instanceCount) * 360;
-                const color = hslToRgb(hue, 0.8, 0.6);
-                instanceColors[i * 3] = color.r;
-                instanceColors[i * 3 + 1] = color.g;
-                instanceColors[i * 3 + 2] = color.b;
-            }
-            
-            buffers.instanceColor = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.instanceColor);
-            gl.bufferData(gl.ARRAY_BUFFER, instanceColors, gl.STATIC_DRAW);
-        }
-
-        function hslToRgb(h, s, l) {
-            h /= 360;
-            const a = s * Math.min(l, 1 - l);
-            const f = (n, k = (n + h / 30) % 12) => l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-            return { r: f(0), g: f(8), b: f(4) };
-        }
-
-        function setupAttributes() {
-            const positionLocation = gl.getAttribLocation(program, 'a_position');
-            const instancePositionLocation = gl.getAttribLocation(program, 'a_instancePosition');
-            const instanceColorLocation = gl.getAttribLocation(program, 'a_instanceColor');
-
-            // 정점 위치 속성 설정
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.vertex);
-            gl.enableVertexAttribArray(positionLocation);
-            gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-            // 인스턴스 위치 속성 설정
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.instancePosition);
-            gl.enableVertexAttribArray(instancePositionLocation);
-            gl.vertexAttribPointer(instancePositionLocation, 2, gl.FLOAT, false, 0, 0);
-            
-            // 인스턴스별로 하나씩 사용하도록 설정
-            const ext = gl.getExtension('ANGLE_instanced_arrays');
-            ext.vertexAttribDivisorANGLE(instancePositionLocation, 1);
-
-            // 인스턴스 색상 속성 설정
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.instanceColor);
-            gl.enableVertexAttribArray(instanceColorLocation);
-            gl.vertexAttribPointer(instanceColorLocation, 3, gl.FLOAT, false, 0, 0);
-            ext.vertexAttribDivisorANGLE(instanceColorLocation, 1);
-        }
-
-        function render() {
-            time += 0.016;
-            
-            gl.clearColor(0, 0, 0, 1);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            
-            gl.useProgram(program);
-            
-            // 유니폼 설정
-            const timeLocation = gl.getUniformLocation(program, 'u_time');
-            const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
-            
-            gl.uniform1f(timeLocation, time);
-            gl.uniform2f(resolutionLocation, gl.canvas.width, gl.canvas.height);
-            
-            // 속성 설정
-            setupAttributes();
-            
-            // 인덱스 버퍼 바인딩
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.index);
-            
-            // 인스턴스 렌더링
-            const ext = gl.getExtension('ANGLE_instanced_arrays');
-            ext.drawElementsInstancedANGLE(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0, instanceCount);
-            
-            if (isAnimating) {
-                animationId = requestAnimationFrame(render);
-            }
-        }
-
-        function toggleAnimation() {
-            isAnimating = !isAnimating;
-            if (isAnimating) {
-                render();
-            } else {
-                cancelAnimationFrame(animationId);
-            }
-        }
-
-        function changeInstanceCount() {
-            instanceCount = instanceCount === 12 ? 24 : instanceCount === 24 ? 6 : 12;
-            createBuffers();
-            if (!isAnimating) {
-                render();
-            }
-        }
-
-        function init() {
-            const canvas = document.getElementById('glCanvas');
-            gl = canvas.getContext('webgl');
-            
-            if (!gl) {
-                alert('WebGL을 지원하지 않는 브라우저입니다.');
-                return;
-            }
-            
-            // 인스턴스 렌더링 확장 확인
-            const ext = gl.getExtension('ANGLE_instanced_arrays');
-            if (!ext) {
-                alert('ANGLE_instanced_arrays 확장을 지원하지 않습니다.');
-                return;
-            }
-            
-            // 셰이더 생성
-            const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-            const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-            
-            // 프로그램 생성
-            program = createProgram(gl, vertexShader, fragmentShader);
-            
-            // 버퍼 생성
-            createBuffers();
-            
-            // 뷰포트 설정
-            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-            
-            // 렌더링 시작
-            render();
-        }
-
-        // 페이지 로드 시 초기화
-        window.onload = init;
-    </script>
-</body>
-</html>
+  return { instanceData, instanceCount };
+}
