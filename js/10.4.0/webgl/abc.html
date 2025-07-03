@@ -1,5 +1,5 @@
 
-const instanceEntries = coordinateSets.map(coordinates => {
+const instanceBuffers = coordinatesData.map(coordinates => {
   const { instanceData, instanceCount } = createInstanceData(coordinates);
   const instanceBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
@@ -7,7 +7,7 @@ const instanceEntries = coordinateSets.map(coordinates => {
   return { instanceBuffer, instanceCount };
 });  
 
-instanceEntries.forEach(entry => {
+instanceBuffers.forEach(entry => {
   gl.bindBuffer(gl.ARRAY_BUFFER, entry.instanceBuffer);
   bindInstanceAttributes(instanceAttributes, 1);
 
