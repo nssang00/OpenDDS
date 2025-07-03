@@ -498,7 +498,7 @@ void main() {
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
 
     // ====== GPU buffers & attrib binding ======
-    const instanceBuffer = gl.createBuffer();
+    //const instanceBuffer = gl.createBuffer();
     //gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     //gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
 
@@ -625,6 +625,20 @@ void main() {
         strokePatternTextureOffset: [0, 0],        
       },         
     ];
+
+    const coordinatesData = [
+      coordinates,
+      mirrorCoordinates(coordinates),
+    ];    
+
+    const instanceBuffers = coordinatesData.map(coordinates => {
+      const { instanceData, instanceCount } = createInstanceData(coordinates);
+      const instanceBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+      return { instanceBuffer, instanceCount };
+    });  
+    
     
     // ====== Draw ======
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -633,18 +647,15 @@ void main() {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    const coordinateSets = [
-      coordinates,
-      mirrorCoordinates(coordinates),
-    ];
-
-    coordinateSets.forEach((coordinates) => {
-      const instanceCount = updateInstanceData(coordinates);
-      lineStyles.forEach((style) => {
+    instanceBuffers.forEach(entry => {
+      gl.bindBuffer(gl.ARRAY_BUFFER, entry.instanceBuffer);
+      bindInstanceAttributes(instanceAttributes, 1);
+    
+      lineStyles.forEach(style => {
         setLineUniforms(style);//Dynamic Uniforms
-        ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
+        ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, entry.instanceCount);
       });
-    });      
+    });
 
   </script>
 </body>
