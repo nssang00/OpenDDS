@@ -21,6 +21,13 @@ for (let i = 0; i < instanceBuffers.length; ++i) {
   }
 }
 
+const instanceEntries = coordinateSets.map(coords => {
+  const { instanceData, instanceCount } = createInstanceData(coords);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+  return { buffer, count: instanceCount };
+});  
 
 instanceEntries.forEach(entry => {
   gl.bindBuffer(gl.ARRAY_BUFFER, entry.buffer);
