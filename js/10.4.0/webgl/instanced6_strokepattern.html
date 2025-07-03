@@ -383,7 +383,6 @@ void main() {
       { name: "a_id",           size: 1 },
       { name: "a_angleTangentSum", size: 1 } // 추가!
     ];
-    const STRIDE = instanceAttributes.reduce((sum, a) => sum + a.size, 0) * 4;
 
     const coordinates = [
       [-122.48369693756104, 37.83381888486939],
@@ -442,81 +441,78 @@ void main() {
 
     // ====== 인스턴스 데이터 ======
     function createInstanceData(coords) {
-      function angle(p0, pA, pB) {
-        const v0x = pA[0] - p0[0];
-        const v0y = pA[1] - p0[1];
-        const v1x = pB[0] - p0[0];
-        const v1y = pB[1] - p0[1];
-        const l0 = Math.sqrt(v0x * v0x + v0y * v0y);
-        const l1 = Math.sqrt(v1x * v1x + v1y * v1y);
-        if (l0 === 0.0 || l1 === 0.0) return -1.0;
-        const dot = (v0x * v1x + v0y * v1y) / (l0 * l1);
-        const ang = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
-        const cross = v0x * v1y - v0y * v1x;
-        return cross < 0 ? -ang : ang;
+      const sx = canvas.width  / (maxLon - minLon);
+      const sy = canvas.height / (maxLat - minLat);
+      const tx = -minLon * sx;
+      const ty = -minLat * sy;
+      const toPx = ([lon, lat]) => [lon * sx + tx, lat * sy + ty];
+
+      function angleBetween(p0, pA, pB) {
+        const lenA = Math.sqrt(
+          (pA[0] - p0[0]) * (pA[0] - p0[0]) + (pA[1] - p0[1]) * (pA[1] - p0[1]),
+        );
+        const tangentA = [(pA[0] - p0[0]) / lenA, (pA[1] - p0[1]) / lenA];
+        const orthoA = [-tangentA[1], tangentA[0]];
+        const lenB = Math.sqrt(
+          (pB[0] - p0[0]) * (pB[0] - p0[0]) + (pB[1] - p0[1]) * (pB[1] - p0[1]),
+        );
+        const tangentB = [(pB[0] - p0[0]) / lenB, (pB[1] - p0[1]) / lenB];
+      
+        // this angle can be clockwise or anticlockwise; hence the computation afterwards
+        const angle =
+          lenA === 0 || lenB === 0
+            ? 0
+            : Math.acos(
+                Math.min(Math.max(tangentB[0] * tangentA[0] + tangentB[1] * tangentA[1], -1), 1),
+              );
+        const isClockwise = tangentB[0] * orthoA[0] + tangentB[1] * orthoA[1] > 0;
+        return !isClockwise ? Math.PI * 2 - angle : angle;
       }
-      
+
       const instanceCount = coords.length - 1;
-      const instanceData = new Float32Array(instanceCount * STRIDE / 4);
-      let distances = 0;
-      let angleTangentSum = 0;
-      
+      const instanceData = [];
+
+      let distances = 0;           // 픽셀 누적길이
+      let angleTangentSum = 0;  // 누적 tan((π-|θ|)/2)
+
       for (let i = 0; i < instanceCount; i++) {
-        const idx = i * STRIDE / 4;
         const p0 = coords[i];
         const p1 = coords[i + 1];
-        const dx = p1[0] - p0[0];
-        const dy = p1[1] - p0[1];
-        const segmentLength = Math.sqrt(dx * dx + dy * dy);
-        const prev = i > 0 ? coords[i - 1] : p0;
-        const next = i < instanceCount - 1 ? coords[i + 2] : p1;
-        const angle0 = i > 0 ? angle(p0, p1, prev) : -1.0;
-        const angle1 = i < instanceCount - 1 ? angle(p1, p0, next) : -1.0;
+        const p0world = toPx(p0);
+        const p1world = toPx(p1);
 
-        instanceData[idx]     = p0[0];
-        instanceData[idx+1]   = p0[1];
-        instanceData[idx+2]   = p1[0];
-        instanceData[idx+3]   = p1[1];
-        instanceData[idx+4]   = distances;
-        instanceData[idx+5]   = angle0;
-        instanceData[idx+6]   = angle1;
-        instanceData[idx+7]   = i;
-        instanceData[idx+8]   = angleTangentSum;
+        const pB = i > 0 ? coords[i - 1] : p0;
+        const pBworld = toPx(pB);
+        const angle0 = i > 0 ? angleBetween(p0world, p1world, pBworld) : -1.0;
 
-        if (i > 0 && Math.cos(angle0) <= 0.98) {
+        const pA = i < instanceCount - 1 ? coords[i + 2] : p1;
+        const pAworld = toPx(pA);        
+        const angle1 = i < instanceCount - 1 ? angleBetween(p1world, p0world, pAworld) : -1.0;
+
+        instanceData.push(
+          p0[0], p0[1],            // a_segmentStart
+          p1[0], p1[1],            // a_segmentEnd
+          distances,               // a_distance
+          angle0, angle1,          // a_joinAngles
+          i,                       // a_id
+          angleTangentSum          // a_angleTangentSum 
+        );
+
+        if (i > 0 && Math.abs(Math.cos(angle0)) <= 0.98) {
           angleTangentSum += Math.tan((angle0 - Math.PI) / 2);
         }
-        if (i < instanceCount-1 && Math.cos(angle1) <= 0.98) {
-          angleTangentSum += Math.tan((Math.PI - angle1) / 2);
-        }            
-        distances += segmentLength;
+        if (i < instanceCount - 1 && Math.abs(Math.cos(angle1)) <= 0.98) {
+          angleTangentSum += Math.tan((Math.PI - angle1) / 2); 
+        }
+        distances += Math.hypot(p1world[0] - p0world[0], p1world[1] - p0world[1]);
       }
-      
-      return { instanceData, instanceCount };
+
+      return {
+        instanceData: new Float32Array(instanceData),
+        instanceCount
+      };
     }
  
-    // ====== Static quad ======
-    const quadVertices = new Float32Array([
-      -1, -1,  //ㅣeft bottom
-      -1, 1,   // left top
-      1, -1,   // right bottom
-      1, 1    // right top
-    ]);
-    const quadVertexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
-
-    // ====== index buffer ======
-    const quadIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
-    const quadIndexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
-
-    // ====== GPU buffers & attrib binding ======
-    //const instanceBuffer = gl.createBuffer();
-    //gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    //gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
-
     function bindAttrib(name, size, stride, offset, div) {
       const location = gl.getAttribLocation(program, name);
       gl.enableVertexAttribArray(location);
@@ -555,15 +551,7 @@ void main() {
       gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), style.strokeMiterLimit);
       
       gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), style.useStrokePattern);    
-  
-      const dashArray = [20,5,20,5];
-      if(style.dashPattern && style.dashPattern.length > 0)
-      {
-        gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(style.dashPattern));
-        gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), style.dashPattern.length);
-        gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), style.dashOffset);
-      }
-    
+      
       // --- uniform 등록
       if (style.useStrokePattern) {
         let width = 20;
@@ -588,34 +576,26 @@ void main() {
         gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), style.useStrokePattern);
         
         gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), ...style.strokeColor);
-      } 
-    }    
-    
-    const program = getProgram(fragmentShaderSource, vertexShaderSource);
 
-    gl.useProgram(program);
-    //gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    //bindInstanceAttributes(instanceAttributes, 1);
-    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
-    bindAttrib("a_position", 2, 0, 0, 0);
-
-    // ====== Static Uniforms ======
-    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
-    gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
-    gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
-    gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+        gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), 0);
+      }
+      else if(style.dashPattern && style.dashPattern.length > 0)
+      {
+        gl.uniform1fv(gl.getUniformLocation(program, "u_dashPattern"), new Float32Array(style.dashPattern));
+        gl.uniform1i(gl.getUniformLocation(program, "u_dashCount"), style.dashPattern.length);
+        gl.uniform1f(gl.getUniformLocation(program, "u_dashOffset"), style.dashOffset);
+      }
+    }
 
     const lineStyles = [
       {//solid
         strokeColor: [0.08, 0.8, 1.0, 1.0],
-        strokeWidth: 6.0,
-        strokeOffset: 0.0,
+        strokeWidth: 12.0,
+        strokeOffset: -5.0,
         strokeCap: 0.0,//Round
         strokeJoin: 0.0,//Round
         strokeMiterLimit: 10.0,
-      },
+      },        
       {//dash
         strokeColor: [1.0, 0.0, 0.0, 1.0],
         strokeWidth: 6.0,
@@ -625,6 +605,7 @@ void main() {
         strokeMiterLimit: 10.0,
         dashPattern: [20,5,20,5],
         dashOffset: 0.0,
+        useStrokePattern: false,
       },
       {//pattern
         strokeColor: [1.0, 1.0, 1.0, 1.0],
@@ -637,8 +618,42 @@ void main() {
         strokePatternTextureSpacing: 20,
         strokePatternTextureStartOffset: 10,
         strokePatternTextureOffset: [0, 0],        
-      },         
-    ];
+      },
+    ];    
+
+    const program = getProgram(fragmentShaderSource, vertexShaderSource);
+
+    gl.useProgram(program);
+
+    // ====== Static quad ======
+    const quadVertices = new Float32Array([
+      -1, -1,  //ㅣeft bottom
+      -1, 1,   // left top
+      1, -1,   // right bottom
+      1, 1    // right top
+    ]);
+    const quadVertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+
+    // ====== index buffer ======
+    const quadIndices = new Uint16Array([0, 1, 2, 1, 3, 2]);
+    const quadIndexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);    
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+    bindAttrib("a_position", 2, 0, 0, 0);
+
+    // ====== Static Uniforms ======
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
+    gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
+    gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
+    gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+
+
 
     const coordinatesData = [
       coordinates,
@@ -660,7 +675,6 @@ void main() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-
 
     instanceBuffers.forEach(({ instanceBuffer, instanceCount }, index) => {
       gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
