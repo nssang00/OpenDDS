@@ -486,6 +486,9 @@ void main() {
         if (i > 0 && Math.cos(angle0) <= 0.98) {
           angleTangentSum += Math.tan((angle0 - Math.PI) / 2);
         }
+        if (i < instanceCount-1 && Math.cos(angle1) <= 0.98) {
+          angleTangentSum += Math.tan((Math.PI - angle1) / 2);
+        }            
         distances += segmentLength;
       }
       
