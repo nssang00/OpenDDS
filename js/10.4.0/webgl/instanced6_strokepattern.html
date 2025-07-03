@@ -374,9 +374,6 @@ void main() {
       }
       return program;
     }
-    const program = getProgram(fragmentShaderSource, vertexShaderSource);
-    
-    //gl.useProgram(program);    
     
     const instanceAttributes = [
       { name: "a_segmentStart", size: 2 },
@@ -523,6 +520,7 @@ void main() {
       gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, offset);
       ext.vertexAttribDivisorANGLE(location, div);
     }
+    
     function bindInstanceAttributes(attribs, divisor = 1) {
       const stride = attribs.reduce((sum, a) => sum + a.size, 0) * 4;
       let offset = 0;
@@ -531,20 +529,6 @@ void main() {
         offset += attr.size * 4;
       }
     }
-
-    gl.useProgram(program);
-    //gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    //bindInstanceAttributes(instanceAttributes, 1);
-    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
-    bindAttrib("a_position", 2, 0, 0, 0);
-
-    // ====== Static Uniforms ======
-    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
-    gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
-    gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
-    gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
 
     function createPatternCanvas(width = 20, height = 20) {
       const canvas = document.createElement("canvas");
@@ -602,7 +586,24 @@ void main() {
         
         gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), ...style.strokeColor);
       } 
-    }
+    }    
+    
+    const program = getProgram(fragmentShaderSource, vertexShaderSource);
+
+    gl.useProgram(program);
+    //gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+    //bindInstanceAttributes(instanceAttributes, 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+    bindAttrib("a_position", 2, 0, 0, 0);
+
+    // ====== Static Uniforms ======
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
+    gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
+    gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
+    gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+
     const lineStyles = [
       {//solid
         strokeColor: [0.08, 0.8, 1.0, 1.0],
