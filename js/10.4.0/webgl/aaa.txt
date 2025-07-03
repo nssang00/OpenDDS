@@ -1,5 +1,5 @@
 /**
- * 경‧위도 배열 → 인스턴스 버퍼 생성 (OpenLayers 방식 그대로)
+ * 경‧위도 배열 → 인스턴스 버퍼 생성 (OpenLayers 방식 그대로, push 방식)
  * ① 각도를 **픽셀 공간**에서 0 – 2π 로 계산  
  * ② angleTangentSum 을 “세그먼트 시작-전” 누계로 두 번(앞·뒤) 누적  
  * ③ a_distance 도 픽셀 길이로 누적
@@ -25,14 +25,12 @@ function createInstanceData(coords) {
   }
 
   const instanceCount = coords.length - 1;
-  const instanceData  = new Float32Array((instanceCount * STRIDE) / 4);
+  const instanceData = []; // 일반 배열로 push
 
   let distPx = 0;           // 픽셀 누적길이
   let angleTangentSum = 0;  // 누적 tan((π-|θ|)/2)
 
   for (let i = 0; i < instanceCount; i++) {
-    const idx = (i * STRIDE) / 4;
-
     const p0 = coords[i];
     const p1 = coords[i + 1];
     const p0px = toPx(p0);
@@ -45,16 +43,13 @@ function createInstanceData(coords) {
     const angle1 = i < instanceCount - 1 ? angleBetweenPx(p1px, p0px, toPx(next)) : -1.0;
 
     /* ---------- (C) attribute 기록 ---------- */
-    instanceData.set(
-      [
-        p0[0], p0[1],            // a_segmentStart
-        p1[0], p1[1],            // a_segmentEnd
-        distPx,                  // a_distance  (픽셀)
-        angle0, angle1,          // a_joinAngles
-        i,                       // a_id
-        angleTangentSum,         // a_angleTangentSum (세그먼트 시작 시점)
-      ],
-      idx
+    instanceData.push(
+      p0[0], p0[1],            // a_segmentStart
+      p1[0], p1[1],            // a_segmentEnd
+      distPx,                  // a_distance  (픽셀)
+      angle0, angle1,          // a_joinAngles
+      i,                       // a_id
+      angleTangentSum          // a_angleTangentSum (세그먼트 시작 시점)
     );
 
     /* ---------- (D) angleTangentSum 누적 (OL 공식) ---------- */
@@ -69,5 +64,9 @@ function createInstanceData(coords) {
     distPx += Math.hypot(p1px[0] - p0px[0], p1px[1] - p0px[1]);
   }
 
-  return { instanceData, instanceCount };
+  // 최종 변환
+  return {
+    instanceData: new Float32Array(instanceData),
+    instanceCount
+  };
 }
