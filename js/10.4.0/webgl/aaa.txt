@@ -1,0 +1,46 @@
+import Map from "ol/Map";
+import View from "ol/View";
+import {LineString} from "ol/geom";
+import Feature from "ol/Feature";
+import VectorSource from "ol/source/Vector";
+import VectorLayer from "ol/layer/Vector";
+import {fromLonLat} from "ol/proj";
+
+const coords = [
+  [-122.48369693756104, 37.83381888486939],
+  // ... (생략)
+  [-122.49378204345702, 37.83368330777276]
+];
+
+const mercatorCoords = coords.map(c => fromLonLat(c));
+function getCentroid(coords) {
+  let x = 0, y = 0;
+  for (const [cx, cy] of coords) { x += cx; y += cy; }
+  x /= coords.length;
+  y /= coords.length;
+  return [x, y];
+}
+const center = [1825927.7316762917, 6143091.089223046];
+const lineCentroid = getCentroid(mercatorCoords);
+const dx = center[0] - lineCentroid[0];
+const dy = center[1] - lineCentroid[1];
+const translatedCoords = mercatorCoords.map(([x, y]) => [x + dx, y + dy]);
+
+const vectorLayer = new VectorLayer({
+  source: new VectorSource({
+    features: [
+      new Feature({
+        geometry: new LineString(translatedCoords)
+      })
+    ]
+  })
+});
+
+const map = new Map({
+  target: "map",
+  layers: [vectorLayer],
+  view: new View({
+    center: center,
+    zoom: 9
+  })
+});
