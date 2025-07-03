@@ -1,46 +1,18 @@
-// (1) 인스턴스 버퍼 여러개 미리 등록
-const instanceBuffers = [];
-const instanceCounts = [];
-coordinateSets.forEach(coords => {
-  const { instanceData, instanceCount } = createInstanceData(coords);
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+
+const instanceEntries = coordinateSets.map(coordinates => {
+  const { instanceData, instanceCount } = createInstanceData(coordinates);
+  const instanceBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
-  instanceBuffers.push(buffer);
-  instanceCounts.push(instanceCount);
-});
-
-// (2) 드로우 루프에서 각각 꺼내서 바인딩 후 그리기
-for (let i = 0; i < instanceBuffers.length; ++i) {
-  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffers[i]);
-  bindInstanceAttributes(instanceAttributes, 1); // 이때마다 다시 attribute pointer 설정
-
-  for (const style of lineStyles) {
-    setLineUniforms(style);
-    ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCounts[i]);
-  }
-}
-
-const instanceEntries = coordinateSets.map(coords => {
-  const { instanceData, instanceCount } = createInstanceData(coords);
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
-  return { buffer, count: instanceCount };
+  return { instanceBuffer, instanceCount };
 });  
 
 instanceEntries.forEach(entry => {
-  gl.bindBuffer(gl.ARRAY_BUFFER, entry.buffer);
+  gl.bindBuffer(gl.ARRAY_BUFFER, entry.instanceBuffer);
   bindInstanceAttributes(instanceAttributes, 1);
 
   lineStyles.forEach(style => {
     setLineUniforms(style);
-    ext.drawElementsInstancedANGLE(
-      gl.TRIANGLES,
-      quadIndices.length,
-      gl.UNSIGNED_SHORT,
-      0,
-      entry.count
-    );
+    ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, entry.instanceCount);
   });
 });
