@@ -2,50 +2,190 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>두께 라인 내부 반투명 색칠</title>
+  <title>최적화된 두께 라인 + 삼각형 라벨 내부 배치</title>
   <style>
-    body { background: #161822; margin:0; font-family:'Pretendard',sans-serif; }
-    .container { width:1100px; margin:32px auto 0 auto; }
-    .viz-box { background:#232846; border-radius:14px; padding:20px 0 10px 0; margin-bottom:18px; }
-    .tbl-box { background:#1a2033; border-radius:10px; margin:0 0 22px 0; color:#fff; padding:18px 0 10px 0; }
-    table { border-collapse:collapse; margin:0 auto; width:1000px;}
-    th, td { border:1.3px solid #33405e; padding:7px 13px; font-size:1.07em;}
-    th { background:#244072; color:#a3e0ff;}
-    td { background:#232846;}
-    .inst0 { background:#24386f !important; }
-    .inst1 { background:#5b358e !important; }
-    .head { color:#ffe058; font-size:1.13em; }
-    .info { color:#8cf7ff; font-size:1.03em; margin:7px 0 0 32px; }
-    .desc { margin:14px 0 10px 0; color:#ffd371; font-size:1.07em;}
-    canvas { display:block; margin:0 auto 0 auto; border-radius:13px;}
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body { 
+      background: linear-gradient(135deg, #1a1e2d, #161822);
+      margin: 0;
+      font-family: 'Pretendard', 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      color: #e0e7ff;
+    }
+    .container { 
+      width: 1100px; 
+      background: #1d2135;
+      border-radius: 18px;
+      padding: 30px;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+      border: 1px solid #2a3150;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+    .header h1 {
+      color: #ffe058;
+      font-size: 2.2rem;
+      margin-bottom: 10px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+    }
+    .header p {
+      color: #8cf7ff;
+      font-size: 1.2rem;
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .highlight {
+      color: #ffd700;
+      font-weight: bold;
+    }
+    .viz-box { 
+      background: linear-gradient(145deg, #232846, #1c203a); 
+      border-radius: 14px; 
+      padding: 25px 0 15px 0; 
+      margin-bottom: 25px; 
+      border: 1px solid #33405e;
+      box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.3);
+    }
+    .tbl-box { 
+      background: #1a2033; 
+      border-radius: 10px; 
+      margin: 0 0 25px 0; 
+      color: #fff; 
+      padding: 20px 0 15px 0; 
+      border: 1px solid #33405e;
+    }
+    table { 
+      border-collapse: collapse; 
+      margin: 0 auto; 
+      width: 1000px;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td { 
+      border: 1.3px solid #33405e; 
+      padding: 12px 15px; 
+      font-size: 1.05rem;
+      text-align: center;
+    }
+    th { 
+      background: linear-gradient(to bottom, #244072, #1a2c5a); 
+      color: #a3e0ff;
+      font-weight: 600;
+    }
+    td { 
+      background: #232846;
+    }
+    .inst0 { background: #24386f !important; }
+    .inst1 { background: #5b358e !important; }
+    .head { 
+      color: #ffe058; 
+      font-size: 1.2rem;
+      text-align: center;
+      margin-bottom: 15px;
+      padding: 0 20px;
+    }
+    .info { 
+      color: #8cf7ff; 
+      font-size: 1.05rem; 
+      margin: 10px 35px 0 35px; 
+      line-height: 1.6;
+      text-align: center;
+    }
+    .info span {
+      display: inline-block;
+      margin: 0 8px;
+    }
+    .divider {
+      color: #5ab4ff;
+      font-weight: bold;
+    }
+    .desc { 
+      margin: 15px 0 12px 0; 
+      color: #ffd371; 
+      font-size: 1.1rem;
+      text-align: center;
+      padding: 0 20px;
+    }
+    canvas { 
+      display: block; 
+      margin: 0 auto; 
+      border-radius: 13px;
+      background: #1a2033;
+      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+    }
+    .footer {
+      text-align: center;
+      color: #8c9bbd;
+      margin-top: 25px;
+      font-size: 0.95rem;
+      padding-top: 15px;
+      border-top: 1px solid #2a3150;
+    }
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      margin-top: 15px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="desc">
-      <b>각 두께 라인(사각형) 내부를 <span style="color:#ffe058">인스턴스 색상 반투명</span>으로 채워서<br>
-        WebGL 실제 렌더링과 유사하게 시각화 (<span style="color:#ffd600">테두리와 정점·라벨은 동일</span>)
-      </b>
+    <div class="header">
+      <h1>최적화된 두께 라인 시각화</h1>
+      <p>△1 라벨은 <span class="highlight">Q0 근처</span>에, △2 라벨은 <span class="highlight">Q2 근처</span>에 사각형 내부에 배치</p>
     </div>
+    
     <div class="viz-box">
       <canvas id="sixviz" width="1040" height="470"></canvas>
       <div class="info">
-        <span style="color:#5ab4ff;font-weight:bold;">● a_segmentStart, a_segmentEnd: 인스턴스0 파랑, 인스턴스1 보라</span>
-        <span style="color:#ffe058;">｜</span>
-        <span style="color:#e6e6fa;">작은 반투명 원: 쿼드 4정점(Q0~Q3)</span>
-        <span style="color:#ffe058;">｜</span>
-        <span style="color:#ffd600;">사각형 내부와 테두리: 두께 라인(반투명+얇은색)</span>
-        <br>
-        <span style="color:#5ab4ff">■ 인스턴스 0 (점1-점2)</span>,
-        <span style="color:#ad6cf6">■ 인스턴스 1 (점2-점3)</span>
+        <span style="color:#5ab4ff;font-weight:bold;">● a_segmentStart, a_segmentEnd</span>
+        <span class="divider">|</span>
+        <span style="color:#e6e6fa;">● Q0~Q3: 쿼드 정점</span>
+        <span class="divider">|</span>
+        <span style="color:#ffd600;">■ 두께 라인 (사각형)</span>
+        <span class="divider">|</span>
+        <span style="color:#ffe2e2;">--- 내부 대각선 점선</span>
+      </div>
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-color" style="background:#5ab4ff;"></div>
+          <span>인스턴스 0 (점1-점2)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#ad6cf6;"></div>
+          <span>인스턴스 1 (점2-점3)</span>
+        </div>
       </div>
     </div>
+    
     <div class="tbl-box">
-      <div class="head">각 인스턴스(선분) 별 6개 vertex attribute (삼각형 2개, 6정점)</div>
+      <div class="head">각 인스턴스(선분) 별 6개 vertex attribute (2개의 <span style="color:#ff6b6b">△삼각형</span>, 6정점)</div>
       <table>
         <tr>
           <th>인스턴스</th>
-          <th>삼각형</th>
+          <th>△</th>
           <th>인덱스</th>
           <th>a_position</th>
           <th>a_segmentStart</th>
@@ -54,87 +194,179 @@
         </tr>
         <!-- 인스턴스 0: 1-2 -->
         <tr class="inst0"><td rowspan="6" style="font-weight:bold;text-align:center;background:#24386f;color:#a3e0ff;">0</td>
-          <td>삼각형1</td><td>0</td><td>[-1,-1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
-        <tr class="inst0"><td>삼각형1</td><td>1</td><td>[-1, 1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
-        <tr class="inst0"><td>삼각형1</td><td>2</td><td>[ 1,-1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
-        <tr class="inst0"><td>삼각형2</td><td>1</td><td>[-1, 1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
-        <tr class="inst0"><td>삼각형2</td><td>3</td><td>[ 1, 1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
-        <tr class="inst0"><td>삼각형2</td><td>2</td><td>[ 1,-1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
+          <td rowspan="3">△1</td><td>0</td><td>[-1,-1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
+        <tr class="inst0"><td>1</td><td>[-1, 1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
+        <tr class="inst0"><td>2</td><td>[ 1,-1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
+        <tr class="inst0"><td rowspan="3">△2</td><td>1</td><td>[-1, 1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
+        <tr class="inst0"><td>3</td><td>[ 1, 1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
+        <tr class="inst0"><td>2</td><td>[ 1,-1]</td><td>(220,160)</td><td>(540,290)</td><td>(0.0,0.22)</td></tr>
         <!-- 인스턴스 1: 2-3 -->
         <tr class="inst1"><td rowspan="6" style="font-weight:bold;text-align:center;background:#5b358e;color:#fff;">1</td>
-          <td>삼각형1</td><td>0</td><td>[-1,-1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
-        <tr class="inst1"><td>삼각형1</td><td>1</td><td>[-1, 1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
-        <tr class="inst1"><td>삼각형1</td><td>2</td><td>[ 1,-1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
-        <tr class="inst1"><td>삼각형2</td><td>1</td><td>[-1, 1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
-        <tr class="inst1"><td>삼각형2</td><td>3</td><td>[ 1, 1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
-        <tr class="inst1"><td>삼각형2</td><td>2</td><td>[ 1,-1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
+          <td rowspan="3">△1</td><td>0</td><td>[-1,-1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
+        <tr class="inst1"><td>1</td><td>[-1, 1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
+        <tr class="inst1"><td>2</td><td>[ 1,-1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
+        <tr class="inst1"><td rowspan="3">△2</td><td>1</td><td>[-1, 1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
+        <tr class="inst1"><td>3</td><td>[ 1, 1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
+        <tr class="inst1"><td>2</td><td>[ 1,-1]</td><td>(540,290)</td><td>(840,180)</td><td>(-0.22,0.0)</td></tr>
       </table>
-      <div class="desc">※ 위의 시각화 선/점 색상 = 이 표 인스턴스 배경색 계열과 1:1 일치!</div>
+      <div class="desc">
+        ※ △1 = Q0-Q1-Q2, △2 = Q1-Q3-Q2<br>
+        ※ <span class="highlight">△1 라벨은 Q0 근처에, △2 라벨은 Q2 근처에 사각형 내부에 배치됨</span>
+      </div>
+    </div>
+    
+    <div class="footer">
+      두께 라인 시각화 - 삼각형 라벨 내부 배치 최적화 버전
     </div>
   </div>
+  
   <script>
     const ctx = document.getElementById("sixviz").getContext("2d");
     // 점 3개
     const P1 = {x:220, y:160}, P2={x:540, y:290}, P3={x:840, y:180};
+    
     // 색상(테이블 배경과 일치)
     const instColors = [
-      { main: "#5ab4ff", mainAlpha: "rgba(90,180,255,0.32)", sub:"#cdefff", quad:"#e6e6fa", quadAlpha:"rgba(230,230,250,0.45)", tbl:"#24386f" },
-      { main: "#ad6cf6", mainAlpha: "rgba(173,108,246,0.32)", sub:"#f0e6ff", quad:"#e6e6fa", quadAlpha:"rgba(230,230,250,0.45)", tbl:"#5b358e" }
+      { 
+        main: "#5ab4ff", 
+        mainAlpha: "rgba(90,180,255,0.28)", 
+        highlight: "#2390e7", 
+        highlightAlpha: "rgba(35,144,231,0.88)", 
+        triangleLabel: "#a3e0ff",
+        quad: "#e6e6fa",
+        tbl: "#24386f"
+      },
+      { 
+        main: "#ad6cf6", 
+        mainAlpha: "rgba(173,108,246,0.28)", 
+        highlight: "#9a30f3", 
+        highlightAlpha: "rgba(154,48,243,0.85)", 
+        triangleLabel: "#e0baff",
+        quad: "#e6e6fa",
+        tbl: "#5b358e"
+      }
     ];
+    
     // 두 인스턴스(선분)
     const lines = [
       { A: P1, B: P2, color: instColors[0], join: "(0.0,0.22)" },
       { A: P2, B: P3, color: instColors[1], join: "(-0.22,0.0)" }
     ];
+    
     const thickness = 60;
+    
+    // 사각형 정점 계산 함수
     function quadVerts(line) {
       const {A,B} = line;
       const dx=B.x-A.x, dy=B.y-A.y, len=Math.sqrt(dx*dx+dy*dy);
       const nx=-dy/len, ny=dx/len;
       const ox=nx*thickness/2, oy=ny*thickness/2;
       return [
-        { x:A.x+ox, y:A.y+oy },
-        { x:B.x+ox, y:B.y+oy },
-        { x:B.x-ox, y:B.y-oy },
-        { x:A.x-ox, y:A.y-oy }
+        { x:A.x+ox, y:A.y+oy }, // Q0
+        { x:B.x+ox, y:B.y+oy }, // Q1
+        { x:B.x-ox, y:B.y-oy }, // Q2
+        { x:A.x-ox, y:A.y-oy }  // Q3
       ];
     }
-    // 배경
+    
+    // 삼각형 라벨 위치 계산 함수 (Q0 근처와 Q2 근처, 사각형 내부)
+    function calculateTriangleLabelPositions(quad) {
+      // 사각형 중심점 계산
+      const centerX = (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4;
+      const centerY = (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4;
+      
+      // △1 위치: Q0에서 중심점 방향으로 25% 이동 (사각형 내부)
+      const t1x = quad[0].x + (centerX - quad[0].x) * 0.25;
+      const t1y = quad[0].y + (centerY - quad[0].y) * 0.25;
+      
+      // △2 위치: Q2에서 중심점 방향으로 25% 이동 (사각형 내부)
+      const t2x = quad[2].x + (centerX - quad[2].x) * 0.25;
+      const t2y = quad[2].y + (centerY - quad[2].y) * 0.25;
+      
+      return { t1: {x: t1x, y: t1y}, t2: {x: t2x, y: t2y} };
+    }
+
+    // 배경 그리기
     ctx.save();
-    ctx.globalAlpha = 0.10;
-    ctx.fillStyle = "#49f";
-    ctx.fillRect(44, 46, 950, 352);
+    ctx.fillStyle = "#0e1120";
+    ctx.fillRect(0, 0, 1040, 470);
+    
+    // 그리드 배경
+    ctx.strokeStyle = "rgba(70, 90, 140, 0.2)";
+    ctx.lineWidth = 1;
+    
+    // 수직선
+    for (let x = 20; x < 1040; x += 30) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 470);
+      ctx.stroke();
+    }
+    
+    // 수평선
+    for (let y = 20; y < 470; y += 30) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(1040, y);
+      ctx.stroke();
+    }
     ctx.restore();
-    ctx.font = "bold 19px sans-serif";
-    ctx.fillStyle = "#fff";
-    ctx.fillText("가운데 중심선 없이, 표 색상과 일치하는 두께 라인(사각형)만 시각화",80,74);
+    
+    // 제목
+    ctx.save();
+    ctx.font = "bold 24px 'Pretendard', sans-serif";
+    ctx.fillStyle = "#ffd600";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+    ctx.shadowBlur = 5;
+    ctx.fillText("최적화된 두께 라인 시각화", 520, 40);
+    ctx.font = "bold 18px 'Pretendard', sans-serif";
+    ctx.fillStyle = "#8cf7ff";
+    ctx.fillText("△1은 Q0 근처, △2는 Q2 근처에 사각형 내부에 배치", 520, 75);
+    ctx.shadowBlur = 0;
+    ctx.textAlign = "left";
+    ctx.restore();
 
     // 점1,2,3 (중앙에 작은 반투명 원)
     [P1,P2,P3].forEach((pt,i)=>{
       ctx.save();
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 7.5, 0, 2*Math.PI);
+      ctx.arc(pt.x, pt.y, 8, 0, 2*Math.PI);
       ctx.fillStyle = i==0 ? instColors[0].mainAlpha : (i==2?instColors[1].mainAlpha:"rgba(179,230,255,0.32)");
       ctx.fill();
       ctx.lineWidth = 2;
       ctx.strokeStyle = "#fff";
       ctx.stroke();
-      ctx.font = "bold 12px sans-serif";
-      ctx.fillStyle = "#232846";
-      ctx.fillText(i===0?"점1":i===1?"점2":"점3", pt.x-11, pt.y-14);
-      ctx.font = "bold 10px sans-serif";
+      ctx.font = "bold 14px 'Pretendard', sans-serif";
+      ctx.fillStyle = "#1a2033";
+      ctx.fillText(i===0?"점1":i===1?"점2":"점3", pt.x-15, pt.y-18);
+      ctx.font = "bold 12px 'Pretendard', sans-serif";
       ctx.fillStyle = "#fff";
-      ctx.fillText(`(${pt.x},${pt.y})`, pt.x-14, pt.y+16);
+      ctx.fillText(`(${pt.x},${pt.y})`, pt.x-18, pt.y+22);
       ctx.restore();
     });
 
     lines.forEach((line,instIdx)=>{
       const A = line.A, B = line.B;
       const quad = quadVerts(line);
+      const labelPos = calculateTriangleLabelPositions(quad);
+
+      // 내부 삼각형 분할 대각선(Q1–Q3) 점선
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(quad[1].x, quad[1].y); // Q1
+      ctx.lineTo(quad[3].x, quad[3].y); // Q3
+      ctx.setLineDash([8,7]);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffb3b3";
+      ctx.globalAlpha = 0.8;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
 
       // 두께 라인(사각형) 내부 반투명 채움
       ctx.save();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.6;
       ctx.beginPath();
       ctx.moveTo(quad[0].x, quad[0].y);
       ctx.lineTo(quad[1].x, quad[1].y);
@@ -145,7 +377,7 @@
       ctx.fill();
       ctx.restore();
 
-      // 두께 라인(사각형) 테두리만 얇게
+      // 두께 라인(사각형) 테두리 - 실선
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(quad[0].x, quad[0].y);
@@ -153,44 +385,75 @@
       ctx.lineTo(quad[2].x, quad[2].y);
       ctx.lineTo(quad[3].x, quad[3].y);
       ctx.closePath();
-      ctx.globalAlpha = 0.5;
-      ctx.lineWidth = 3.2;
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([]);
       ctx.strokeStyle = line.color.main;
       ctx.stroke();
       ctx.restore();
 
-      // 쿼드 4정점 (연하고 작게, 반투명)
+      // 삼각형 라벨 배치 (△1, △2) - 작게, 사각형 내부에
+      ctx.save();
+      ctx.font = "bold 20px 'Pretendard', sans-serif";
+      ctx.fillStyle = line.color.triangleLabel;
+      ctx.globalAlpha = 0.95;
+      
+      // △1 (Q0 근처)
+      ctx.fillText("△1", labelPos.t1.x - 10, labelPos.t1.y + 7);
+      
+      // △2 (Q2 근처)
+      ctx.fillText("△2", labelPos.t2.x - 10, labelPos.t2.y + 7);
+      ctx.restore();
+
+      // 쿼드 4정점 (작고 반투명 채움)
       for(let i=0; i<4; ++i) {
         ctx.save();
-        ctx.globalAlpha = 1;
         ctx.beginPath();
-        ctx.arc(quad[i].x, quad[i].y, 4.5, 0, 2*Math.PI);
-        ctx.fillStyle = line.color.mainAlpha;
+        ctx.arc(quad[i].x, quad[i].y, 5, 0, 2*Math.PI);
+        ctx.fillStyle = line.color.main;
+        ctx.globalAlpha = 0.5;
         ctx.fill();
-        ctx.lineWidth = 1;
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1.5;
         ctx.strokeStyle = "#fff";
         ctx.stroke();
-        ctx.font = "bold 9px sans-serif";
-        ctx.fillStyle = line.color.main;
-        ctx.fillText(`Q${i}`, quad[i].x-7, quad[i].y-7);
+        ctx.font = "bold 13px 'Pretendard', sans-serif";
+        ctx.fillStyle = line.color.quad;
+        ctx.fillText(`Q${i}`, quad[i].x - 9, quad[i].y - 9);
         ctx.restore();
       }
 
-      // segmentStart/End 라벨
+      // segmentStart/End 라벨과 강조된 원!
       [A,B].forEach((pt,pi)=>{
         ctx.save();
-        ctx.font = "bold 10px sans-serif";
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 9, 0, 2*Math.PI);
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = line.color.highlightAlpha;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = line.color.highlight;
+        ctx.globalAlpha = 1;
+        ctx.stroke();
+        ctx.font = "bold 13px 'Pretendard', sans-serif";
         ctx.fillStyle = line.color.main;
-        ctx.fillText(pi==0?"a_segmentStart":"a_segmentEnd", pt.x+10, pt.y-7+pi*16);
+        ctx.fillText(pi==0 ? "a_segmentStart" : "a_segmentEnd", pt.x + 16, pt.y - 8 + pi * 22);
         ctx.restore();
       });
     });
-    ctx.font = "bold 13px sans-serif";
+
+    // 설명 텍스트
+    ctx.save();
+    ctx.font = "bold 16px 'Pretendard', sans-serif";
     ctx.fillStyle = "#ff9";
-    ctx.fillText("작은 반투명 원, 사각형: 테이블 각 인스턴스 색상과 정확히 일치",72,410);
-    ctx.font = "bold 12px sans-serif";
-    ctx.fillStyle = "#ffe058";
-    ctx.fillText("Q0~Q3: 쿼드 4꼭짓점(연노랑), Q0→Q1→Q2→Q3→Q0로 얇은 사각형",72,428);
+    ctx.textAlign = "left";
+    ctx.fillText("△1 라벨은 Q0 근처에, △2 라벨은 Q2 근처에 사각형 내부에 배치됨", 72, 420);
+    ctx.font = "bold 14px 'Pretendard', sans-serif";
+    ctx.fillStyle = "#5ab4ff";
+    ctx.fillText("Q0~Q3: 쿼드 4꼭짓점, △1 = Q0-Q1-Q2, △2 = Q1-Q3-Q2", 72, 445);
+    ctx.fillStyle = "#ad6cf6";
+    ctx.fillText("점선: 각 사각형 내부 삼각형 분할 대각선(Q1–Q3)", 72, 470);
+    ctx.restore();
   </script>
 </body>
 </html>
