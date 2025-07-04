@@ -1,46 +1,43 @@
-import Map from "ol/Map";
-import View from "ol/View";
-import {LineString} from "ol/geom";
-import Feature from "ol/Feature";
-import VectorSource from "ol/source/Vector";
-import VectorLayer from "ol/layer/Vector";
-import {fromLonLat} from "ol/proj";
+function makeViewProjectionMatrix(center, resolution, width, height) {
+  // center: [x, y] (EPSG:3857 또는 원하는 좌표계)
+  // resolution: m/px (줌에 따라 달라짐)
+  // width, height: canvas 크기(px)
+  const sx = 2 / (resolution * width);
+  const sy = 2 / (resolution * height);
+  return new Float32Array([
+    sx,   0, 0, 0,
+     0, -sy, 0, 0,
+     0,   0, 1, 0,
+    -center[0]*sx, center[1]*sy, 0, 1
+  ]);
+}
 
-const coords = [
-  [-122.48369693756104, 37.83381888486939],
-  // ... (생략)
-  [-122.49378204345702, 37.83368330777276]
+
+// 해상도 테이블 예시 (줌별로 배열로 만들 수도 있음)
+const resolutions = [
+  156543.033928, 78271.516964, 39135.758482, 19567.879241,
+  9783.9396205, 4891.96981025, 2445.98490513, 1222.99245256,
+  611.496226281, 305.748113141, 152.87405657, 76.4370282852,
+  38.2185141426, 19.1092570713, 9.55462853565, 4.77731426782,
+  2.38865713391, 1.19432856696, 0.597164283478, 0.298582141739, 0.149291070869
 ];
 
-const mercatorCoords = coords.map(c => fromLonLat(c));
-function getCentroid(coords) {
-  let x = 0, y = 0;
-  for (const [cx, cy] of coords) { x += cx; y += cy; }
-  x /= coords.length;
-  y /= coords.length;
-  return [x, y];
-}
-const center = [1825927.7316762917, 6143091.089223046];
-const lineCentroid = getCentroid(mercatorCoords);
-const dx = center[0] - lineCentroid[0];
-const dy = center[1] - lineCentroid[1];
-const translatedCoords = mercatorCoords.map(([x, y]) => [x + dx, y + dy]);
+// 화면 크기
+const width = canvas.width;
+const height = canvas.height;
 
-const vectorLayer = new VectorLayer({
-  source: new VectorSource({
-    features: [
-      new Feature({
-        geometry: new LineString(translatedCoords)
-      })
-    ]
-  })
-});
+// 지도 중심 (예시: EPSG:3857의 서울)
+const center = [14135299, 4517287];
 
-const map = new Map({
-  target: "map",
-  layers: [vectorLayer],
-  view: new View({
-    center: center,
-    zoom: 9
-  })
+// 여러 해상도에서 행렬을 만들어보자!
+[2, 7, 12, 17].forEach(zoom => {
+  const resolution = resolutions[zoom];
+  const matrix = makeViewProjectionMatrix(center, resolution, width, height);
+
+  // 예시: WebGL uniform에 넘긴다고 가정
+  gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, matrix);
+
+  console.log(`zoom=${zoom}, resolution=${resolution}`);
+  console.log(matrix);
+  // → 실제로는 이 상태에서 draw 호출!
 });
