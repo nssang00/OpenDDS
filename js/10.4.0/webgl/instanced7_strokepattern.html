@@ -408,6 +408,19 @@ void main() {
       [-122.49378204345702, 37.83368330777276]
     ];
 
+    const zigzagCoordinates = [
+      [-122.493782, 37.833683], 
+      [-122.492782, 37.829921],  
+      [-122.491782, 37.832683],
+      [-122.490782, 37.829921],
+      [-122.489782, 37.832683],
+      [-122.488782, 37.829921],
+      [-122.487782, 37.832683],
+      [-122.486782, 37.829921],
+      [-122.485782, 37.832683],
+      [-122.483696, 37.829921], 
+    ];
+
     function makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, viewWidth, viewHeight, scale = 1, rotation = 0) {
       const baseRes = Math.max(bboxWidth / viewWidth, bboxHeight / viewHeight);
       const sx = 2 / (viewWidth * baseRes * scale);
@@ -654,11 +667,11 @@ void main() {
         ]
       },
       {
-        coordinates: mirrorCoordinates(coordinates, 'lon'),
+        coordinates: zigzagCoordinates,//mirrorCoordinates(coordinates, 'lon'),
         styles: [
-          dash0,
+          //dash0,
           { ...dash0, scale: 2 }, 
-          pattern0,
+          //pattern0,
           { ...pattern0, strokeWidth: 4}, 
         ]
       }
