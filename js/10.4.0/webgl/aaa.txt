@@ -1,3 +1,28 @@
+function makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, viewWidth, viewHeight, scale = 1, rotation = 0) {
+  const baseRes = Math.max(bboxWidth / viewWidth, bboxHeight / viewHeight);
+  const sx = 2 / (viewWidth * baseRes * scale);
+  const sy = 2 / (viewHeight * baseRes * scale);
+
+  const cosR = Math.cos(rotation);
+  const sinR = Math.sin(rotation);
+
+  return new Float32Array([
+    sx * cosR,  sx * sinR, 0, 0,
+   -sy * sinR,  sy * cosR, 0, 0,
+    0,          0,         1, 0,
+   -centerX * sx * cosR + centerY * sy * sinR,
+   -centerX * sx * sinR - centerY * sy * cosR,
+    0, 1
+  ]);
+}
+
+// 45도 회전 (라디안)
+const rotation = Math.PI / 4;
+const proj = makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, viewWidth, viewHeight, 1, rotation);
+
+function createProjectionMatrix(scale, rotation = 0) {
+  return makeOrthoProjectionMatrix((minLon + maxLon) / 2, (minLat + maxLat) / 2, maxLon - minLon, maxLat - minLat, canvas.width, canvas.height, scale, rotation);
+}
 
 const lons = coordinates.map(c => c[0]);
 const lats = coordinates.map(c => c[1]);
