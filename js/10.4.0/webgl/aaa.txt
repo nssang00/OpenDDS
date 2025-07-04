@@ -1,3 +1,28 @@
+const lons = coordinates.map(c => c[0]);
+const lats = coordinates.map(c => c[1]);
+const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+const centerX = (minLon + maxLon) / 2;
+const centerY = (minLat + maxLat) / 2;
+
+const width = canvas.width, height = canvas.height;
+const bboxWidth = maxLon - minLon, bboxHeight = maxLat - minLat;
+const baseResolution = Math.max(bboxWidth / width, bboxHeight / height);
+
+let resolution = baseResolution;
+function makeOrthoProjectionMatrix(centerX, centerY, width, height, resolution) {
+  const sx = 2 / (width * resolution);
+  const sy = 2 / (height * resolution);
+  return new Float32Array([
+    sx,  0, 0, 0,
+     0, sy, 0, 0,
+     0,  0, 1, 0,
+    -centerX * sx, -centerY * sy, 0, 1
+  ]);
+}
+
+
+
 const width = canvas.width, height = canvas.height;
 const bboxWidth = maxLon - minLon, bboxHeight = maxLat - minLat;
 const resX = bboxWidth / width, resY = bboxHeight / height;
