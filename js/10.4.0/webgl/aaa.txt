@@ -1,3 +1,5 @@
+// 좌표배열을 key, {buffer, instanceCount}를 value로 저장
+const bufferCache = new WeakMap();
 function getOrCreateGLBuffer(coords) {
   // 이미 캐시에 있으면 바로 반환
   if (bufferCache.has(coords)) {
