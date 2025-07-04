@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>OpenLayers-style Join/Cap (OL 함수명 + angleTangentSum)</title>
+  <title>webgl instanced drawing</title>
   <style>
     html,body,canvas {margin:0;width:100vw;height:100vh;display:block;background:#111;}
   </style>
@@ -721,7 +721,7 @@ void main() {
   
       features.forEach(feature => {
         const { buffer, instanceCount } = getOrCreateBuffer(feature.coordinates);
-      // 버퍼 바인딩
+        // 버퍼 바인딩
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         bindInstanceAttributes(instanceAttributes, 1);
         
