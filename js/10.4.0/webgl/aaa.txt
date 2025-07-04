@@ -1,3 +1,41 @@
+function getOrCreateGLBuffer(coords) {
+  // 이미 캐시에 있으면 바로 반환
+  if (bufferCache.has(coords)) {
+    return bufferCache.get(coords);
+  }
+  // 새로 생성 (좌표 → 인스턴스 데이터 → 버퍼)
+  const { instanceData, instanceCount } = createInstanceData(coords);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+
+  // 캐시에 저장 (좌표 참조가 바뀌지 않는 한 재사용)
+  bufferCache.set(coords, { buffer, instanceCount });
+  return { buffer, instanceCount };
+}
+
+
+features.forEach(feature => {
+  // 좌표배열을 기준으로 gl buffer/instanceCount 얻기
+  const { buffer, instanceCount } = getOrCreateGLBuffer(feature.coordinates);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  bindInstanceAttributes(instanceAttributes, 1);
+
+  feature.styles.forEach(style => {
+    setLineUniforms(style);
+    ext.drawElementsInstancedANGLE(
+      gl.TRIANGLES,
+      quadIndices.length,
+      gl.UNSIGNED_SHORT,
+      0,
+      instanceCount
+    );
+  });
+});
+
+
+
+
 // 1. 대표 스타일 개별 선언
 const solid0 = {
   scale: 1,
