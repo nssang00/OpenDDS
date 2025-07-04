@@ -407,26 +407,7 @@ void main() {
       [-122.49223709106445, 37.83337825839438],
       [-122.49378204345702, 37.83368330777276]
     ];
-/*
-    // ====== 투영행렬 생성 (2D 직교 투영) ======
-    function makeOrthoProjectionMatrix(minX, minY, maxX, maxY) {
-      const sx = 2 / (maxX - minX);
-      const sy = 2 / (maxY - minY);
-      const tx = -(maxX + minX) / (maxX - minX);
-      const ty = -(maxY + minY) / (maxY - minY);
-      return new Float32Array([
-        sx,  0, 0, 0,
-         0, sy, 0, 0,
-         0,  0, 1, 0,
-        tx, ty, 0, 1
-      ]);
-    }
-    const lons = coordinates.map(c => c[0]);
-    const lats = coordinates.map(c => c[1]);
-    const minLon = Math.min(...lons), maxLon = Math.max(...lons);
-    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-    const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat);
-*/
+
     function makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, viewWidth, viewHeight, scale = 1) {
       const baseRes = Math.max(bboxWidth / viewWidth, bboxHeight / viewHeight);
       const sx = 2 / (viewWidth * baseRes * scale);
@@ -444,7 +425,9 @@ void main() {
     const minLon = Math.min(...lons), maxLon = Math.max(...lons);
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
         
-    const projectionMatrix = makeOrthoProjectionMatrix((minLon + maxLon) / 2, (minLat + maxLat) / 2, maxLon - minLon, maxLat - minLat, canvas.width, canvas.height, 1);
+    funtion createProjectionMatrix(scale) {
+      return projectionMatrix = makeOrthoProjectionMatrix((minLon + maxLon) / 2, (minLat + maxLat) / 2, maxLon - minLon, maxLat - minLat, canvas.width, canvas.height, scale);
+    }
     
     function mirrorCoordinates(coords, axis = 'lat') {
       const lons = coords.map(c => c[0]);
@@ -665,7 +648,7 @@ void main() {
     bindAttrib("a_position", 2, 0, 0, 0);
 
     // ====== Static Uniforms ======
-    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, projectionMatrix);
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, createProjectionMatrix(1));
     gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
     gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
     gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
