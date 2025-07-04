@@ -1,3 +1,86 @@
+// 1. 대표 스타일 개별 선언
+const solid0 = {
+  scale: 1,
+  rotation: 0,
+  strokeColor: [0.08, 0.8, 1.0, 1.0],
+  strokeWidth: 12.0,
+  strokeOffset: -5.0,
+  strokeCap: 0.0,
+  strokeJoin: 0.0,
+  strokeMiterLimit: 10.0,
+};
+
+const dash0 = {
+  scale: 1,
+  rotation: 0,
+  strokeColor: [1.0, 0.0, 0.0, 1.0],
+  strokeWidth: 6.0,
+  strokeOffset: 5.0,
+  strokeCap: 4.0,
+  strokeJoin: 0.0,
+  strokeMiterLimit: 10.0,
+  dashPattern: [20, 5, 20, 5],
+  dashOffset: 0.0,
+  useStrokePattern: false,
+};
+
+const pattern0 = {
+  scale: 1,
+  rotation: 0,
+  strokeColor: [1.0, 1.0, 1.0, 1.0],
+  strokeWidth: 12.0,
+  strokeOffset: -5.0,
+  strokeCap: 0.0,
+  strokeJoin: 0.0,
+  strokeMiterLimit: 10.0,
+  useStrokePattern: true,
+  strokePatternTextureSpacing: 20,
+  strokePatternTextureStartOffset: 10,
+  strokePatternTextureOffset: [0, 0],
+};
+
+/////
+const features = [
+  {
+    coordinates: coordinates,
+    styles: [
+      solid0,                                 // 기본 solid 스타일
+      { ...solid0, scale: 2 },                // scale만 다르게
+      { ...solid0, rotation: Math.PI / 2 },   // rotation만 다르게
+    ]
+  },
+  {
+    coordinates: mirrorCoordinates(coordinates),
+    styles: [
+      dash0,                                  // 기본 dash 스타일
+      { ...dash0, scale: 2 },                 // scale만 다르게
+      pattern0,                               // 기본 pattern 스타일
+      { ...pattern0, strokeWidth: 16, strokeColor: [0,1,1,1] }, // 두께, 색상만 다르게
+    ]
+  }
+];
+
+
+//////
+features.forEach(feature => {
+  const { instanceData, instanceCount } = createInstanceData(feature.coordinates);
+  const instanceBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+  bindInstanceAttributes(instanceAttributes, 1);
+
+  feature.styles.forEach(style => {
+    setLineUniforms(style);
+    ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
+  });
+});
+
+
+//////////
+/////////;
+//////////
 function makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, viewWidth, viewHeight, scale = 1, rotation = 0) {
   const baseRes = Math.max(bboxWidth / viewWidth, bboxHeight / viewHeight);
   const sx = 2 / (viewWidth * baseRes * scale);
