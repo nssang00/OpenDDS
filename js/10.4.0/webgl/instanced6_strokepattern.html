@@ -171,16 +171,16 @@ uniform float u_strokePatternTextureSpacing;
 uniform float u_strokePatternTextureStartOffset;
 
 vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float startOffsetPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
-    float scaleFactor = sampleSize.y / lineWidth;
-    float currentLengthScaled = currentLengthPx * scaleFactor;
-    float spacingScaled = max(spacingPx * scaleFactor, sampleSize.x);
-    float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor + sampleSize.x, spacingScaled);
-    // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
-    uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
-    if (uCoordPx > sampleSize.x - 1.0) return vec4(0.0);
-    float vCoordPx = (0.5 - 0.5 * currentRadiusRatio) * sampleSize.y;
-    vec2  texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize; 
-    return texture2D(texture, texCoord);
+  float scaleFactor = sampleSize.y / lineWidth;
+  float currentLengthScaled = currentLengthPx * scaleFactor;
+  float spacingScaled = max(spacingPx * scaleFactor, sampleSize.x);
+  float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor + sampleSize.x, spacingScaled);
+  // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
+  uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
+  if (uCoordPx > sampleSize.x - 1.0) return vec4(0.0);
+  float vCoordPx = (0.5 - 0.5 * currentRadiusRatio) * sampleSize.y;
+  vec2  texCoord = (vec2(uCoordPx, vCoordPx) + textureOffset) / textureSize; 
+  return texture2D(texture, texCoord);
 }
 
 float getSingleDashDistance(float distance, float radius, float dashOffset, float dashLength, float dashLengthTotal, float capType, float lineWidth) {
@@ -441,7 +441,6 @@ void main() {
       }
     }
 
-    // ====== 인스턴스 데이터 ======
     function createInstanceData(coords) {
       const sx = canvas.width  / (maxLon - minLon);
       const sy = canvas.height / (maxLat - minLat);
@@ -474,8 +473,8 @@ void main() {
       const instanceCount = coords.length - 1;
       const instanceData = [];
 
-      let distances = 0;           // 픽셀 누적길이
-      let angleTangentSum = 0;  // 누적 tan((π-|θ|)/2)
+      let distances = 0; 
+      let angleTangentSum = 0;
 
       for (let i = 0; i < instanceCount; i++) {
         const p0 = coords[i];
@@ -561,8 +560,7 @@ void main() {
       gl.uniform1f(gl.getUniformLocation(program, "u_strokeMiterLimit"), style.strokeMiterLimit);
       
       gl.uniform1i(gl.getUniformLocation(program, "u_useStrokePattern"), style.useStrokePattern);    
-      
-      // --- uniform 등록
+
       if (style.useStrokePattern) {
         let width = 20;
         let height = 20;     
@@ -646,12 +644,7 @@ void main() {
     gl.useProgram(program);
 
     // ====== Static quad ======
-    const quadVertices = new Float32Array([
-      -1, -1,  //ㅣeft bottom
-      -1, 1,   // left top
-      1, -1,   // right bottom
-      1, 1    // right top
-    ]);
+    const quadVertices = new Float32Array([-1, -1, -1, 1, 1, -1, 1, 1]);//[left, bottom, left, top, right, bottom, right, top]
     const quadVertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
