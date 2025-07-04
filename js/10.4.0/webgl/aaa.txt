@@ -1,125 +1,37 @@
+
 const lons = coordinates.map(c => c[0]);
 const lats = coordinates.map(c => c[1]);
 const minLon = Math.min(...lons), maxLon = Math.max(...lons);
 const minLat = Math.min(...lats), maxLat = Math.max(...lats);
 const centerX = (minLon + maxLon) / 2;
 const centerY = (minLat + maxLat) / 2;
-
-const bboxWidth = maxLon - minLon;
-const bboxHeight = maxLat - minLat;
 const width = canvas.width, height = canvas.height;
-const baseResolution = Math.max(bboxWidth / width, bboxHeight / height); // "기본 해상도"
-let resolution = 1; // ← 기본값 1이 "딱 맞게"!
 
-function makeOrthoProjectionMatrix(centerX, centerY, width, height, resolution) {
-  // baseResolution * resolution: 실제 적용 해상도
-  const sx = 2 / (width * baseResolution * resolution);
-  const sy = 2 / (height * baseResolution * resolution);
+// 3. 심플 프로젝션 함수 (scale만 받아서)
+function makeOrthoProjectionMatrix(centerX, centerY, minX, minY, maxX, maxY, width, height, scale) {
+  // "데이터 전체가 딱 맞게"의 기본 배율
+  const bboxWidth = maxX - minX;
+  const bboxHeight = maxY - minY;
+  const baseRes = Math.max(bboxWidth / width, bboxHeight / height);
+  const sx = 2 / (width * baseRes * scale);
+  const sy = 2 / (height * baseRes * scale);
   return new Float32Array([
-    sx,  0, 0, 0,
-     0, sy, 0, 0,
-     0,  0, 1, 0,
+    sx, 0, 0, 0,
+    0, sy, 0, 0,
+    0, 0, 1, 0,
     -centerX * sx, -centerY * sy, 0, 1
   ]);
 }
 
-
-
-const width = canvas.width, height = canvas.height;
-const bboxWidth = maxLon - minLon, bboxHeight = maxLat - minLat;
-const resX = bboxWidth / width, resY = bboxHeight / height;
-const baseResolution = Math.max(resX, resY);
-
-let resolution = baseResolution;
-
-function makeOrthoProjectionMatrix(minX, minY, maxX, maxY, resolution) {
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const sx = 2 / (width * resolution);
-  const sy = 2 / (height * resolution);
-  return new Float32Array([
-    sx,  0, 0, 0,
-     0, sy, 0, 0,
-     0,  0, 1, 0,
-    -centerX * sx, -centerY * sy, 0, 1
-  ]);
-}
-
+// 4. draw 함수에서 사용
 function updateMatrixAndRedraw() {
-  const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat, resolution);
-  gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
-  // ... redraw 그대로
-}
-
-// zoom in/out 이벤트
-document.getElementById('zoom-in').onclick = () => {
-  resolution /= 2;
-  updateMatrixAndRedraw();
-};
-document.getElementById('zoom-out').onclick = () => {
-  resolution *= 2;
-  updateMatrixAndRedraw();
-};
-
-////////
-
-
-
-function makeViewProjectionMatrix(center, resolution, width, height) {
-  // center: [x, y] (EPSG:3857 또는 원하는 좌표계)
-  // resolution: m/px (줌에 따라 달라짐)
-  // width, height: canvas 크기(px)
-  const sx = 2 / (resolution * width);
-  const sy = 2 / (resolution * height);
-  return new Float32Array([
-    sx,   0, 0, 0,
-     0, -sy, 0, 0,
-     0,   0, 1, 0,
-    -center[0]*sx, center[1]*sy, 0, 1
-  ]);
-}
-
-function makeOrthoProjectionMatrix(minX, minY, maxX, maxY, resolution) {
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const width = (maxX - minX) * resolution;
-  const height = (maxY - minY) * resolution;
-  const sx = 2 / width;
-  const sy = 2 / height;
-  // 중심을 (0,0)에 오게 만드는 트랜슬레이션
-  return new Float32Array([
-    sx,  0, 0, 0,
-     0, sy, 0, 0,
-     0,  0, 1, 0,
-    -centerX * sx, -centerY * sy, 0, 1
-  ]);
-}
-
-// 해상도 테이블 예시 (줌별로 배열로 만들 수도 있음)
-const resolutions = [
-  156543.033928, 78271.516964, 39135.758482, 19567.879241,
-  9783.9396205, 4891.96981025, 2445.98490513, 1222.99245256,
-  611.496226281, 305.748113141, 152.87405657, 76.4370282852,
-  38.2185141426, 19.1092570713, 9.55462853565, 4.77731426782,
-  2.38865713391, 1.19432856696, 0.597164283478, 0.298582141739, 0.149291070869
-];
-
-// 화면 크기
-const width = canvas.width;
-const height = canvas.height;
-
-// 지도 중심 (예시: EPSG:3857의 서울)
-const center = [14135299, 4517287];
-
-// 여러 해상도에서 행렬을 만들어보자!
-[2, 7, 12, 17].forEach(zoom => {
-  const resolution = resolutions[zoom];
-  const matrix = makeViewProjectionMatrix(center, resolution, width, height);
-
-  // 예시: WebGL uniform에 넘긴다고 가정
+  const matrix = makeOrthoProjectionMatrix(centerX, centerY, minLon, minLat, maxLon, maxLat, width, height, scale);
   gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, matrix);
+  // ... draw 코드는 기존 그대로
+}
 
-  console.log(`zoom=${zoom}, resolution=${resolution}`);
-  console.log(matrix);
-  // → 실제로는 이 상태에서 draw 호출!
-});
+// 5. zoom in/out 버튼 (scale 배율)
+document.getElementById('zoom-in').onclick = () => { scale *= 0.5; updateMatrixAndRedraw(); };
+document.getElementById('zoom-out').onclick = () => { scale *= 2; updateMatrixAndRedraw(); };
+
+updateMatrixAndRedraw();
