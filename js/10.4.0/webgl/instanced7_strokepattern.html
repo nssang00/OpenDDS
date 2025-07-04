@@ -663,7 +663,8 @@ void main() {
           solid0,
           { ...solid0, scale: 2, strokeColor: [1.0, 0.0, 0.0, 1.0] },
           //{ ...solid0, scale: 2 },
-          //{ ...dash0, rotation:90 * (Math.PI / 180) }, 
+          { ...dash0, dashPattern: [3,40,3,40], strokeColor: [0.5, 0.5, 0.0, 1.0]},
+          { ...dash0, dashPattern: [3,40,3,40], strokeColor: [0.5, 1.0, 0.5, 1.0],dashOffset: 5}, 
         ]
       },
       {
@@ -672,7 +673,7 @@ void main() {
           //dash0,
           { ...dash0, scale: 2 }, 
           //pattern0,
-          { ...pattern0, strokeWidth: 4}, 
+          { ...pattern0, strokeWidth: 8, rotation:90 * (Math.PI / 180)}, 
         ]
       }
     ];
