@@ -408,15 +408,21 @@ void main() {
       [-122.49378204345702, 37.83368330777276]
     ];
 
-    function makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, viewWidth, viewHeight, scale = 1) {
+    function makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, viewWidth, viewHeight, scale = 1, rotation = 0) {
       const baseRes = Math.max(bboxWidth / viewWidth, bboxHeight / viewHeight);
       const sx = 2 / (viewWidth * baseRes * scale);
       const sy = 2 / (viewHeight * baseRes * scale);
+
+      const cosR = Math.cos(rotation);
+      const sinR = Math.sin(rotation);
+
       return new Float32Array([
-        sx, 0, 0, 0,
-        0, sy, 0, 0,
-        0, 0, 1, 0,
-        -centerX * sx, -centerY * sy, 0, 1
+        sx * cosR,  sx * sinR, 0, 0,
+      -sy * sinR,  sy * cosR, 0, 0,
+        0,          0,         1, 0,
+      -centerX * sx * cosR + centerY * sy * sinR,
+      -centerX * sx * sinR - centerY * sy * cosR,
+        0, 1
       ]);
     }
     
@@ -425,8 +431,8 @@ void main() {
     const minLon = Math.min(...lons), maxLon = Math.max(...lons);
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
         
-    function createProjectionMatrix(scale) {
-      return projectionMatrix = makeOrthoProjectionMatrix((minLon + maxLon) / 2, (minLat + maxLat) / 2, maxLon - minLon, maxLat - minLat, canvas.width, canvas.height, scale);
+    function createProjectionMatrix(scale = 1, rotation = 0) {
+      return projectionMatrix = makeOrthoProjectionMatrix((minLon + maxLon) / 2, (minLat + maxLat) / 2, maxLon - minLon, maxLat - minLat, canvas.width, canvas.height, scale, rotation);
     }
     
     function mirrorCoordinates(coords, axis = 'lat') {
@@ -545,7 +551,7 @@ void main() {
     
     function setLineUniforms(style) {
       // ====== Static Uniforms ======
-      gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, createProjectionMatrix(style.scale));
+      gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, createProjectionMatrix(style.scale, style.rotation));
       gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
       gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
       gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
@@ -598,6 +604,7 @@ void main() {
     const lineStyle0 = [
       {//solid
         scale:1,
+        rotation:0,
         strokeColor: [0.08, 0.8, 1.0, 1.0],
         strokeWidth: 12.0,
         strokeOffset: -5.0,
@@ -606,7 +613,8 @@ void main() {
         strokeMiterLimit: 10.0,
       },        
       {//dash
-        scale:1,        
+        scale:1,
+        rotation:0,
         strokeColor: [1.0, 0.0, 0.0, 1.0],
         strokeWidth: 6.0,
         strokeOffset: 5.0,
@@ -618,7 +626,8 @@ void main() {
         useStrokePattern: false,
       },
       {//pattern
-        scale:1,        
+        scale:1,
+        rotation:0,
         strokeColor: [1.0, 1.0, 1.0, 1.0],
         strokeWidth: 12.0,
         strokeOffset: -5.0,
@@ -634,10 +643,15 @@ void main() {
 
     const lineStyle1 = lineStyle0.map(style => ({
       ...style,
-      scale: 2
+      scale: 2,
     }));
 
-    const lineStyles = [lineStyle0, lineStyle1];
+    const lineStyle2 = lineStyle0.map(style => ({
+      ...style,
+      rotation: 90 * (Math.PI / 180),
+    }));
+
+    const lineStyles = [lineStyle0, lineStyle1, lineStyle2];
 
     const program = getProgram(fragmentShaderSource, vertexShaderSource);
 
@@ -661,6 +675,7 @@ void main() {
     const coordinatesData = [
       coordinates,
       mirrorCoordinates(coordinates),
+      coordinates,
     ];    
 
     const instanceBuffers = coordinatesData.map(coordinates => {
