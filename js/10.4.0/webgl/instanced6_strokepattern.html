@@ -597,7 +597,7 @@ void main() {
       }
     }
 
-    const lineStyles = [
+    const lineStyle0 = [
       {//solid
         scale:1,
         strokeColor: [0.08, 0.8, 1.0, 1.0],
@@ -609,6 +609,43 @@ void main() {
       },        
       {//dash
         scale:1,        
+        strokeColor: [1.0, 0.0, 0.0, 1.0],
+        strokeWidth: 6.0,
+        strokeOffset: 5.0,
+        strokeCap: 4.0,//Round
+        strokeJoin: 0.0,//Round
+        strokeMiterLimit: 10.0,
+        dashPattern: [20,5,20,5],
+        dashOffset: 0.0,
+        useStrokePattern: false,
+      },
+      {//pattern
+        scale:1,        
+        strokeColor: [1.0, 1.0, 1.0, 1.0],
+        strokeWidth: 12.0,
+        strokeOffset: -5.0,
+        strokeCap: 0.0,//Round
+        strokeJoin: 0.0,//Round
+        strokeMiterLimit: 10.0,
+        useStrokePattern: true,
+        strokePatternTextureSpacing: 20,
+        strokePatternTextureStartOffset: 10,
+        strokePatternTextureOffset: [0, 0],        
+      },
+    ];
+
+    const lineStyle1 = [
+      {//solid
+        scale:2,
+        strokeColor: [0.08, 0.8, 1.0, 1.0],
+        strokeWidth: 12.0,
+        strokeOffset: -5.0,
+        strokeCap: 0.0,//Round
+        strokeJoin: 0.0,//Round
+        strokeMiterLimit: 10.0,
+      },        
+      {//dash
+        scale:2,        
         strokeColor: [1.0, 0.0, 0.0, 1.0],
         strokeWidth: 6.0,
         strokeOffset: 5.0,
@@ -633,6 +670,8 @@ void main() {
         strokePatternTextureOffset: [0, 0],        
       },
     ];    
+
+    const lineStyles = [lineStyle0, lineStyle1];
 
     const program = getProgram(fragmentShaderSource, vertexShaderSource);
 
@@ -683,7 +722,7 @@ void main() {
       gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
       bindInstanceAttributes(instanceAttributes, 1);
     
-      lineStyles.forEach(style => {
+      lineStyles[index].forEach(style => {
         setLineUniforms(style);//Dynamic Uniforms
         ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
       });
