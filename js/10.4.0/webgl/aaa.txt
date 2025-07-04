@@ -13,19 +13,20 @@ function makeViewProjectionMatrix(center, resolution, width, height) {
 }
 
 function makeOrthoProjectionMatrix(minX, minY, maxX, maxY, resolution) {
-  // resolution=1이면 꽉 차게, resolution>1이면 축소, resolution<1이면 확대
-  const sx = 2 / ((maxX - minX) * resolution);
-  const sy = 2 / ((maxY - minY) * resolution);
-  const tx = -(maxX + minX) / (maxX - minX);
-  const ty = -(maxY + minY) / (maxY - minY);
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const width = (maxX - minX) * resolution;
+  const height = (maxY - minY) * resolution;
+  const sx = 2 / width;
+  const sy = 2 / height;
+  // 중심을 (0,0)에 오게 만드는 트랜슬레이션
   return new Float32Array([
     sx,  0, 0, 0,
      0, sy, 0, 0,
      0,  0, 1, 0,
-    tx, ty, 0, 1
+    -centerX * sx, -centerY * sy, 0, 1
   ]);
 }
-
 
 // 해상도 테이블 예시 (줌별로 배열로 만들 수도 있음)
 const resolutions = [
