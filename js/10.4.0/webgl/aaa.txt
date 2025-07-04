@@ -3,18 +3,11 @@ const lons = coordinates.map(c => c[0]);
 const lats = coordinates.map(c => c[1]);
 const minLon = Math.min(...lons), maxLon = Math.max(...lons);
 const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-const centerX = (minLon + maxLon) / 2;
-const centerY = (minLat + maxLat) / 2;
-const width = canvas.width, height = canvas.height;
 
-// 3. 심플 프로젝션 함수 (scale만 받아서)
-function makeOrthoProjectionMatrix(centerX, centerY, minX, minY, maxX, maxY, width, height, scale) {
-  // "데이터 전체가 딱 맞게"의 기본 배율
-  const bboxWidth = maxX - minX;
-  const bboxHeight = maxY - minY;
-  const baseRes = Math.max(bboxWidth / width, bboxHeight / height);
-  const sx = 2 / (width * baseRes * scale);
-  const sy = 2 / (height * baseRes * scale);
+function makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, viewWidth, viewHeight, scale = 1) {
+  const baseRes = Math.max(bboxWidth / viewWidth, bboxHeight / viewHeight);
+  const sx = 2 / (viewWidth * baseRes * scale);
+  const sy = 2 / (viewHeight * baseRes * scale);
   return new Float32Array([
     sx, 0, 0, 0,
     0, sy, 0, 0,
@@ -22,6 +15,24 @@ function makeOrthoProjectionMatrix(centerX, centerY, minX, minY, maxX, maxY, wid
     -centerX * sx, -centerY * sy, 0, 1
   ]);
 }
+
+const projectionMatrix = makeOrthoProjectionMatrix((minLon + maxLon) / 2, (minLat + maxLat) / 2, maxLon - minLon, maxLat - minLat, canvas.width, canvas.height, scale);
+
+  gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, matrix);
+  // ...draw
+}
+
+document.getElementById('zoom-in').onclick = () => { scale *= 0.5; updateMatrixAndRedraw(); };
+document.getElementById('zoom-out').onclick = () => { scale *= 2; updateMatrixAndRedraw(); };
+
+// 리사이즈 대응 (optional)
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  updateMatrixAndRedraw();
+});
+
+updateMatrixAndRedraw(); // 최초 렌더링
 
 // 4. draw 함수에서 사용
 function updateMatrixAndRedraw() {
