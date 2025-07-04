@@ -545,6 +545,14 @@ void main() {
     }
     
     function setLineUniforms(style) {
+      // ====== Static Uniforms ======
+      gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, createProjectionMatrix(style.scale));
+      gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
+      gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
+      gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
+      gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
+      gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
+
       gl.uniform4f(gl.getUniformLocation(program, "u_strokeColor"), ...style.strokeColor);
       gl.uniform1f(gl.getUniformLocation(program, "u_strokeWidth"), style.strokeWidth);    
       gl.uniform1f(gl.getUniformLocation(program, "u_strokeOffset"), style.strokeOffset);
@@ -591,6 +599,7 @@ void main() {
 
     const lineStyles = [
       {//solid
+        scale:1,
         strokeColor: [0.08, 0.8, 1.0, 1.0],
         strokeWidth: 12.0,
         strokeOffset: -5.0,
@@ -599,6 +608,7 @@ void main() {
         strokeMiterLimit: 10.0,
       },        
       {//dash
+        scale:1,        
         strokeColor: [1.0, 0.0, 0.0, 1.0],
         strokeWidth: 6.0,
         strokeOffset: 5.0,
@@ -610,6 +620,7 @@ void main() {
         useStrokePattern: false,
       },
       {//pattern
+        scale:2,        
         strokeColor: [1.0, 1.0, 1.0, 1.0],
         strokeWidth: 12.0,
         strokeOffset: -5.0,
@@ -646,15 +657,6 @@ void main() {
     
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     bindAttrib("a_position", 2, 0, 0, 0);
-
-    // ====== Static Uniforms ======
-    gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, createProjectionMatrix(1));
-    gl.uniform2f(gl.getUniformLocation(program, "u_viewportSizePx"), canvas.width, canvas.height);
-    gl.uniform1f(gl.getUniformLocation(program, "u_pixelRatio"), window.devicePixelRatio || 1);
-    gl.uniform1f(gl.getUniformLocation(program, "u_globalAlpha"), 1.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_depth"), 0.0);
-    gl.uniform1f(gl.getUniformLocation(program, "u_resolution"), 1.0);
-
 
     const coordinatesData = [
       coordinates,
