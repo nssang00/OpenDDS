@@ -634,42 +634,10 @@ void main() {
       },
     ];
 
-    const lineStyle1 = [
-      {//solid
-        scale:2,
-        strokeColor: [0.08, 0.8, 1.0, 1.0],
-        strokeWidth: 12.0,
-        strokeOffset: -5.0,
-        strokeCap: 0.0,//Round
-        strokeJoin: 0.0,//Round
-        strokeMiterLimit: 10.0,
-      },        
-      {//dash
-        scale:2,        
-        strokeColor: [1.0, 0.0, 0.0, 1.0],
-        strokeWidth: 6.0,
-        strokeOffset: 5.0,
-        strokeCap: 4.0,//Round
-        strokeJoin: 0.0,//Round
-        strokeMiterLimit: 10.0,
-        dashPattern: [20,5,20,5],
-        dashOffset: 0.0,
-        useStrokePattern: false,
-      },
-      {//pattern
-        scale:2,        
-        strokeColor: [1.0, 1.0, 1.0, 1.0],
-        strokeWidth: 12.0,
-        strokeOffset: -5.0,
-        strokeCap: 0.0,//Round
-        strokeJoin: 0.0,//Round
-        strokeMiterLimit: 10.0,
-        useStrokePattern: true,
-        strokePatternTextureSpacing: 20,
-        strokePatternTextureStartOffset: 10,
-        strokePatternTextureOffset: [0, 0],        
-      },
-    ];    
+    const lineStyle1 = lineStyle0.map(style => ({
+      ...style,
+      scale: 2
+    }));
 
     const lineStyles = [lineStyle0, lineStyle1];
 
