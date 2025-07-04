@@ -16,7 +16,7 @@ function makeOrthoProjectionMatrix(centerX, centerY, bboxWidth, bboxHeight, view
   ]);
 }
 
-const projectionMatrix = makeOrthoProjectionMatrix((minLon + maxLon) / 2, (minLat + maxLat) / 2, maxLon - minLon, maxLat - minLat, canvas.width, canvas.height, scale);
+const projectionMatrix = makeOrthoProjectionMatrix((minLon + maxLon) / 2, (minLat + maxLat) / 2, maxLon - minLon, maxLat - minLat, canvas.width, canvas.height, 1);
 
   gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, matrix);
   // ...draw
