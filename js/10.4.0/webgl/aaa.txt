@@ -1,3 +1,43 @@
+const width = canvas.width, height = canvas.height;
+const bboxWidth = maxLon - minLon, bboxHeight = maxLat - minLat;
+const resX = bboxWidth / width, resY = bboxHeight / height;
+const baseResolution = Math.max(resX, resY);
+
+let resolution = baseResolution;
+
+function makeOrthoProjectionMatrix(minX, minY, maxX, maxY, resolution) {
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const sx = 2 / (width * resolution);
+  const sy = 2 / (height * resolution);
+  return new Float32Array([
+    sx,  0, 0, 0,
+     0, sy, 0, 0,
+     0,  0, 1, 0,
+    -centerX * sx, -centerY * sy, 0, 1
+  ]);
+}
+
+function updateMatrixAndRedraw() {
+  const u_projectionMatrix = makeOrthoProjectionMatrix(minLon, minLat, maxLon, maxLat, resolution);
+  gl.uniformMatrix4fv(gl.getUniformLocation(program, "u_projectionMatrix"), false, u_projectionMatrix);
+  // ... redraw 그대로
+}
+
+// zoom in/out 이벤트
+document.getElementById('zoom-in').onclick = () => {
+  resolution /= 2;
+  updateMatrixAndRedraw();
+};
+document.getElementById('zoom-out').onclick = () => {
+  resolution *= 2;
+  updateMatrixAndRedraw();
+};
+
+////////
+
+
+
 function makeViewProjectionMatrix(center, resolution, width, height) {
   // center: [x, y] (EPSG:3857 또는 원하는 좌표계)
   // resolution: m/px (줌에 따라 달라짐)
