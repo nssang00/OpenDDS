@@ -5,14 +5,16 @@ const minLat = Math.min(...lats), maxLat = Math.max(...lats);
 const centerX = (minLon + maxLon) / 2;
 const centerY = (minLat + maxLat) / 2;
 
+const bboxWidth = maxLon - minLon;
+const bboxHeight = maxLat - minLat;
 const width = canvas.width, height = canvas.height;
-const bboxWidth = maxLon - minLon, bboxHeight = maxLat - minLat;
-const baseResolution = Math.max(bboxWidth / width, bboxHeight / height);
+const baseResolution = Math.max(bboxWidth / width, bboxHeight / height); // "기본 해상도"
+let resolution = 1; // ← 기본값 1이 "딱 맞게"!
 
-let resolution = baseResolution;
 function makeOrthoProjectionMatrix(centerX, centerY, width, height, resolution) {
-  const sx = 2 / (width * resolution);
-  const sy = 2 / (height * resolution);
+  // baseResolution * resolution: 실제 적용 해상도
+  const sx = 2 / (width * baseResolution * resolution);
+  const sy = 2 / (height * baseResolution * resolution);
   return new Float32Array([
     sx,  0, 0, 0,
      0, sy, 0, 0,
