@@ -712,13 +712,6 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     bindAttrib("a_position", 2, 0, 0, 0);
 
-    canvas.addEventListener("wheel", (e) => {
-      e.preventDefault();
-    
-      scale = Math.max(0.2, Math.min(10.0, currentScale - Math.sign(e.deltaY) * 0.2));
-      render(scale);
-    }, { passive: false });
-    
     function render(scale) {
       // ====== Draw ======
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -739,6 +732,14 @@ void main() {
         });
       });
     }
+
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+    
+      scale = Math.max(0.2, Math.min(10.0, currentScale - Math.sign(e.deltaY) * 0.2));
+      render(scale);
+    }, { passive: false });
+    
     render(1.0);
   </script>
 </body>
