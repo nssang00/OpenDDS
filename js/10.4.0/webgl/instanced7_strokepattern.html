@@ -381,8 +381,13 @@ void main() {
       { name: "a_distance",     size: 1 },
       { name: "a_joinAngles",   size: 2 },
       { name: "a_id",           size: 1 },
-      { name: "a_angleTangentSum", size: 1 } // 추가!
+      { name: "a_angleTangentSum", size: 1 } 
     ];
+
+    const optionalAttributes = [
+  { name: "a_measureStart", size: 1 },
+  { name: "a_measureEnd",   size: 1 }
+];
 
     const coordinates = [
       [-122.48369693756104, 37.83381888486939],
@@ -533,12 +538,32 @@ void main() {
         instanceCount
       };
     }
+
+    function createOptionalData(instanceCount) {
+  const optionalData = new Float32Array(instanceCount * optionalAttributes.length);
+  for (let i = 0; i < instanceCount; ++i) {
+    // optionalData[i*2+0] = 0, optionalData[i*2+1] = 0
+  }
+  return optionalData;
+}
  
     function bindAttrib(name, size, stride, offset, div) {
       const location = gl.getAttribLocation(program, name);
       gl.enableVertexAttribArray(location);
       gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, offset);
       ext.vertexAttribDivisorANGLE(location, div);
+    }
+
+    function disableAttrib(name, value = 0) {
+      const loc = gl.getAttribLocation(program, name);
+      gl.disableVertexAttribArray(loc);
+      gl.vertexAttrib1f(loc, value);
+    }
+
+    function disableAttributes(attribs, value = 0) {
+      for (const attr of attribs) {
+        disableAttrib(attr.name, value);
+      }
     }
     
     function bindInstanceAttributes(attribs, divisor = 1) {
@@ -688,6 +713,13 @@ void main() {
       const buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+
+      /*
+      const optionalData = createOptionalData();
+      const optionalBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, optionalBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, optionalData, gl.STATIC_DRAW);
+      */
     
       bufferCache.set(coords, { buffer, instanceCount });
       return { buffer, instanceCount };
@@ -725,6 +757,15 @@ void main() {
         // Bind instance buffer
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         bindInstanceAttributes(instanceAttributes, 1);
+        /*
+        let useOptional = false;
+        gl.bindBuffer(gl.ARRAY_BUFFER, optionalBuffer);
+        if (!useOptional) {
+          disableAttributes(optionalAttributes, 0);
+        } else {
+          bindInstanceAttributes(optionalAttributes, 1);
+        }
+        */
         
         feature.styles.forEach(style => {
           setLineUniforms({ ...style, scale: scale });
@@ -739,7 +780,7 @@ void main() {
       scale = Math.max(0.2, Math.min(10.0, currentScale - Math.sign(e.deltaY) * 0.2));
       render(scale);
     }, { passive: false });
-    
+
     render(1.0);
   </script>
 </body>
