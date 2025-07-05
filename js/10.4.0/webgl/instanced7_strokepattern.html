@@ -709,7 +709,7 @@ void main() {
       {
         coordinates: zigzagCoordinates,//mirrorCoordinates(coordinates, 'lon'),
         styles: [
-          dash0,
+        { ...dash0, dashPattern: [20,5,20,5], strokeColor: [0.8, 0.5, 1.0, 1.0]},
           //pattern0,
           { ...pattern0, strokeWidth: 8, rotation:90 * (Math.PI / 180)}, 
         ]
