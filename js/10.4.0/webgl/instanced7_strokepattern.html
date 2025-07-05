@@ -712,17 +712,14 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
     bindAttrib("a_position", 2, 0, 0, 0);
 
-    let currentScale = 1.0;
-
     canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
     
-      const delta = Math.sign(e.deltaY);
-      currentScale = Math.max(0.2, Math.min(10.0, currentScale - delta * 0.2));
-      render();
+      scale = Math.max(0.2, Math.min(10.0, currentScale - Math.sign(e.deltaY) * 0.2));
+      render(scale);
     }, { passive: false });
     
-    function render() {
+    function render(scale) {
       // ====== Draw ======
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.clearColor(0, 0, 0, 0);
@@ -737,12 +734,12 @@ void main() {
         bindInstanceAttributes(instanceAttributes, 1);
         
         feature.styles.forEach(style => {
-          setLineUniforms({ ...style, scale: currentScale });
+          setLineUniforms({ ...style, scale: scale });
           ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
         });
       });
     }
-    render();
+    render(1.0);
   </script>
 </body>
 </html>
