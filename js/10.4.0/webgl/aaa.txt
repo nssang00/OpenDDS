@@ -1,3 +1,34 @@
+function getCoordinatesKey(coords) {
+  // 좌표 배열을 JSON 문자열로 변환 (길면 해시로 대체 가능)
+  return JSON.stringify(coords);
+}
+
+features.forEach(feature => {
+  const coordKey = getCoordinatesKey(feature.coordinates);
+
+  let instanceData, instanceCount, instanceBuffer;
+  if (bufferCache.has(coordKey)) {
+    ({ instanceBuffer, instanceCount } = bufferCache.get(coordKey));
+  } else {
+    // 새로 생성
+    ({ instanceData, instanceCount } = createInstanceData(feature.coordinates));
+    instanceBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
+    bufferCache.set(coordKey, { instanceBuffer, instanceCount });
+  }
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+  bindInstanceAttributes(instanceAttributes, 1);
+
+  feature.styles.forEach(style => {
+    setLineUniforms(style);
+    ext.drawElementsInstancedANGLE(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0, instanceCount);
+  });
+});
+
+//////
+
 function getOrCreateBuffer(coords) {
   // 객체 자체를 키로 사용
   if (bufferCache.has(coords)) {
