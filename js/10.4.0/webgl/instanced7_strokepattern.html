@@ -25,6 +25,8 @@ precision mediump float;
 
 attribute vec2  a_segmentStart;
 attribute vec2  a_segmentEnd;
+attribute float a_measureStart;
+attribute float a_measureEnd;
 attribute vec2  a_position;
 attribute float a_distance;
 attribute vec2  a_joinAngles;
@@ -55,6 +57,8 @@ varying vec4  v_hitColor;
 varying float v_angleTangentSum;
 varying float v_segmentLength;
 varying vec2  v_segmentTangent;
+varying float v_measureStart;
+varying float v_measureEnd;
 
 vec2 worldToPx(vec2 worldPos) {
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
@@ -128,6 +132,8 @@ void main() {
   v_angleTangentSum = a_angleTangentSum;
   v_segmentLength = length(segmentEndPx - segmentStartPx);
   v_segmentTangent = tangentPx;
+  v_measureStart = a_measureStart;
+  v_measureEnd = a_measureEnd;
 }
 `;
 
@@ -148,6 +154,8 @@ varying float v_distanceOffsetPx;
 varying float v_angleTangentSum;
 varying float v_segmentLength;
 varying vec2  v_segmentTangent;
+varying float v_measureStart;
+varying float v_measureEnd;
 
 uniform float u_strokeWidth;
 uniform sampler2D u_pattern;
@@ -169,6 +177,10 @@ uniform vec2  u_strokePatternTextureOffset;
 uniform vec2 u_strokePatternTextureSampleSize;
 uniform float u_strokePatternTextureSpacing;
 uniform float u_strokePatternTextureStartOffset;
+
+const float PI = 3.141592653589793238;
+const float TWO_PI = 2.0 * PI;
+float currentLineMetric = 0.; // an actual value will be used in the stroke shaders
 
 vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset, vec2 sampleSize, float spacingPx, float startOffsetPx, float currentLengthPx, float currentRadiusRatio, float lineWidth) {
   float scaleFactor = sampleSize.y / lineWidth;
