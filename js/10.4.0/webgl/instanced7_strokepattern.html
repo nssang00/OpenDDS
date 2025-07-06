@@ -27,7 +27,7 @@ attribute vec2  a_segmentStart;
 attribute vec2  a_segmentEnd;
 attribute float a_measureStart;
 attribute float a_measureEnd;
-attribute vec2  a_position;
+attribute vec2  a_quadCorner;
 attribute float a_distance;
 attribute vec2  a_joinAngles;
 attribute float a_id;
@@ -109,11 +109,11 @@ void main() {
   segmentStartPx = getOffsetPoint(segmentStartPx, normalPx, v_angleStart, u_strokeOffset);
   segmentEndPx = getOffsetPoint(segmentEndPx, normalPx, v_angleEnd, u_strokeOffset);
   
-  float normalDir  = a_position.y < 0.0 ?  1.0 : -1.0;
-  float tangentDir = a_position.x < 0.0 ?  1.0 : -1.0;
-  float angle = a_position.x < 0.0 ? v_angleStart : v_angleEnd;
+  float normalDir  = a_quadCorner.y < 0.0 ?  1.0 : -1.0;
+  float tangentDir = a_quadCorner.x < 0.0 ?  1.0 : -1.0;
+  float angle = a_quadCorner.x < 0.0 ? v_angleStart : v_angleEnd;
   vec2 joinDirection;  
-  vec2  positionPx = a_position.x < 0.0 ? segmentStartPx : segmentEndPx;
+  vec2  positionPx = a_quadCorner.x < 0.0 ? segmentStartPx : segmentEndPx;
 
   if (cos(angle) > 0.985 || isCap(angle)) {
     joinDirection = normalPx * normalDir - tangentPx * tangentDir;
@@ -754,7 +754,7 @@ void main() {
     
     // Set up vertex attributes
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
-    bindAttrib("a_position", 2, 0, 0, 0);
+    bindAttrib("a_quadCorner", 2, 0, 0, 0);
 
     function render(scale) {
       // ====== Draw ======
