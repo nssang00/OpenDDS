@@ -25,13 +25,15 @@ precision mediump float;
 
 attribute vec2  a_segmentStart;
 attribute vec2  a_segmentEnd;
-attribute float a_measureStart;
-attribute float a_measureEnd;
 attribute vec2  a_quadCorner;
 attribute float a_distance;
 attribute vec2  a_joinAngles;
-attribute float a_id;
+attribute float a_pickId;
 attribute float a_angleTangentSum;
+
+//optional
+attribute float a_measureStart;
+attribute float a_measureEnd;
 
 uniform mat4  u_projectionMatrix;
 uniform vec2  u_viewportSizePx;
@@ -128,7 +130,7 @@ void main() {
   v_segmentEnd   = segmentEndPx;
   v_distanceOffsetPx = a_distance / u_resolution - (u_strokeOffset * a_angleTangentSum);
   v_joinAngles = a_joinAngles;
-  v_hitColor = colorEncodeId(a_id);//kmg
+  v_hitColor = colorEncodeId(a_pickId);//kmg
   v_angleTangentSum = a_angleTangentSum;
   v_segmentLength = length(segmentEndPx - segmentStartPx);
   v_segmentTangent = tangentPx;
@@ -392,7 +394,7 @@ void main() {
       { name: "a_segmentEnd",   size: 2 },
       { name: "a_distance",     size: 1 },
       { name: "a_joinAngles",   size: 2 },
-      { name: "a_id",           size: 1 },
+      { name: "a_pickId",           size: 1 },
       { name: "a_angleTangentSum", size: 1 } 
     ];
 
@@ -532,7 +534,7 @@ void main() {
           p1[0], p1[1],            // a_segmentEnd
           distances,               // a_distance
           angle0, angle1,          // a_joinAngles
-          i,                       // a_id
+          i,                       // a_pickId
           angleTangentSum          // a_angleTangentSum 
         );
 
