@@ -22,7 +22,7 @@ precision highp float;
 #else
 precision mediump float;
 #endif
-
+//instance buffer(divisor = 1)
 attribute vec2  a_segmentStart;
 attribute vec2  a_segmentEnd;
 attribute float a_distance;
@@ -30,6 +30,7 @@ attribute vec2  a_joinAngles;
 attribute float a_pickId; // a_hitColor
 attribute float a_angleTangentSum;//a_parameters
 
+//static quad buffer(divisor = 0)
 attribute vec2  a_quadCorner; // a_parameters -> static vertex buffer
 
 //optional
@@ -727,8 +728,8 @@ void main() {
         return bufferCache.get(coords);
       }
       const { instanceData, instanceCount } = createInstanceData(coords);
-      const buffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      const instanceBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
 
       // ---- optional(measure) attributes ----
@@ -762,7 +763,7 @@ void main() {
     
     // Set up vertex attributes
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
-    bindAttrib("a_quadCorner", 2, 0, 0, 0);
+    bindAttrib("a_quadCorner", 2, 0, 0, 0);// divisor = 0
 
     function render(scale) {
       // ====== Draw ======
