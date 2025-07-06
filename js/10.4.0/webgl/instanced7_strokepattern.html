@@ -25,11 +25,12 @@ precision mediump float;
 
 attribute vec2  a_segmentStart;
 attribute vec2  a_segmentEnd;
-attribute vec2  a_quadCorner;
 attribute float a_distance;
 attribute vec2  a_joinAngles;
-attribute float a_pickId;
-attribute float a_angleTangentSum;
+attribute float a_pickId; // a_hitColor
+attribute float a_angleTangentSum;//a_parameters
+
+attribute vec2  a_quadCorner; // a_parameters -> static vertex buffer
 
 //optional
 attribute float a_measureStart;
