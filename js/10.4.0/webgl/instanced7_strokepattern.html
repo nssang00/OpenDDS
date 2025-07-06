@@ -678,7 +678,7 @@ void main() {
       scale: 1,
       rotation: 0,
       strokeColor: [1.0, 0.0, 0.0, 1.0],
-      strokeWidth: 6.0,
+      strokeWidth: 12.0,
       strokeOffset: 5.0,
       strokeCap: 4.0,
       strokeJoin: 0.0,
@@ -708,10 +708,10 @@ void main() {
         coordinates: coordinates,
         styles: [
           solid0,
-          { ...solid0, scale: 1, strokeColor: [1.0, 0.0, 0.0, 1.0] },
+          { ...solid0, strokeOffset: 10, strokeWidth:3, strokeColor: [1.0, 0.0, 0.0, 1.0] },
           //{ ...solid0, scale: 2 },
-          { ...dash0, dashPattern: [3,40,3,40], strokeColor: [0.5, 0.5, 0.0, 1.0]},
-          { ...dash0, dashPattern: [3,40,3,40], strokeColor: [0.5, 1.0, 0.5, 1.0],dashOffset: 5}, 
+          { ...dash0, dashPattern: [3,40,3,40], strokeColor: [0.5, 0.5, 1.0, 1.0]},
+          { ...dash0, dashPattern: [3,40,3,40], strokeColor: [0.5, 1.0, 0.5, 1.0],dashOffset: 20}, 
           { ...pattern0, strokeWidth: 8, strokePatternTextureSpacing: 40,strokePatternTextureStartOffset: 10}, 
           { ...pattern0, strokeWidth:12, strokePatternTextureSpacing: 40,strokePatternTextureStartOffset: 20}, 
         ],
@@ -720,7 +720,7 @@ void main() {
       {
         coordinates: zigzagCoordinates,//mirrorCoordinates(coordinates, 'lon'),
         styles: [
-        { ...dash0, dashPattern: [20,5,20,5], strokeColor: [0.8, 0.5, 1.0, 1.0]},
+          { ...dash0, strokeWidth:6, dashPattern: [20,5,20,5], strokeColor: [0.8, 0.5, 1.0, 1.0]},
           //pattern0,
           { ...pattern0, strokeWidth: 8, rotation:90 * (Math.PI / 180)}, 
         ]
