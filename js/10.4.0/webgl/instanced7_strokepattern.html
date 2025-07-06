@@ -343,7 +343,11 @@ void main() {
     dashField = dashDistanceField(currentLengthPx, currentRadiusPx, u_strokeCap, u_strokeWidth, u_dashPattern, u_dashCount, u_dashOffset);
   }
   distanceField = max(distanceField, dashField);
-
+/*
+  vec2 texCoord = mod(gl_FragCoord.xy, u_strokePatternTextureSampleSize) / u_strokePatternTextureSampleSize;
+  vec4 patternColor = texture2D(u_strokePatternTexture, texCoord);
+  vec4 color = u_strokeColor * patternColor;
+  */
   vec4 color = u_strokeColor;
   if (u_useStrokePattern) {
     vec2 segmentNormal = vec2(-segmentTangent.y, segmentTangent.x);
