@@ -399,7 +399,7 @@ void main() {
       { name: "a_angleTangentSum", size: 1 } 
     ];
 
-    const optionalAttributes = [
+    const measureAttributes = [
       { name: "a_measureStart", size: 1 },
       { name: "a_measureEnd",   size: 1 }
     ];
@@ -555,7 +555,7 @@ void main() {
     }
 
     function createMeasureData(instanceCount) {
-      const measureData = new Float32Array(instanceCount * optionalAttributes.length);
+      const measureData = new Float32Array(instanceCount * measureAttributes.length);
       for (let i = 0; i < instanceCount; ++i) {
         measureData[i * 2 + 0] = Math.random();
         measureData[i * 2 + 1] = Math.random();
@@ -781,9 +781,9 @@ void main() {
         // optional attributes 
         if (measureBuffer) {
           gl.bindBuffer(gl.ARRAY_BUFFER, measureBuffer);
-          bindInstanceAttributes(optionalAttributes, 1);
+          bindInstanceAttributes(measureAttributes, 1);
         } else {
-          disableAttributes(optionalAttributes, 0.0);
+          disableAttributes(measureAttributes, 0.0);
         }
         
         feature.styles.forEach(style => {
