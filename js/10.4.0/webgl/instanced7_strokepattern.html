@@ -554,12 +554,13 @@ void main() {
       };
     }
 
-    function createOptionalData(instanceCount) {
-      const optionalData = new Float32Array(instanceCount * optionalAttributes.length);
+    function createMeasureData(instanceCount) {
+      const measureData = new Float32Array(instanceCount * optionalAttributes.length);
       for (let i = 0; i < instanceCount; ++i) {
-        // optionalData[i*2+0] = 0, optionalData[i*2+1] = 0
+        measureData[i * 2 + 0] = Math.random();
+        measureData[i * 2 + 1] = Math.random();
       }
-      return optionalData;
+      return measureData;
     }
  
     function bindAttrib(name, size, stride, offset, div) {
@@ -707,7 +708,8 @@ void main() {
           { ...dash0, dashPattern: [3,40,3,40], strokeColor: [0.5, 1.0, 0.5, 1.0],dashOffset: 5}, 
           { ...pattern0, strokeWidth: 8, strokePatternTextureSpacing: 40,strokePatternTextureStartOffset: 10}, 
           { ...pattern0, strokeWidth:12, strokePatternTextureSpacing: 40,strokePatternTextureStartOffset: 20}, 
-        ]
+        ],
+        //useMeasure:true
       },
       {
         coordinates: zigzagCoordinates,//mirrorCoordinates(coordinates, 'lon'),
@@ -720,7 +722,7 @@ void main() {
     ];
 
     const bufferCache = new WeakMap();
-    function getOrCreateBuffer(coords) {
+    function getOrCreateBuffer(coords, useMeasure = false) {
       if (bufferCache.has(coords)) {
         return bufferCache.get(coords);
       }
@@ -729,15 +731,18 @@ void main() {
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STATIC_DRAW);
 
-      /*
-      const optionalData = createOptionalData();
-      const optionalBuffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, optionalBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, optionalData, gl.STATIC_DRAW);
-      */
+  // ---- optional(measure) attributes ----
+  let measureBuffer = null;
+  if (useMeasure) {
+    const measureData = createMeasureData(instanceCount);
+    measureBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, measureBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, measureData, gl.STATIC_DRAW);
+  }
     
-      bufferCache.set(coords, { buffer, instanceCount });
-      return { buffer, instanceCount };
+  const obj = { buffer, instanceCount, measureBuffer };
+  bufferCache.set(coords, obj);
+  return obj;
     }
 
     const program = getProgram(fragmentShaderSource, vertexShaderSource);
@@ -768,19 +773,18 @@ void main() {
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   
       features.forEach(feature => {
-        const { buffer, instanceCount } = getOrCreateBuffer(feature.coordinates);
+        const { buffer, instanceCount, measureBuffer } = getOrCreateBuffer(feature.coordinates, feature.useMeasure ?? false);
         // Bind instance buffer
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         bindInstanceAttributes(instanceAttributes, 1);
-        /*
-        let useOptional = false;
-        gl.bindBuffer(gl.ARRAY_BUFFER, optionalBuffer);
-        if (!useOptional) {
-          disableAttributes(optionalAttributes, 0);
-        } else {
+
+        // optional attributes 
+        if (measureBuffer) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, measureBuffer);
           bindInstanceAttributes(optionalAttributes, 1);
+        } else {
+          disableAttributes(optionalAttributes, 0.0);
         }
-        */
         
         feature.styles.forEach(style => {
           setLineUniforms({ ...style, scale: scale });
