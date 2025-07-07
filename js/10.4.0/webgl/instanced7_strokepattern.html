@@ -802,11 +802,12 @@ void main() {
       });
     }
 
+    let currentScale = 1.0;
     canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
     
-      scale = Math.max(0.2, Math.min(10.0, currentScale - Math.sign(e.deltaY) * 0.2));
-      render(scale);
+      currentScale = Math.max(0.2, Math.min(10.0, currentScale - Math.sign(e.deltaY) * 0.2));
+      render(currentScale);
     }, { passive: false });
 
     render(1.0);
