@@ -574,7 +574,8 @@ void main() {
       ext.vertexAttribDivisorANGLE(location, div);
     }
 
-    function disableAttributes(attribs, value = 0) {
+
+    function setConstantAttributes(attribs, value = 0) {
       for (const attr of attribs) {
         const loc = gl.getAttribLocation(program, attr.name);
         gl.disableVertexAttribArray(loc);
@@ -786,7 +787,7 @@ void main() {
           gl.bindBuffer(gl.ARRAY_BUFFER, measureBuffer);
           bindInstanceAttributes(measureAttributes, 1);
         } else {
-          disableAttributes(measureAttributes, 0.0);
+          setConstantAttributes(measureAttributes, 0.0);
         }
         
         feature.styles.forEach(style => {
