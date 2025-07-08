@@ -574,12 +574,6 @@ void main() {
       ext.vertexAttribDivisorANGLE(location, div);
     }
 
-    function disableAttrib(name, value = 0) {
-      const loc = gl.getAttribLocation(program, name);
-      gl.disableVertexAttribArray(loc);
-      gl.vertexAttrib1f(loc, value);
-    }
-
     function disableAttributes(attribs, value = 0) {
       for (const attr of attribs) {
         const loc = gl.getAttribLocation(program, attr.name);
