@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebGL Globe (No CORS)</title>
+  <style>
+    html, body, canvas {
+      margin: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      background: black;
+    }
+  </style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+<script>
+const canvas = document.getElementById("glcanvas");
+const gl = canvas.getContext("webgl");
+canvas.width = canvas.clientWidth;
+canvas.height = canvas.clientHeight;
+
+// === SHADERS ===
+const vsSource = `
+  attribute vec3 aPosition;
+  attribute vec2 aTexCoord;
+  uniform mat4 uModelViewMatrix;
+  uniform mat4 uProjectionMatrix;
+  varying vec2 vTexCoord;
+  void main(void) {
+    gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
+    vTexCoord = aTexCoord;
+  }
+`;
+
+const fsSource = `
+  precision mediump float;
+  varying vec2 vTexCoord;
+  uniform sampler2D uSampler;
+  void main(void) {
+    gl_FragColor = texture2D(uSampler, vTexCoord);
+  }
+`;
+
+function createShader(type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(shader));
+  }
+  return shader;
+}
+
+const vs = createShader(gl.VERTEX_SHADER, vsSource);
+const fs = createShader(gl.FRAGMENT_SHADER, fsSource);
+
+const program = gl.createProgram();
+gl.attachShader(program, vs);
+gl.attachShader(program, fs);
+gl.linkProgram(program);
+gl.useProgram(program);
+
+// === SPHERE DATA ===
+function createSphere(radius, latBands, longBands) {
+  const positions = [], texCoords = [], indices = [];
+  for (let lat = 0; lat <= latBands; ++lat) {
+    const theta = lat * Math.PI / latBands;
+    const sinTheta = Math.sin(theta);
+    const cosTheta = Math.cos(theta);
+    for (let lon = 0; lon <= longBands; ++lon) {
+      const phi = lon * 2 * Math.PI / longBands;
+      const sinPhi = Math.sin(phi);
+      const cosPhi = Math.cos(phi);
+      const x = cosPhi * sinTheta;
+      const y = cosTheta;
+      const z = sinPhi * sinTheta;
+      const u = 1 - lon / longBands;
+      const v = 1 - lat / latBands;
+      positions.push(radius * x, radius * y, radius * z);
+      texCoords.push(u, v);
+    }
+  }
+  for (let lat = 0; lat < latBands; ++lat) {
+    for (let lon = 0; lon < longBands; ++lon) {
+      const first = lat * (longBands + 1) + lon;
+      const second = first + longBands + 1;
+      indices.push(first, second, first + 1);
+      indices.push(second, second + 1, first + 1);
+    }
+  }
+  return {positions, texCoords, indices};
+}
+
+const sphere = createSphere(1, 40, 40);
+
+// === BUFFERS ===
+function createAndBindBuffer(target, data, usage) {
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(target, buffer);
+  gl.bufferData(target, data, usage);
+  return buffer;
+}
+
+const posBuffer = createAndBindBuffer(gl.ARRAY_BUFFER, new Float32Array(sphere.positions), gl.STATIC_DRAW);
+const texBuffer = createAndBindBuffer(gl.ARRAY_BUFFER, new Float32Array(sphere.texCoords), gl.STATIC_DRAW);
+const indexBuffer = createAndBindBuffer(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(sphere.indices), gl.STATIC_DRAW);
+
+// === ATTRIBUTES ===
+const aPosition = gl.getAttribLocation(program, "aPosition");
+gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
+gl.enableVertexAttribArray(aPosition);
+
+const aTexCoord = gl.getAttribLocation(program, "aTexCoord");
+gl.bindBuffer(gl.ARRAY_BUFFER, texBuffer);
+gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
+gl.enableVertexAttribArray(aTexCoord);
+
+// === TEXTURE (Canvas Generated) ===
+function createProceduralTexture() {
+  const texCanvas = document.createElement("canvas");
+  texCanvas.width = 256;
+  texCanvas.height = 128;
+  const ctx = texCanvas.getContext("2d");
+
+  // background (ocean)
+  ctx.fillStyle = "#0066cc";
+  ctx.fillRect(0, 0, texCanvas.width, texCanvas.height);
+
+  // continents (rough shapes)
+  ctx.fillStyle = "#33cc33";
+  for (let i = 0; i < 50; i++) {
+    const x = Math.random() * texCanvas.width;
+    const y = Math.random() * texCanvas.height;
+    const r = Math.random() * 20 + 10;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return texCanvas;
+}
+
+const texture = gl.createTexture();
+const texCanvas = createProceduralTexture();
+gl.bindTexture(gl.TEXTURE_2D, texture);
+gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, texCanvas);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+gl.generateMipmap(gl.TEXTURE_2D);
+
+// === MATRICES ===
+function perspective(out, fovy, aspect, near, far) {
+  const f = 1.0 / Math.tan(fovy / 2);
+  out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+  out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+  out[8] = 0; out[9] = 0; out[10] = (far + near) / (near - far); out[11] = -1;
+  out[12] = 0; out[13] = 0; out[14] = (2 * far * near) / (near - far); out[15] = 0;
+}
+
+function identity() {
+  return [1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1];
+}
+
+function rotateY(m, angle) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  m[0] = c; m[2] = s;
+  m[8] = -s; m[10] = c;
+}
+
+function translateZ(m, val) {
+  m[14] += val;
+}
+
+const uModelViewMatrix = gl.getUniformLocation(program, "uModelViewMatrix");
+const uProjectionMatrix = gl.getUniformLocation(program, "uProjectionMatrix");
+
+// === DRAW ===
+function drawScene(time) {
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+
+  const proj = new Float32Array(16);
+  perspective(proj, Math.PI / 4, canvas.width / canvas.height, 0.1, 100);
+  gl.uniformMatrix4fv(uProjectionMatrix, false, proj);
+
+  const mv = identity();
+  rotateY(mv, time * 0.001);
+  translateZ(mv, -3);
+  gl.uniformMatrix4fv(uModelViewMatrix, false, mv);
+
+  gl.drawElements(gl.TRIANGLES, sphere.indices.length, gl.UNSIGNED_SHORT, 0);
+  requestAnimationFrame(drawScene);
+}
+
+requestAnimationFrame(drawScene);
+</script>
+</body>
+</html>
