@@ -1,3 +1,10 @@
+composeTransform(
+  projectionMatrix,
+  ...,         // 나머지는 기존대로
+  -origin.x,   // translate X, 반드시 음수!
+  -origin.y    // translate Y, 반드시 음수!
+);
+
 const origin =  getViewCenter(); // EPSG:3857 큰 값 (ex: [1.5e8, 4.2e7])
 vertexArray.push(feature.x - origin[0]);
 vertexArray.push(feature.y - origin[1]);
