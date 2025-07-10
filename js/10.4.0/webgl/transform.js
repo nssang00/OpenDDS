@@ -1,20 +1,16 @@
-// vertex shader
-uniform mat4 u_projectMatrix;
-uniform vec2 u_viewOrigin;
+const origin =  getViewCenter(); // EPSG:3857 큰 값 (ex: [1.5e8, 4.2e7])
+vertexArray.push(feature.x - origin[0]);
+vertexArray.push(feature.y - origin[1]);
 
-attribute vec2 a_worldPosition;
+uniform vec2 u_viewOrigin;
+attribute vec2 a_position; // 이미 origin 뺀 값
 
 void main() {
-  vec2 localPos = a_worldPosition - u_viewOrigin; // or u_viewCenterOrigin, u_tileOrigin
-  gl_Position = u_projectMatrix * vec4(localPos, 0, 1);
+    gl_Position = u_projectMatrix * vec4(a_position, 0, 1);
+
+    vec2 worldPos = a_position + u_viewOrigin; // "더하기"
 }
 
-// CPU에서
-const viewOrigin = getViewCenter(); // EPSG:3857 큰 값 (ex: [1.5e8, 4.2e7])
-for (const feature of features) {
-  vertexArray.push(feature.x - viewOrigin[0]);
-  vertexArray.push(feature.y - viewOrigin[1]);
-}
 
 // GPU(Shader)에서
 uniform vec2 u_viewOrigin;
