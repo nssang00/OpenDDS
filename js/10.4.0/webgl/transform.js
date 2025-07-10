@@ -1,11 +1,11 @@
 // vertex shader
 uniform mat4 u_projectMatrix;
-uniform vec2 u_tileOrigin;
+uniform vec2 u_viewOrigin;
 
 attribute vec2 a_worldPosition;
 
 void main() {
-  vec2 localPos = a_worldPosition - u_tileOrigin; // or u_viewCenterOrigin
+  vec2 localPos = a_worldPosition - u_viewOrigin; // or u_viewCenterOrigin, u_tileOrigin
   gl_Position = u_projectMatrix * vec4(localPos, 0, 1);
 }
 
