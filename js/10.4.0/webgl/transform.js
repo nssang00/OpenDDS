@@ -6,7 +6,7 @@ vertexArray.push(feature.y - origin.y);
 // 2. projectionMatrix 생성시
 setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
 // "꼭!" translateTransform으로 -origin을 추가
-translateTransform(this.tmpTransform_, -origin.x, -origin.y);
+//translateTransform(this.tmpTransform_, -origin.x, -origin.y);
 // batchInvertTransform 더이상 필요 없음!
 this.helper.setUniformMatrixValue(
   Uniforms.PROJECTION_MATRIX,
@@ -18,7 +18,7 @@ applyUniforms_(alpha, renderExtent, origin, tileZ, depth) {
   // 1. world to screen matrix (no batchInvertTransform)
   setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
   // 여기서 origin은 [originX, originY]
-  translateTransform(this.tmpTransform_, -origin[0], -origin[1]);
+  //translateTransform(this.tmpTransform_, -origin[0], -origin[1]);
   // multiplyTransform은 더이상 필요 없음!
 
   this.helper.setUniformMatrixValue(
