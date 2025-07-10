@@ -1,3 +1,19 @@
+
+// 1. 버퍼 생성시
+vertexArray.push(feature.x - origin.x); // origin을 뺀 오프셋만 저장
+vertexArray.push(feature.y - origin.y);
+
+// 2. projectionMatrix 생성시
+setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
+// "꼭!" translateTransform으로 -origin을 추가
+translateTransform(this.tmpTransform_, -origin.x, -origin.y);
+// batchInvertTransform 더이상 필요 없음!
+this.helper.setUniformMatrixValue(
+  Uniforms.PROJECTION_MATRIX,
+  mat4FromTransform(this.tmpMat4_, this.tmpTransform_),
+);
+
+//////////
 applyUniforms_(alpha, renderExtent, origin, tileZ, depth) {
   // 1. world to screen matrix (no batchInvertTransform)
   setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
