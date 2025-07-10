@@ -9,6 +9,23 @@ void main() {
   gl_Position = u_projectMatrix * vec4(localPos, 0, 1);
 }
 
+// CPU에서
+const viewOrigin = getViewCenter(); // EPSG:3857 큰 값 (ex: [1.5e8, 4.2e7])
+for (const feature of features) {
+  vertexArray.push(feature.x - viewOrigin[0]);
+  vertexArray.push(feature.y - viewOrigin[1]);
+}
+
+// GPU(Shader)에서
+uniform vec2 u_viewOrigin;
+uniform mat4 u_projectMatrix;
+attribute vec2 a_relativePosition; // 이미 offset 적용된 좌표
+
+void main() {
+  vec2 worldPosition = a_relativePosition + u_viewOrigin;
+  gl_Position = u_projectMatrix * vec4(a_relativePosition, 0, 1);
+}
+
 
 
 renderInstructions.js
