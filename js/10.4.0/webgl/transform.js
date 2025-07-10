@@ -1,3 +1,39 @@
+applyUniforms_(alpha, renderExtent, origin, tileZ, depth) {
+  // 1. world to screen matrix (no batchInvertTransform)
+  setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
+  // 여기서 origin은 [originX, originY]
+  translateTransform(this.tmpTransform_, -origin[0], -origin[1]);
+  // multiplyTransform은 더이상 필요 없음!
+
+  this.helper.setUniformMatrixValue(
+    Uniforms.PROJECTION_MATRIX,
+    mat4FromTransform(this.tmpMat4_, this.tmpTransform_),
+  );
+
+  // 2. screen to world matrix
+  // (optionally, 실제 월드좌표로의 역변환이 필요하면)
+  makeInverseTransform(this.tmpTransform_, this.currentFrameStateTransform_);
+  // 실제로 world 좌표가 필요하면 origin도 더해줘야 함
+  this.helper.setUniformMatrixValue(
+    Uniforms.SCREEN_TO_WORLD_MATRIX,
+    mat4FromTransform(this.tmpMat4_, this.tmpTransform_),
+  );
+
+  // 3. (선택) origin을 u_viewOrigin 등으로 따로 uniform으로 넘겨도 됨 (월드 복원 필요시)
+  this.helper.setUniformFloatVec2(Uniforms.VIEW_ORIGIN, origin);
+
+  this.helper.setUniformFloatValue(Uniforms.GLOBAL_ALPHA, alpha);
+  this.helper.setUniformFloatValue(Uniforms.DEPTH, depth);
+  this.helper.setUniformFloatValue(Uniforms.TILE_ZOOM_LEVEL, tileZ);
+  this.helper.setUniformFloatVec4(Uniforms.RENDER_EXTENT, renderExtent);
+}
+
+// origin: 중심 좌표(예: 타일 중심, 뷰 중심 등)
+vertexArray.push(feature.x - origin[0]);
+vertexArray.push(feature.y - origin[1]);
+// (z값이 있으면 z도 빼줌)
+/////////
+
 composeTransform(
   projectionMatrix,
   ...,         // 나머지는 기존대로
