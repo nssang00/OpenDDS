@@ -1,3 +1,14 @@
+// vertex shader
+uniform mat4 u_projectMatrix;
+uniform vec2 u_tileOrigin;
+
+attribute vec2 a_worldPosition;
+
+void main() {
+  vec2 localPos = a_worldPosition - u_tileOrigin; // or u_viewCenterOrigin
+  gl_Position = u_projectMatrix * vec4(localPos, 0, 1);
+}
+
 
 
 renderInstructions.js
