@@ -15,16 +15,11 @@ function angleBetween(p0, pA, pB) {
   return angle;
 }
 
-function angleBetween2(p0, pA, pB) {
+function angleBetweenOptimized2(p0, pA, pB) {
   const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
   const bx = pB[0] - p0[0], by = pB[1] - p0[1];
-
-  const dot = ax * bx + ay * by;
-  const cross = ax * by - ay * bx;
-
-  if (Math.abs(dot) < 1e-12 && Math.abs(cross) < 1e-12) return 0;
-
-  let angle = Math.atan2(cross, dot);
+  if ((ax * ax + ay * ay) < 1e-12 || (bx * bx + by * by) < 1e-12) return 0;
+  const angle = Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
   return angle < 0 ? angle + 2 * Math.PI : angle;
 }
 
