@@ -15,6 +15,19 @@ function angleBetween(p0, pA, pB) {
   return angle;
 }
 
+function angleBetween2(p0, pA, pB) {
+  const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
+  const bx = pB[0] - p0[0], by = pB[1] - p0[1];
+
+  const dot = ax * bx + ay * by;
+  const cross = ax * by - ay * bx;
+
+  if (Math.abs(dot) < 1e-12 && Math.abs(cross) < 1e-12) return 0;
+
+  let angle = Math.atan2(cross, dot);
+  return angle < 0 ? angle + 2 * Math.PI : angle;
+}
+
 function angleBetween_ori(p0, pA, pB) {
     const lenA = Math.sqrt(
       (pA[0] - p0[0]) * (pA[0] - p0[0]) + (pA[1] - p0[1]) * (pA[1] - p0[1]),
