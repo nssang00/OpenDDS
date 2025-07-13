@@ -15,7 +15,7 @@ function angleBetween(p0, pA, pB) {
   return angle;
 }
 
-function angleBetweenOptimized2(p0, pA, pB) {
+function angleBetween(p0, pA, pB) {
   const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
   const bx = pB[0] - p0[0], by = pB[1] - p0[1];
   if ((ax * ax + ay * ay) < 1e-12 || (bx * bx + by * by) < 1e-12) return 0;
