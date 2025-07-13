@@ -33,3 +33,23 @@ export function optimizedAngleBetween(p0, pA, pB) {
   const angle = Math.atan2(cross, dot); 
   return angle >= 0 ? angle : angle + 2 * Math.PI;
 }
+
+
+export function hybridAngleBetween(p0, pA, pB) {
+  const dx1 = pA[0] - p0[0], dy1 = pA[1] - p0[1];
+  const dx2 = pB[0] - p0[0], dy2 = pB[1] - p0[1];
+  
+  const dot = dx1*dx2 + dy1*dy2;
+  const cross = dx1*dy2 - dy1*dx2;
+  const magSq1 = dx1*dx1 + dy1*dy1;
+  const magSq2 = dx2*dx2 + dy2*dy2;
+  
+  if (magSq1 < 1e-12 || magSq2 < 1e-12) return 0;
+  
+  if (dot * dot > (0.985**2) * magSq1 * magSq2) {
+    return cross >= 0 ? 0 : 2 * Math.PI;
+  }
+  
+  const angle = Math.atan2(cross, dot); 
+  return angle >= 0 ? angle : angle + 2 * Math.PI;
+}
