@@ -15,41 +15,24 @@ function angleBetween(p0, pA, pB) {
   return angle;
 }
 
-export function optimizedAngleBetween(p0, pA, pB) {
-  const dx1 = pA[0] - p0[0], dy1 = pA[1] - p0[1];
-  const dx2 = pB[0] - p0[0], dy2 = pB[1] - p0[1];
-  
-  const dot = dx1*dx2 + dy1*dy2;
-  const cross = dx1*dy2 - dy1*dx2;
-  const magSq1 = dx1*dx1 + dy1*dy1;
-  const magSq2 = dx2*dx2 + dy2*dy2;
-  
-  if (magSq1 === 0 || magSq2 === 0) return 0;
-  
-  if (dot * dot > 0.998 * magSq1 * magSq2) {
-    return cross >= 0 ? 0 : 2 * Math.PI;
-  }
-  
-  const angle = Math.atan2(cross, dot); 
-  return angle >= 0 ? angle : angle + 2 * Math.PI;
-}
+function angleBetween_ori(p0, pA, pB) {
+    const lenA = Math.sqrt(
+      (pA[0] - p0[0]) * (pA[0] - p0[0]) + (pA[1] - p0[1]) * (pA[1] - p0[1]),
+    );
+    const tangentA = [(pA[0] - p0[0]) / lenA, (pA[1] - p0[1]) / lenA];
+    const orthoA = [-tangentA[1], tangentA[0]];
+    const lenB = Math.sqrt(
+      (pB[0] - p0[0]) * (pB[0] - p0[0]) + (pB[1] - p0[1]) * (pB[1] - p0[1]),
+    );
+    const tangentB = [(pB[0] - p0[0]) / lenB, (pB[1] - p0[1]) / lenB];
 
-
-export function hybridAngleBetween(p0, pA, pB) {
-  const dx1 = pA[0] - p0[0], dy1 = pA[1] - p0[1];
-  const dx2 = pB[0] - p0[0], dy2 = pB[1] - p0[1];
-  
-  const dot = dx1*dx2 + dy1*dy2;
-  const cross = dx1*dy2 - dy1*dx2;
-  const magSq1 = dx1*dx1 + dy1*dy1;
-  const magSq2 = dx2*dx2 + dy2*dy2;
-  
-  if (magSq1 < 1e-12 || magSq2 < 1e-12) return 0;
-  
-  if (dot * dot > (0.985**2) * magSq1 * magSq2) {
-    return cross >= 0 ? 0 : 2 * Math.PI;
+    // this angle can be clockwise or anticlockwise; hence the computation afterwards
+    const angle =
+      lenA === 0 || lenB === 0
+        ? 0
+        : Math.acos(
+            clamp(tangentB[0] * tangentA[0] + tangentB[1] * tangentA[1], -1, 1),
+          );
+    const isClockwise = tangentB[0] * orthoA[0] + tangentB[1] * orthoA[1] > 0;
+    return !isClockwise ? Math.PI * 2 - angle : angle;
   }
-  
-  const angle = Math.atan2(cross, dot); 
-  return angle >= 0 ? angle : angle + 2 * Math.PI;
-}
