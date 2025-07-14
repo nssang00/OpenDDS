@@ -37,11 +37,14 @@ generatePointBuffers_(instructions) {
     }
   }
 
-  return this.createBuffersForInstancedGeometry_(
-    new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]), // Quad vertices
-    new Uint32Array([0, 1, 3, 1, 2, 3]),             // Quad indices
-    instanceAttributes
-  );
+  const indicesBuffer  = new Uint32Array([0, 1, 3, 1, 2, 3]);  
+  const vertexAttributesBuffer = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
+
+  return [
+    new WebGLArrayBuffer(ELEMENT_ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(indicesBuffer),
+    new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(vertexAttributesBuffer),
+    new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(instanceAttributes)
+  ];
 }
 
 generateLineStringBuffers_(renderInstructions, transform) {
@@ -100,8 +103,8 @@ generateLineStringBuffers_(renderInstructions, transform) {
         const m1 = renderInstructions[segmentEndIndex + 2];
   
         // toWorldTransform
-        const p0world = applyTransform(invertTransform, [p0[0], p0[1]]);
-        const p1world = applyTransform(invertTransform, [p1[0], p1[1]]);
+        const p0world = applyTransform(invertTransform, [...p0]);
+        const p1world = applyTransform(invertTransform, [...p1]);
   
         // join/cap angles
         function angleBetween(p0, pA, pB) {
@@ -120,8 +123,9 @@ generateLineStringBuffers_(renderInstructions, transform) {
             renderInstructions[beforeIndex],
             renderInstructions[beforeIndex + 1],
           ];
-          const pBworld = applyTransform(invertTransform, [pB[0], pB[1]]);
+          const pBworld = applyTransform(invertTransform, [...pB]);
           angle0 = angleBetween(p0world, p1world, pBworld);
+
           if (Math.cos(angle0) <= LINESTRING_ANGLE_COSINE_CUTOFF) {
             newAngleTangentSum += Math.tan((angle0 - Math.PI) / 2);
           }
@@ -132,7 +136,7 @@ generateLineStringBuffers_(renderInstructions, transform) {
             renderInstructions[afterIndex],
             renderInstructions[afterIndex + 1],
           ];
-          const pAworld = applyTransform(invertTransform, [pA[0], pA[1]]);
+          const pAworld = applyTransform(invertTransform, [...pA]);
           angle1 = angleBetween(p1world, p0world, pAworld);
           if (Math.cos(angle1) <= LINESTRING_ANGLE_COSINE_CUTOFF) {
             newAngleTangentSum += Math.tan((Math.PI - angle1) / 2);
@@ -159,11 +163,15 @@ generateLineStringBuffers_(renderInstructions, transform) {
       currentInstructionsIndex += verticesCount * instructionsPerVertex;
     }
   
-    return this.createBuffersForInstancedGeometry_(
-      new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-      new Uint32Array([0, 1, 3, 1, 2, 3]),
-      new Float32Array(instanceAttributes)
-    );
+    const vertexAttributesBuffer = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
+    const indicesBuffer  = new Uint32Array([0, 1, 3, 1, 2, 3]);
+    const instanceAttributesBuffer = new Float32Array(instanceAttributes);
+  
+    return [
+      new WebGLArrayBuffer(ELEMENT_ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(indicesBuffer),
+      new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(vertexAttributesBuffer),
+      new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(instanceAttributesBuffer)
+    ];
   }
   
 
@@ -221,11 +229,3 @@ generatePolygonBuffers_(instructions) {
   ];
 }
 
-// Helper to create instanced geometry buffers
-createBuffersForInstancedGeometry_(vertexData, indexData, instanceData) {
-  return [
-    new WebGLArrayBuffer(ELEMENT_ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(indexData),
-    new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(vertexData),
-    new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(instanceData)
-  ];
-}
