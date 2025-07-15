@@ -1,3 +1,36 @@
+function pushCustomAttributesInRenderInstructions(
+  renderInstructions,
+  customAttributes,
+  batchEntry,
+  currentIndex,
+) {
+  let shift = 0;
+  for (const key in customAttributes) {
+    const attr = customAttributes[key];
+    const value = attr.callback.call(batchEntry, batchEntry.feature);
+    const size = attr.size || 1;
+    
+    let first = value?.[0] ?? value;
+    if (first === UNDEFINED_PROP_VALUE) {
+      console.warn('The "has" operator might return false positives.'); 
+    }
+    if (first === undefined) {
+      first = UNDEFINED_PROP_VALUE;
+    } else if (first === null) {
+      first = 0;
+    }
+    
+    renderInstructions[currentIndex + shift++] = first;
+    
+    for (let i = 1; i < size; i++) {
+      renderInstructions[currentIndex + shift++] = value[i];
+    }
+  }
+  return shift;
+}
+
+
+//////////
 const label2 = `generateBuffersFromFeatures-${Date.now()}`;
 console.time(label2);    
 this.styleRenderer_
