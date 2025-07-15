@@ -110,24 +110,25 @@ generatePointBuffersFromFeatures_(features, transform) {
     ++refCounter;
     const geometry = feature.getGeometry();
     const flatCoordinates = geometry.getFlatCoordinates();
-    
-    // 좌표 변환
-    const pixelX = transform[0] * flatCoordinates[0] + transform[2] * flatCoordinates[1] + transform[4];
-    const pixelY = transform[1] * flatCoordinates[0] + transform[3] * flatCoordinates[1] + transform[5];
-    
-    instanceAttributes[bufferPosition++] = pixelX;
-    instanceAttributes[bufferPosition++] = pixelY;
-    
-    // 커스텀 속성 추가
-    for (const key in this.customAttributes_) {
-      const attr = this.customAttributes_[key];
-      const value = attr.callback.call({ ref: refCounter }, feature);
-      const size = attr.size ?? 1;
-      for (let i = 0; i < size; i++) {
-        instanceAttributes[bufferPosition++] = (value && value[i] != null) ? value[i] : 0;
+    const stride = geometry.getStride();
+    for (let i = 0; i < flatCoordinates.length; i += stride) {
+      // 좌표 변환
+      const pixelX = transform[0] * flatCoordinates[i] + transform[2] * flatCoordinates[i+1] + transform[4];
+      const pixelY = transform[1] * flatCoordinates[i] + transform[3] * flatCoordinates[i+1] + transform[5];
+      instanceAttributes[bufferPosition++] = pixelX;
+      instanceAttributes[bufferPosition++] = pixelY;
+      // 커스텀 속성
+      for (const key in this.customAttributes_) {
+        const attr = this.customAttributes_[key];
+        const value = attr.callback.call({ ref: refCounter }, feature);
+        const size = attr.size ?? 1;
+        for (let i = 0; i < size; i++) {
+          instanceAttributes[bufferPosition++] = (value && value[i] != null) ? value[i] : 0;
+        }
       }
     }
   }
+  
 
   return {
     indicesBuffer: new Uint32Array([0, 1, 3, 1, 2, 3]),
@@ -417,4 +418,3 @@ generatePolygonBuffersFromFeatures_(features, transform) {
   };
 }
 
-// 기존 generateRenderInstructionsFromFeatures_ 메서드는 제거됨
