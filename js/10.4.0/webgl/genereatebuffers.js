@@ -1,4 +1,125 @@
+generateLineStringBuffers_(renderInstructions, transform) {
+  const customAttrsCount = getCustomAttributesSize(this.customAttributes_);
+  const instructionsPerVertex = 3; // x, y, m
 
+  // === 1. 총 세그먼트 수 계산 ===
+  let currentInstructionsIndex = 0;
+  let totalSegments = 0;
+  while (currentInstructionsIndex < renderInstructions.length) {
+    // 커스텀 속성 건너뜀
+    currentInstructionsIndex += customAttrsCount;
+    const verticesCount = renderInstructions[currentInstructionsIndex++];
+    totalSegments += (verticesCount - 1);
+    currentInstructionsIndex += verticesCount * instructionsPerVertex;
+  }
+
+  // === 2. 할당 크기 계산 ===
+  const floatsPerSegment = 10 + customAttrsCount; // p0(x,y,m), p1(x,y,m), angle0, angle1, len, sum, ...custom
+  const totalFloats = totalSegments * floatsPerSegment;
+  const instanceAttributes = new Float32Array(totalFloats);
+  let bufferPos = 0;
+
+  // === 3. 실제 데이터 채우기 ===
+  const invertTransform = createTransform();
+  makeInverseTransform(invertTransform, transform);
+
+  currentInstructionsIndex = 0;
+  while (currentInstructionsIndex < renderInstructions.length) {
+    // 커스텀 속성
+    const customAttributes = [];
+    for (let i = 0; i < customAttrsCount; ++i) {
+      customAttributes[i] = renderInstructions[currentInstructionsIndex + i];
+    }
+    currentInstructionsIndex += customAttrsCount;
+    const verticesCount = renderInstructions[currentInstructionsIndex++];
+
+    const firstInstructionsIndex = currentInstructionsIndex;
+    const lastInstructionsIndex = currentInstructionsIndex + (verticesCount - 1) * instructionsPerVertex;
+    const isLoop =
+      renderInstructions[firstInstructionsIndex] === renderInstructions[lastInstructionsIndex] &&
+      renderInstructions[firstInstructionsIndex + 1] === renderInstructions[lastInstructionsIndex + 1];
+
+    let currentLength = 0;
+    let currentAngleTangentSum = 0;
+
+    for (let i = 0; i < verticesCount - 1; i++) {
+      let beforeIndex = null;
+      if (i > 0) beforeIndex = currentInstructionsIndex + (i - 1) * instructionsPerVertex;
+      else if (isLoop) beforeIndex = lastInstructionsIndex - instructionsPerVertex;
+      let afterIndex = null;
+      if (i < verticesCount - 2) afterIndex = currentInstructionsIndex + (i + 2) * instructionsPerVertex;
+      else if (isLoop) afterIndex = firstInstructionsIndex + instructionsPerVertex;
+
+      const segmentStartIndex = currentInstructionsIndex + i * instructionsPerVertex;
+      const segmentEndIndex   = currentInstructionsIndex + (i + 1) * instructionsPerVertex;
+      const p0 = [renderInstructions[segmentStartIndex], renderInstructions[segmentStartIndex + 1]];
+      const p1 = [renderInstructions[segmentEndIndex],   renderInstructions[segmentEndIndex + 1]];
+      const m0 = renderInstructions[segmentStartIndex + 2];
+      const m1 = renderInstructions[segmentEndIndex + 2];
+      const p0world = applyTransform(invertTransform, [...p0]);
+      const p1world = applyTransform(invertTransform, [...p1]);
+
+      function angleBetween(p0, pA, pB) {
+        const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
+        const bx = pB[0] - p0[0], by = pB[1] - p0[1];
+        if ((ax * ax + ay * ay) < 1e-12 || (bx * bx + by * by) < 1e-12) return 0;
+        const angle = Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+        return angle < 0 ? angle + 2 * Math.PI : angle;
+      }
+      let angle0 = -1, angle1 = -1;
+      let newAngleTangentSum = currentAngleTangentSum;
+      if (beforeIndex !== null) {
+        const pB = [renderInstructions[beforeIndex], renderInstructions[beforeIndex + 1]];
+        const pBworld = applyTransform(invertTransform, [...pB]);
+        angle0 = angleBetween(p0world, p1world, pBworld);
+        if (Math.cos(angle0) <= LINESTRING_ANGLE_COSINE_CUTOFF) {
+          newAngleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+        }
+      }
+      if (afterIndex !== null) {
+        const pA = [renderInstructions[afterIndex], renderInstructions[afterIndex + 1]];
+        const pAworld = applyTransform(invertTransform, [...pA]);
+        angle1 = angleBetween(p1world, p0world, pAworld);
+        if (Math.cos(angle1) <= LINESTRING_ANGLE_COSINE_CUTOFF) {
+          newAngleTangentSum += Math.tan((Math.PI - angle1) / 2);
+        }
+      }
+
+      // === push 대신 직접 할당 ===
+      instanceAttributes[bufferPos++] = p0[0];
+      instanceAttributes[bufferPos++] = p0[1];
+      instanceAttributes[bufferPos++] = m0;
+      instanceAttributes[bufferPos++] = p1[0];
+      instanceAttributes[bufferPos++] = p1[1];
+      instanceAttributes[bufferPos++] = m1;
+      instanceAttributes[bufferPos++] = angle0;
+      instanceAttributes[bufferPos++] = angle1;
+      instanceAttributes[bufferPos++] = currentLength;
+      instanceAttributes[bufferPos++] = currentAngleTangentSum;
+      for (let j = 0; j < customAttrsCount; ++j) {
+        instanceAttributes[bufferPos++] = customAttributes[j];
+      }
+
+      currentLength += Math.sqrt(
+        (p1world[0] - p0world[0]) * (p1world[0] - p0world[0]) +
+        (p1world[1] - p0world[1]) * (p1world[1] - p0world[1])
+      );
+      currentAngleTangentSum = newAngleTangentSum;
+    }
+    currentInstructionsIndex += verticesCount * instructionsPerVertex;
+  }
+
+  const vertexAttributesBuffer = new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]);
+  const indicesBuffer  = new Uint32Array([0, 1, 3, 1, 2, 3]);
+
+  return [
+    new WebGLArrayBuffer(ELEMENT_ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(indicesBuffer),
+    new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(vertexAttributesBuffer),
+    new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(instanceAttributes)
+  ];
+}
+
+/////////////
 
 generateBuffersForType_(renderInstructions, geometryType, transform) {
   if (!renderInstructions) return null;
