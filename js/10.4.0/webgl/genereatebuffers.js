@@ -1,16 +1,14 @@
-    const label2 = `generateBuffersFromFeatures-${Date.now()}`;
-    console.time(label2);    
-    this.styleRenderer_
-      .generateBuffersFromFeatures(features, transform)
-      .then((buffers) => {
-        this.buffers = buffers;
-        console.timeEnd(label2);
-        this.setReady();
-      });
+const label2 = `generateBuffersFromFeatures-${Date.now()}`;
+console.time(label2);    
+this.styleRenderer_
+  .generateBuffersFromFeatures(features, transform)
+  .then((buffers) => {
+    this.buffers = buffers;
+    console.timeEnd(label2);
+    this.setReady();
+  });
 
-//////////
-
-  //kmg
+//kmg
   async generateBuffersFromFeatures(features, transform) {
     //if (geometryBatch.isEmpty()) {
     //  return null;
@@ -357,3 +355,241 @@
       pointInstructions,
     };
   }    
+
+
+  //////////////////////////
+//kmg
+export function generatePointRenderInstructionsFromFeatures(
+  features,
+  renderInstructions,
+  customAttributes,
+  transform,
+) {
+  let geometriesCount = 0;
+  const geometryRenderEntries = [];
+
+  for (const feature of features) {
+    const geometry = feature.getGeometry();
+    const flatCoordinates = geometry.getFlatCoordinates();
+  
+    geometriesCount++;
+  
+    const pixelCoordinates = new Array(flatCoordinates.length);
+    pixelCoordinates[0] = transform[0] * flatCoordinates[0] + transform[2] * flatCoordinates[1] + transform[4];
+    pixelCoordinates[1] = transform[1] * flatCoordinates[0] + transform[3] * flatCoordinates[1] + transform[5];
+
+    geometryRenderEntries.push({ feature, pixelCoordinates });
+  }
+
+  // here we anticipate the amount of render instructions for points:
+  // 2 instructions per vertex for position (x and y)
+  // + 1 instruction per vertex per custom attributes
+  const totalInstructionsCount =
+    (2 + getCustomAttributesSize(customAttributes)) * geometriesCount;
+  if (
+    !renderInstructions ||
+    renderInstructions.length !== totalInstructionsCount
+  ) {
+    renderInstructions = new Float32Array(totalInstructionsCount);
+  }    
+  
+  let renderIndex = 0;
+  let refCounter = 0;
+  for (const entry of geometryRenderEntries) {
+    ++refCounter;
+
+    renderInstructions[renderIndex++] = entry.pixelCoordinates[0];
+    renderInstructions[renderIndex++] = entry.pixelCoordinates[1];
+    for (const key in customAttributes) {
+      const attr = customAttributes[key];
+      const value = attr.callback.call({ ref: refCounter }, entry.feature);
+      const size = attr.size ?? 1;
+      for (let i = 0; i < size; i++) {
+        renderInstructions[renderIndex++] = (value && value[i] != null) ? value[i] : 0;
+      }
+    }
+  }
+  return renderInstructions;
+}
+
+export function generateLineStringRenderInstructionsFromFeatures(
+  features,
+  renderInstructions,
+  customAttributes,
+  transform,
+) {
+  let verticesCount = 0;
+  let geometriesCount = 0;
+  
+  const geometryRenderEntries = [];
+  
+  for (const feature of features) {
+    const geometry = feature.getGeometry();
+    const flatCoordinates = geometry.getFlatCoordinates();
+    const ends = geometry.getEnds();
+    const stride = geometry.getStride();
+  
+    verticesCount += flatCoordinates.length / stride;
+    geometriesCount += ends.length;
+  
+    const pixelCoordinates = new Array(flatCoordinates.length);
+    transform2D(
+      flatCoordinates, 
+      0, 
+      flatCoordinates.length, 
+      stride, 
+      transform, 
+      pixelCoordinates, 
+      stride
+    );
+    geometryRenderEntries.push({ feature, pixelCoordinates, ends });
+  }
+
+  // here we anticipate the amount of render instructions for lines:
+  // 3 instructions per vertex for position (x, y and m)
+  // + 1 instruction per line per custom attributes
+  // + 1 instruction per line (for vertices count)
+  const totalInstructionsCount =
+  3 * verticesCount +
+  (1 + getCustomAttributesSize(customAttributes)) * geometriesCount;
+  
+  if (
+    !renderInstructions ||
+    renderInstructions.length !== totalInstructionsCount
+  ) {
+    renderInstructions = new Float32Array(totalInstructionsCount);
+  }
+  
+  let renderIndex = 0;
+  let refCounter = 0;
+  
+  for (const entry of geometryRenderEntries) {
+    const stride = entry.feature.stride_;    
+  
+    ++refCounter;
+    let offset = 0;
+  
+    for (const end of entry.ends) {
+  
+      for (const key in customAttributes) {
+        const attr = customAttributes[key];
+        const value = attr.callback.call({ ref: refCounter }, entry.feature);
+        const size = attr.size ?? 1;
+        for (let i = 0; i < size; i++) {
+          renderInstructions[renderIndex++] = (value && value[i] != null) ? value[i] : 0;
+        }
+      }
+
+      // vertices count
+      renderInstructions[renderIndex++] = (end - offset) / stride;
+  
+      // looping on points for positions
+      for (let i = offset; i < end; i += stride) {
+        renderInstructions[renderIndex++] = entry.pixelCoordinates[i]; 
+        renderInstructions[renderIndex++] = entry.pixelCoordinates[i + 1];
+        renderInstructions[renderIndex++] = stride === 3 ? entry.pixelCoordinates[i + 2] : 0;
+      }
+      offset = end;
+    }
+  }  
+  return renderInstructions;
+}
+
+export function generatePolygonRenderInstructionsFromFeatures(
+  features,
+  renderInstructions,
+  customAttributes,
+  transform,
+) {
+  let verticesCount = 0;
+  let geometriesCount = 0;
+  let ringsCount = 0;
+
+  const geometryRenderEntries = [];
+
+  for (const feature of features) {
+    const geometry = feature.getGeometry();
+    const flatCoordinates = geometry.getFlatCoordinates();
+    const ends = geometry.getEnds();
+    const stride = geometry.getStride();
+
+    verticesCount += flatCoordinates.length / stride;
+    ringsCount += ends.length;
+
+    const multiPolygonEnds = inflateEnds(flatCoordinates, ends);
+    geometriesCount += multiPolygonEnds.length;
+
+    const pixelCoordinates = new Array(flatCoordinates.length);
+    transform2D(
+      flatCoordinates, 
+      0, 
+      flatCoordinates.length, 
+      stride, 
+      transform, 
+      pixelCoordinates, 
+      stride
+    );
+    geometryRenderEntries.push({ feature, pixelCoordinates, multiPolygonEnds });
+  }
+
+  // here we anticipate the amount of render instructions for polygons:
+  // 2 instructions per vertex for position (x and y)
+  // + 1 instruction per polygon per custom attributes
+  // + 1 instruction per polygon (for vertices count in polygon)
+  // + 1 instruction per ring (for vertices count in ring)
+  const totalInstructionsCount =
+    2 * verticesCount +
+    (1 + getCustomAttributesSize(customAttributes)) * geometriesCount +
+    ringsCount;
+
+  if (
+    !renderInstructions ||
+    renderInstructions.length !== totalInstructionsCount
+  ) {
+    renderInstructions = new Float32Array(totalInstructionsCount);
+  }
+
+  let renderIndex = 0;
+  let refCounter = 0;
+
+  for (const entry of geometryRenderEntries) {
+    const stride = entry.feature.stride_;    
+
+    ++refCounter;
+    let offset = 0;
+
+    for (const polygonEnds of entry.multiPolygonEnds) {
+
+      for (const key in customAttributes) {
+        const attr = customAttributes[key];
+        const value = attr.callback.call({ ref: refCounter }, entry.feature);
+        const size = attr.size ?? 1;
+        for (let i = 0; i < size; i++) {
+          renderInstructions[renderIndex++] = (value && value[i] != null) ? value[i] : 0;
+        }
+      }
+
+      // ring count
+      const ringsVerticesCount = polygonEnds.length;
+      renderInstructions[renderIndex++] = ringsVerticesCount;
+
+      // vertices count in each ring
+      for (let i = 0; i < ringsVerticesCount; i++) {
+        renderInstructions[renderIndex++] =
+          (polygonEnds[i] - (i === 0 ? offset : polygonEnds[i - 1])) / stride;
+      }
+
+      // looping on points for positions
+      for (let i = 0; i < ringsVerticesCount; i++) {
+        let end = polygonEnds[i];
+
+        for (let j = offset; j < end; j += 2) {
+          renderInstructions[renderIndex++] = entry.pixelCoordinates[j];
+          renderInstructions[renderIndex++] = entry.pixelCoordinates[j + 1];
+        }
+        offset = end;
+      }
+    }
+  }
+  return renderInstructions;
+}
