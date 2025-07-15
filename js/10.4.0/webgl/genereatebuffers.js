@@ -1,3 +1,81 @@
+function generatePolygonBuffers_(instructions) {
+  const customAttributesSize = getCustomAttributesSize(this.customAttributes_);
+
+  // 1. 전체 vertex 개수 계산
+  let tmpIndex = 0, totalVertices = 0, maxTotalIndices = 0;
+  const vertexCountsPerPolygon = [];
+  while (tmpIndex < instructions.length) {
+    tmpIndex += customAttributesSize;
+    const ringCount = instructions[tmpIndex++];
+    let vertexCount = 0;
+    for (let i = 0; i < ringCount; ++i)
+      vertexCount += instructions[tmpIndex++];
+    tmpIndex += vertexCount * 2;
+    totalVertices += vertexCount;
+    vertexCountsPerPolygon.push(vertexCount);
+    // 인덱스 최대치(완전 삼각분할 기준, 넉넉하게)
+    maxTotalIndices += vertexCount * 3;
+  }
+
+  // 2. 버퍼 할당
+  const vertices = new Float32Array(totalVertices * (2 + customAttributesSize));
+  const indices  = new Uint32Array(maxTotalIndices);
+
+  // 3. 버퍼 채우기
+  let curInstruction = 0, vtxOffset = 0, idxOffset = 0, polyIdx = 0;
+  while (curInstruction < instructions.length) {
+    // Custom 속성 읽기
+    const customAttrs = instructions.slice(curInstruction, curInstruction + customAttributesSize);
+    curInstruction += customAttributesSize;
+
+    // Ring 구조 파싱
+    const ringCount = instructions[curInstruction++];
+    const holes = [];
+    let vertexCount = 0;
+    const ringVertexCounts = [];
+    for (let i = 0; i < ringCount; ++i) {
+      const cnt = instructions[curInstruction++];
+      if (i > 0) holes.push(vertexCount);
+      vertexCount += cnt;
+      ringVertexCounts.push(cnt);
+    }
+
+    // 좌표 추출
+    const coords = instructions.slice(curInstruction, curInstruction + vertexCount * 2);
+    curInstruction += vertexCount * 2;
+
+    // Triangulate
+    const triIndices = earcut(coords, holes, 2);
+
+    // 버퍼에 직접 쓰기 (vertex)
+    for (let i = 0; i < vertexCount; ++i) {
+      const base = (vtxOffset + i) * (2 + customAttributesSize);
+      vertices[base + 0] = coords[i * 2];
+      vertices[base + 1] = coords[i * 2 + 1];
+      for (let j = 0; j < customAttributesSize; ++j) {
+        vertices[base + 2 + j] = customAttrs[j];
+      }
+    }
+    // 인덱스 저장 (vertex 오프셋 적용)
+    for (let i = 0; i < triIndices.length; ++i) {
+      indices[idxOffset + i] = triIndices[i] + vtxOffset;
+    }
+    vtxOffset += vertexCount;
+    idxOffset += triIndices.length;
+    polyIdx++;
+  }
+
+  // 4. indices slice (실제 쓴 만큼만 잘라서 전달)
+  const finalIndices = (idxOffset < indices.length) ? indices.slice(0, idxOffset) : indices;
+
+  return [
+    new WebGLArrayBuffer(ELEMENT_ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(finalIndices),
+    new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW).fromArray(vertices),
+    new WebGLArrayBuffer(ARRAY_BUFFER, DYNAMIC_DRAW) // Empty instance buffer
+  ];
+}
+
+
 generateLineStringBuffers_(renderInstructions, transform) {
   const customAttrsCount = getCustomAttributesSize(this.customAttributes_);
   const instructionsPerVertex = 3; // x, y, m
