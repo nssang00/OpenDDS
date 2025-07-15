@@ -1,3 +1,37 @@
+generateBuffers(geometryBatch, transform) {
+  if (geometryBatch.isEmpty()) {
+    return null;
+  }
+
+  // Render instructions 생성
+  const renderInstructions = this.generateRenderInstructions_(geometryBatch, transform);
+
+  // 각 geometryType별 버퍼 생성
+  const polygonBuffers = renderInstructions.polygonInstructions
+    ? this.generatePolygonBuffers_(renderInstructions.polygonInstructions)
+    : null;
+
+  const lineStringBuffers = renderInstructions.lineStringInstructions
+    ? this.generateLineStringBuffers_(renderInstructions.lineStringInstructions, transform)
+    : null;
+
+  const pointBuffers = renderInstructions.pointInstructions
+    ? this.generatePointBuffers_(renderInstructions.pointInstructions)
+    : null;
+
+  // transform의 역변환 생성
+  const invertVerticesTransform = makeInverseTransform(createTransform(), transform);
+
+  // 결과 리턴
+  return {
+    polygonBuffers,
+    lineStringBuffers,
+    pointBuffers,
+    invertVerticesTransform,
+  };
+}
+
+
 function generatePolygonBuffers_(instructions) {
   const customAttributesSize = getCustomAttributesSize(this.customAttributes_);
 
