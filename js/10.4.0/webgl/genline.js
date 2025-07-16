@@ -548,3 +548,143 @@ function generateLineStringRenderInstructionsFromFeatures3(
 
   return renderInstructions;
 }
+
+///deep2
+function generateLineStringRenderInstructions4(
+  features,
+  renderInstructions,
+  customAttributes,
+  transform,
+) {
+  // 메타데이터 사전 계산
+  let verticesCount = 0;
+  let geometriesCount = 0;
+  const entries = new Array(features.length);
+
+  for (let i = 0; i < features.length; i++) {
+    const geometry = features[i].getGeometry();
+    const flatCoords = geometry.getFlatCoordinates();
+    const ends = geometry.getEnds();
+    const stride = geometry.getStride();
+
+    verticesCount += flatCoords.length / stride;
+    geometriesCount += ends.length;
+
+    // 픽셀 좌표 변환
+    const pixelCoords = new Array(flatCoords.length);
+    transform2D(flatCoords, 0, flatCoords.length, stride, transform, pixelCoords, stride);
+    
+    // 루프 여부 사전 계산 (함수2 장점)
+    const isLoop = ends.map(end => {
+      const count = (end - (ends[0] || 0)) / stride;
+      if (count < 3) return false;
+      const first = 0, last = (count - 1) * stride;
+      return (
+        flatCoords[first] === flatCoords[last] &&
+        flatCoords[first + 1] === flatCoords[last + 1]
+      );
+    });
+
+    entries[i] = { flatCoords, pixelCoords, ends, stride, isLoop };
+  }
+
+  // 렌더 버퍼 준비
+  const instSize = 7 * verticesCount + (1 + getCustomAttrSize(customAttributes)) * geometriesCount;
+  if (!renderInstructions || renderInstructions.length !== instSize) {
+    renderInstructions = new Float32Array(instSize);
+  }
+
+  // 각도 계산 함수 (함수1 장점)
+  const angleBetween = (p0, pA, pB) => {
+    const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
+    const bx = pB[0] - p0[0], by = pB[1] - p0[1];
+    const magA = ax * ax + ay * ay;
+    const magB = bx * bx + by * by;
+    return (magA < 1e-12 || magB < 1e-12) ? 0 : Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+  };
+
+  // 메인 처리 루프
+  const ANGLE_THRESHOLD = Math.cos(10 * Math.PI / 180); // ≈0.985
+  let idx = 0;
+  let refCount = 0;
+
+  for (const { flatCoords, pixelCoords, ends, stride, isLoop } of entries) {
+    refCount++;
+    let offset = 0;
+    let loopIdx = 0;
+
+    for (const end of ends) {
+      // 커스텀 속성 추가
+      idx += pushCustomAttrs(renderInstructions, customAttributes, idx, refCount);
+      
+      const vertCount = (end - offset) / stride;
+      renderInstructions[idx++] = vertCount;
+      const segmentLoop = isLoop[loopIdx++];
+
+      let length = 0;
+      let angleSum = 0;
+
+      for (let i = 0; i < vertCount; i++) {
+        const pos = offset + i * stride;
+        const x = flatCoords[pos];
+        const y = flatCoords[pos + 1];
+        const m = stride > 2 ? flatCoords[pos + 2] : 0;
+        
+        // 인접점 계산 (함수2 방식)
+        let prev = null, next = null, after = null;
+        if (i > 0) prev = [flatCoords[pos - stride], flatCoords[pos - stride + 1]];
+        else if (segmentLoop) {
+          prev = [flatCoords[end - 2 * stride], flatCoords[end - 2 * stride + 1]];
+        }
+        
+        if (i < vertCount - 1) next = [flatCoords[pos + stride], flatCoords[pos + stride + 1]];
+        else if (segmentLoop) next = [flatCoords[offset + stride], flatCoords[offset + stride + 1]];
+        
+        if (i < vertCount - 2) after = [flatCoords[pos + 2 * stride], flatCoords[pos + 2 * stride + 1]];
+        else if (segmentLoop) {
+          after = (i === vertCount - 2)
+            ? [flatCoords[offset + stride], flatCoords[offset + stride + 1]]
+            : [flatCoords[offset + 2 * stride], flatCoords[offset + 2 * stride + 1]];
+        }
+
+        // 각도 계산 (함수3 장점)
+        let angle0 = -1, angle1 = -1;
+        let newAngleSum = angleSum;
+        const curr = [x, y];
+
+        if (prev && next) {
+          angle0 = angleBetween(curr, next, prev);
+          if (Math.cos(angle0) <= ANGLE_THRESHOLD) {
+            newAngleSum += Math.tan((angle0 - Math.PI) / 2);
+          }
+        }
+        
+        if (next && after) {
+          angle1 = angleBetween(next, curr, after);
+          if (Math.cos(angle1) <= ANGLE_THRESHOLD) {
+            newAngleSum += Math.tan((Math.PI - angle1) / 2);
+          }
+        }
+
+        // 버퍼 저장
+        renderInstructions[idx++] = pixelCoords[pos];     // x
+        renderInstructions[idx++] = pixelCoords[pos + 1]; // y
+        renderInstructions[idx++] = m;                   // m
+        renderInstructions[idx++] = angle0;
+        renderInstructions[idx++] = angle1;
+        renderInstructions[idx++] = length;
+        renderInstructions[idx++] = angleSum;
+
+        // 거리 업데이트
+        if (i < vertCount - 1) {
+          const nextX = flatCoords[pos + stride];
+          const nextY = flatCoords[pos + stride + 1];
+          length += Math.sqrt((nextX - x) ** 2 + (nextY - y) ** 2);
+        }
+        angleSum = newAngleSum;
+      }
+      offset = end;
+    }
+  }
+  return renderInstructions;
+}
