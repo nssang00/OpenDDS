@@ -851,3 +851,167 @@ function generateLineStringRenderInstructions(
 
   return renderInstructions;
 }
+
+
+///chat
+function generateLineStringRenderInstructions(
+  features,
+  renderInstructions,
+  customAttributes,
+  transform
+) {
+  let verticesCount = 0;
+  let geometriesCount = 0;
+  const entries = new Array(features.length);
+
+  // 1. Preprocess features and transform coordinates
+  for (let i = 0; i < features.length; i++) {
+    const geometry = features[i].getGeometry();
+    const flatCoordinates = geometry.getFlatCoordinates();
+    const ends = geometry.getEnds();
+    const stride = geometry.getStride();
+
+    verticesCount += flatCoordinates.length / stride;
+    geometriesCount += ends.length;
+
+    const pixelCoordinates = new Array(flatCoordinates.length);
+    transform2D(flatCoordinates, 0, flatCoordinates.length, stride, transform, pixelCoordinates, stride);
+
+    // Precompute loop status for each segment (성능 최적)
+    const isLoop = ends.map((end, idx) => {
+      const start = idx > 0 ? ends[idx - 1] : 0;
+      const count = (end - start) / stride;
+      if (count < 3) return false;
+      const first = start, last = end - stride;
+      return flatCoordinates[first] === flatCoordinates[last] && 
+             flatCoordinates[first + 1] === flatCoordinates[last + 1];
+    });
+
+    entries[i] = { flatCoordinates, pixelCoordinates, ends, stride, isLoop };
+  }
+
+  // 2. Prepare render buffer
+  const totalInstructionsCount = 
+    7 * verticesCount + 
+    (1 + getCustomAttributesSize(customAttributes)) * geometriesCount;
+  if (!renderInstructions || renderInstructions.length !== totalInstructionsCount) {
+    renderInstructions = new Float32Array(totalInstructionsCount);
+  }
+
+  // 3. Optimized angle calculation
+  const ANGLE_COSINE_CUTOFF = Math.cos(10 * Math.PI / 180); // ≈0.985
+  const angleBetween = (p0, pA, pB) => {
+    const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
+    const bx = pB[0] - p0[0], by = pB[1] - p0[1];
+    const magA = ax * ax + ay * ay;
+    const magB = bx * bx + by * by;
+    if (magA < 1e-12 || magB < 1e-12) return 0;
+    const angle = Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+    return angle < 0 ? angle + 2 * Math.PI : angle;
+  };
+
+  // 4. Coordinate access helpers
+  const createCoordinateHelpers = (flatCoordinates, stride, offset) => ({
+    getCoord: (vertexIdx) => {
+      const idx = offset + vertexIdx * stride;
+      return [flatCoordinates[idx], flatCoordinates[idx + 1]];
+    },
+    getM: (vertexIdx) => {
+      const idx = offset + vertexIdx * stride;
+      return stride > 2 ? flatCoordinates[idx + 2] : 0;
+    }
+  });
+
+  // 5. Main processing loop
+  let renderIndex = 0;
+  let refCounter = 0;
+
+  for (const { flatCoordinates, pixelCoordinates, ends, stride, isLoop } of entries) {
+    refCounter++;
+    let offset = 0;
+    let loopIndex = 0;
+
+    for (const end of ends) {
+      // Add custom attributes
+      renderIndex += pushCustomAttributesInRenderInstructionsFromFeatures(
+        renderInstructions, customAttributes, entries[refCounter - 1], renderIndex, refCounter
+      );
+
+      const verticesInLine = (end - offset) / stride;
+      renderInstructions[renderIndex++] = verticesInLine;
+      const segmentIsLoop = isLoop[loopIndex++];
+
+      const { getCoord, getM } = createCoordinateHelpers(flatCoordinates, stride, offset);
+      let currentLength = 0;
+      let currentAngleTangentSum = 0;
+
+      for (let i = 0; i < verticesInLine; i++) {
+        const pixelIndex = offset + i * stride;
+        const current = getCoord(i);
+
+        // Calculate angles
+        let angle0 = -1, angle1 = -1;
+        let newAngleTangentSum = currentAngleTangentSum;
+
+        if (i > 0) {
+          const prev = getCoord(i - 1);
+          const next = i < verticesInLine - 1 ? getCoord(i + 1) : (segmentIsLoop ? getCoord(1) : null);
+          if (next) {
+            angle0 = angleBetween(current, next, prev);
+            if (Math.cos(angle0) <= ANGLE_COSINE_CUTOFF) {
+              newAngleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+            }
+          }
+        } else if (segmentIsLoop && verticesInLine > 2) {
+          const prev = getCoord(verticesInLine - 2);
+          const next = getCoord(1);
+          angle0 = angleBetween(current, next, prev);
+          if (Math.cos(angle0) <= ANGLE_COSINE_CUTOFF) {
+            newAngleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+          }
+        }
+
+        if (i < verticesInLine - 1) {
+          const next = getCoord(i + 1);
+          const after = i < verticesInLine - 2 ? getCoord(i + 2) : (segmentIsLoop ? getCoord(1) : null);
+          if (after) {
+            angle1 = angleBetween(next, current, after);
+            if (Math.cos(angle1) <= ANGLE_COSINE_CUTOFF) {
+              newAngleTangentSum += Math.tan((Math.PI - angle1) / 2);
+            }
+          }
+        } else if (segmentIsLoop && verticesInLine > 2 && i === verticesInLine - 1) {
+          const next = getCoord(1);
+          const after = getCoord(2);
+          angle1 = angleBetween(next, current, after);
+          if (Math.cos(angle1) <= ANGLE_COSINE_CUTOFF) {
+            newAngleTangentSum += Math.tan((Math.PI - angle1) / 2);
+          }
+        }
+
+        // Store in buffer
+        renderInstructions[renderIndex++] = pixelCoordinates[pixelIndex];
+        renderInstructions[renderIndex++] = pixelCoordinates[pixelIndex + 1];
+        renderInstructions[renderIndex++] = getM(i);
+        renderInstructions[renderIndex++] = angle0;
+        renderInstructions[renderIndex++] = angle1;
+        renderInstructions[renderIndex++] = currentLength;
+        renderInstructions[renderIndex++] = currentAngleTangentSum;
+
+        // Update length
+        if (i < verticesInLine - 1) {
+          const next = getCoord(i + 1);
+          currentLength += Math.sqrt(
+            (next[0] - current[0]) * (next[0] - current[0]) +
+            (next[1] - current[1]) * (next[1] - current[1])
+          );
+        }
+
+        currentAngleTangentSum = newAngleTangentSum;
+      }
+      offset = end;
+    }
+  }
+
+  return renderInstructions;
+}
