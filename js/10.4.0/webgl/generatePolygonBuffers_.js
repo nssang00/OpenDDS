@@ -1,3 +1,12 @@
+const floatsPerSegment =
+  2 +                // p0(x, y)
+  1 +                // m0
+  2 +                // p1(x, y)
+  1 +                // m1
+  2 +                // angle0, angle1
+  1 +                // currentLength
+  1 +                // currentAngleTangentSum
+  customAttrsCount;  // customAttrs
 
 function generatePolygonBuffers_(instructions, customAttributesSize = 0) {
   const instructionsPerVertex = 2; // x, y
