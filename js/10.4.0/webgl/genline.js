@@ -2,136 +2,255 @@ function generateLineStringRenderInstructionsFromFeatures(
   features,
   renderInstructions,
   customAttributes,
-  transform
+  transform,
 ) {
-  let totalVertexCount = 0;
-  let totalGeomCount = 0;
+  let verticesCount = 0;
+  let geometriesCount = 0;
   const geometryRenderEntries = new Array(features.length);
-
-  // 1. world좌표 준비
+  
   for (let i = 0; i < features.length; i++) {
-    const feature = features[i];
+    const feature = features[i];    
     const geometry = feature.getGeometry();
     const flatCoordinates = geometry.getFlatCoordinates();
     const ends = geometry.getEnds();
     const stride = geometry.getStride();
-
-    totalVertexCount += flatCoordinates.length / stride;
-    totalGeomCount += ends.length;
-
-    // world 좌표 변환
-    const worldCoordinates = new Array(flatCoordinates.length);
-    transform2D(flatCoordinates, 0, flatCoordinates.length, stride, transform, worldCoordinates, stride);
-
-    geometryRenderEntries[i] = { feature, flatCoordinates, worldCoordinates, ends, stride };
+  
+    verticesCount += flatCoordinates.length / stride;
+    geometriesCount += ends.length;
+  
+    const pixelCoordinates = new Array(flatCoordinates.length);
+    transform2D(
+      flatCoordinates, 
+      0, 
+      flatCoordinates.length, 
+      stride, 
+      transform, 
+      pixelCoordinates, 
+      stride
+    );
+    
+    // Store both pixel and world coordinates
+    geometryRenderEntries[i] = { 
+      feature, 
+      pixelCoordinates, 
+      worldCoordinates: flatCoordinates.slice(), // Copy of original world coords
+      ends 
+    };
   }
 
-  // vertex별 기록: [x, y, m, angle0, angle1, currentLength, tangentSum, ...customAttrs]
-  const customAttrsSize = getCustomAttributesSize(customAttributes);
-  const floatsPerVertex = 3 + 4 + customAttrsSize; // x,y,m + angle0,angle1,len,sum
-  let totalVertices = 0;
-  for (const entry of geometryRenderEntries) {
-    for (let ei = 0; ei < entry.ends.length; ei++) {
-      const start = ei === 0 ? 0 : entry.ends[ei - 1];
-      const end = entry.ends[ei];
-      totalVertices += (end - start) / entry.stride;
-    }
-  }
-  const totalInstructionsCount = floatsPerVertex * totalVertices;
-  if (!renderInstructions || renderInstructions.length !== totalInstructionsCount) {
+  // Calculate total instruction count:
+  // 5 values per vertex (px, py, m, worldx, worldy)
+  // + 1 per geometry for vertex count
+  // + custom attributes per geometry
+  const totalInstructionsCount =
+    5 * verticesCount +
+    (1 + getCustomAttributesSize(customAttributes)) * geometriesCount;
+  
+  if (
+    !renderInstructions ||
+    renderInstructions.length !== totalInstructionsCount
+  ) {
     renderInstructions = new Float32Array(totalInstructionsCount);
   }
-
+  
   let renderIndex = 0;
   let refCounter = 0;
-
-  // 2. 각 선형에 대해 각 vertex의 angle/length/tangentsum 계산해서 renderInstructions에 기록
+  
   for (const entry of geometryRenderEntries) {
+    const feature = entry.feature;
+    const stride = feature.stride_;    
+    const worldCoords = entry.worldCoordinates;
+    
     ++refCounter;
-    const stride = entry.stride;
-    for (let ei = 0; ei < entry.ends.length; ei++) {
-      const start = ei === 0 ? 0 : entry.ends[ei - 1];
-      const end = entry.ends[ei];
-      const vertexCount = (end - start) / stride;
-      if (vertexCount < 2) continue;
-      let tangentSum = 0;
-      let lengthSum = 0;
+    let offset = 0;
 
-      // world좌표만 추출
-      const verts = [];
-      for (let vi = start; vi < end; vi += stride) {
-        verts.push([
-          entry.worldCoordinates[vi],
-          entry.worldCoordinates[vi + 1],
-          stride > 2 ? entry.worldCoordinates[vi + 2] : 0,
-        ]);
-      }
+    for (const end of entry.ends) {
+      // Push custom attributes
+      renderIndex += pushCustomAttributesInRenderInstructionsFromFeatures(
+        renderInstructions,
+        customAttributes,
+        entry,
+        renderIndex,
+        refCounter
+      );
+      
+      // Push vertex count for this geometry part
+      const vertexCount = (end - offset) / stride;
+      renderInstructions[renderIndex++] = vertexCount;
 
-      for (let i = 0; i < vertexCount; ++i) {
-        // 자기 자신, 이전, 다음 인덱스
-        const prevIdx = (i === 0) ? (vertexCount - 2) : i - 1;
-        const nextIdx = (i === vertexCount - 1) ? 1 : i + 1;
-        const p0 = verts[i];
-        const pPrev = (i === 0) ? verts[vertexCount - 2] : verts[i - 1];
-        const pNext = (i === vertexCount - 1) ? verts[1] : verts[i + 1];
-
-        // angle0/angle1 계산
-        let angle0 = 0, angle1 = 0;
-        if (i > 0) {
-          angle0 = angleBetween(p0, verts[i], pPrev);
-          if (Math.cos(angle0) <= 0.985) tangentSum += Math.tan((angle0 - Math.PI) / 2);
-        }
-        if (i < vertexCount - 1) {
-          angle1 = angleBetween(p0, verts[i], pNext);
-          if (Math.cos(angle1) <= 0.985) tangentSum += Math.tan((Math.PI - angle1) / 2);
-        }
-
-        // 길이계산 (segment 누적)
-        if (i > 0) {
-          const dx = p0[0] - verts[i - 1][0], dy = p0[1] - verts[i - 1][1];
-          lengthSum += Math.sqrt(dx * dx + dy * dy);
-        }
-
-        // renderInstructions 기록
-        renderInstructions[renderIndex++] = p0[0]; // x
-        renderInstructions[renderIndex++] = p0[1]; // y
-        renderInstructions[renderIndex++] = p0[2]; // m(있으면), 없으면 0
-
-        renderInstructions[renderIndex++] = angle0;
-        renderInstructions[renderIndex++] = angle1;
-        renderInstructions[renderIndex++] = lengthSum;
-        renderInstructions[renderIndex++] = tangentSum;
-
-        // customAttributes (기존 함수 활용)
-        renderIndex += pushCustomAttributesInRenderInstructionsFromFeatures(
-          renderInstructions,
-          customAttributes,
-          entry,
-          renderIndex,
-          refCounter
+      // Precompute world-space values for the entire segment
+      const segmentWorldCoords = [];
+      for (let i = offset; i < end; i += stride) {
+        segmentWorldCoords.push(
+          worldCoords[i], 
+          worldCoords[i + 1]
         );
       }
+
+      // Precompute angles and cumulative values
+      const { angles, cumulativeLengths, tangentSums } = 
+        precomputeWorldValues(segmentWorldCoords, vertexCount);
+      
+      // Store vertex data with both pixel and world information
+      for (let i = 0; i < vertexCount; i++) {
+        const srcIdx = offset + i * stride;
+        
+        // Pixel coordinates
+        renderInstructions[renderIndex++] = entry.pixelCoordinates[srcIdx];     // px
+        renderInstructions[renderIndex++] = entry.pixelCoordinates[srcIdx + 1]; // py
+        renderInstructions[renderIndex++] = stride === 3 ? 
+          entry.pixelCoordinates[srcIdx + 2] : 0; // m
+        
+        // World coordinates and precomputed values
+        renderInstructions[renderIndex++] = cumulativeLengths[i] || 0; // cumulativeLength
+        renderInstructions[renderIndex++] = tangentSums[i] || 0;       // currentAngleTangentSum
+      }
+      offset = end;
     }
   }
+  
   return renderInstructions;
 }
 
-// angleBetween 그대로 사용
-function angleBetween(p0, pA, pB) {
-  const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
-  const bx = pB[0] - p0[0], by = pB[1] - p0[1];
-  if ((ax * ax + ay * ay) < 1e-12 || (bx * bx + by * by) < 1e-12) return 0;
-  const angle = Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
-  return angle < 0 ? angle + 2 * Math.PI : angle;
+// Helper to precompute world-space values
+function precomputeWorldValues(coords, vertexCount) {
+  const angles = new Array(vertexCount).fill(-1);
+  const cumulativeLengths = new Array(vertexCount).fill(0);
+  const tangentSums = new Array(vertexCount).fill(0);
+  
+  let totalLength = 0;
+  let totalTangentSum = 0;
+  
+  // Compute angles between segments
+  for (let i = 1; i < vertexCount - 1; i++) {
+    const p0 = [coords[(i-1)*2], coords[(i-1)*2 + 1]];
+    const p1 = [coords[i*2], coords[i*2 + 1]];
+    const p2 = [coords[(i+1)*2], coords[(i+1)*2 + 1]];
+    
+    angles[i] = angleBetween(p0, p1, p2);
+  }
+  
+  // Compute cumulative lengths and tangent sums
+  for (let i = 0; i < vertexCount - 1; i++) {
+    const p0 = [coords[i*2], coords[i*2 + 1]];
+    const p1 = [coords[(i+1)*2], coords[(i+1)*2 + 1]];
+    
+    // Segment length
+    const dx = p1[0] - p0[0];
+    const dy = p1[1] - p0[1];
+    const length = Math.sqrt(dx*dx + dy*dy);
+    
+    // Update cumulative length
+    totalLength += length;
+    cumulativeLengths[i + 1] = totalLength;
+    
+    // Update tangent sum if angle exists
+    if (i > 0 && angles[i] !== -1) {
+      const angle = angles[i];
+      if (Math.cos(angle) <= 0.985) {
+        totalTangentSum += Math.tan((angle - Math.PI) / 2);
+      }
+    }
+    tangentSums[i + 1] = totalTangentSum;
+  }
+  
+  return { angles, cumulativeLengths, tangentSums };
 }
+
+// Angle calculation helper
+function angleBetween(p0, p1, p2) {
+  const ax = p0[0] - p1[0], ay = p0[1] - p1[1];
+  const bx = p2[0] - p1[0], by = p2[1] - p1[1];
+  
+  const dot = ax * bx + ay * by;
+  const cross = ax * by - ay * bx;
+  return Math.atan2(cross, dot);
+}
+
+// Optimized buffer generation (no world transforms needed)
 function generateLineStringBuffers_(renderInstructions, customAttributesSize) {
-  // floatsPerVertex는 위에서 쓴 것과 동일해야 함!
-  const floatsPerVertex = 3 + 4 + customAttributesSize;
-  const vertexCount = renderInstructions.length / floatsPerVertex;
-  // (indices/vertexAttribute는 기존 코드 그대로)
+  const customAttrsCount = customAttributesSize;
+  const instructionsPerVertex = 5; // px, py, m, cumLength, tangentSum
+
+  let currentInstructionsIndex = 0;
+  let totalSegments = 0;
+  
+  // First pass: count total segments
+  while (currentInstructionsIndex < renderInstructions.length) {
+    currentInstructionsIndex += customAttrsCount;
+    const verticesCount = renderInstructions[currentInstructionsIndex++];
+    totalSegments += verticesCount - 1;
+    currentInstructionsIndex += verticesCount * instructionsPerVertex;
+  }
+
+  // Prepare buffer
+  const floatsPerSegment =
+    2 +                // p0(x, y)
+    1 +                // m0
+    2 +                // p1(x, y)
+    1 +                // m1
+    1 +                // cumulativeLength
+    1 +                // currentAngleTangentSum
+    customAttrsCount;  // customAttrs
+
+  const totalFloats = totalSegments * floatsPerSegment;
+  const instanceAttributes = new Float32Array(totalFloats);
+  let bufferPos = 0;
+
+  // Second pass: fill segment data
+  currentInstructionsIndex = 0;
+  while (currentInstructionsIndex < renderInstructions.length) {
+    // Read custom attributes
+    const customAttributes = [];
+    for (let i = 0; i < customAttrsCount; ++i) {
+      customAttributes[i] = renderInstructions[currentInstructionsIndex++];
+    }
+    
+    // Read vertex count
+    const verticesCount = renderInstructions[currentInstructionsIndex++];
+    const vertexBase = currentInstructionsIndex;
+    
+    // Process segments
+    for (let i = 0; i < verticesCount - 1; i++) {
+      const idx0 = vertexBase + i * instructionsPerVertex;
+      const idx1 = vertexBase + (i + 1) * instructionsPerVertex;
+      
+      // Extract point data
+      const p0x = renderInstructions[idx0];
+      const p0y = renderInstructions[idx0 + 1];
+      const m0 = renderInstructions[idx0 + 2];
+      const cumLength0 = renderInstructions[idx0 + 3];
+      const tangentSum0 = renderInstructions[idx0 + 4];
+      
+      const p1x = renderInstructions[idx1];
+      const p1y = renderInstructions[idx1 + 1];
+      const m1 = renderInstructions[idx1 + 2];
+      const cumLength1 = renderInstructions[idx1 + 3];
+      const tangentSum1 = renderInstructions[idx1 + 4];
+      
+      // Write segment data to buffer
+      instanceAttributes[bufferPos++] = p0x;
+      instanceAttributes[bufferPos++] = p0y;
+      instanceAttributes[bufferPos++] = m0;
+      instanceAttributes[bufferPos++] = p1x;
+      instanceAttributes[bufferPos++] = p1y;
+      instanceAttributes[bufferPos++] = m1;
+      instanceAttributes[bufferPos++] = cumLength0;
+      instanceAttributes[bufferPos++] = tangentSum0;
+      
+      // Copy custom attributes
+      for (let j = 0; j < customAttrsCount; j++) {
+        instanceAttributes[bufferPos++] = customAttributes[j];
+      }
+    }
+    
+    // Move to next geometry
+    currentInstructionsIndex += verticesCount * instructionsPerVertex;
+  }
+
   return {
-    indicesBuffer : new Uint32Array([0, 1, 3, 1, 2, 3]),
-    vertexAttributesBuffer : new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-    instanceAttributesBuffer : renderInstructions, // 그대로 전달
+    indicesBuffer: new Uint32Array([0, 1, 3, 1, 2, 3]),
+    vertexAttributesBuffer: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+    instanceAttributesBuffer: instanceAttributes,
   };
 }
