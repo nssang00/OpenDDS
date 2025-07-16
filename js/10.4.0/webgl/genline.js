@@ -1,5 +1,5 @@
 //chatgpt
-function generateLineStringRenderInstructionsFromFeatures(
+function generateLineStringRenderInstructionsFromFeatures1(
   features,
   renderInstructions,
   customAttributes,
@@ -156,7 +156,7 @@ function generateLineStringRenderInstructionsFromFeatures(
 }
 
 ////deep
-function generateLineStringRenderInstructionsFromFeatures(
+function generateLineStringRenderInstructionsFromFeatures2(
   features,
   renderInstructions,
   customAttributes,
@@ -346,5 +346,205 @@ function generateLineStringRenderInstructionsFromFeatures(
     }
   }
   
+  return renderInstructions;
+}
+
+
+//claude
+function generateLineStringRenderInstructionsFromFeatures3(
+  features,
+  renderInstructions,
+  customAttributes,
+  transform,
+) {
+  let verticesCount = 0;
+  let geometriesCount = 0;
+  const geometryRenderEntries = new Array(features.length);
+
+  // 첫 번째 패스: 메타데이터 수집 및 픽셀 좌표 변환
+  for (let i = 0; i < features.length; i++) {
+    const feature = features[i];
+    const geometry = feature.getGeometry();
+    const flatCoordinates = geometry.getFlatCoordinates();
+    const ends = geometry.getEnds();
+    const stride = geometry.getStride();
+
+    verticesCount += flatCoordinates.length / stride;
+    geometriesCount += ends.length;
+
+    const pixelCoordinates = new Array(flatCoordinates.length);
+    transform2D(
+      flatCoordinates,
+      0,
+      flatCoordinates.length,
+      stride,
+      transform,
+      pixelCoordinates,
+      stride
+    );
+    
+    geometryRenderEntries[i] = { 
+      feature, 
+      pixelCoordinates, 
+      flatCoordinates, 
+      ends, 
+      stride 
+    };
+  }
+
+  // 렌더링 명령어 배열 준비
+  const totalInstructionsCount =
+    7 * verticesCount +
+    (1 + getCustomAttributesSize(customAttributes)) * geometriesCount;
+
+  if (!renderInstructions || renderInstructions.length !== totalInstructionsCount) {
+    renderInstructions = new Float32Array(totalInstructionsCount);
+  }
+
+  // 각도 계산을 위한 최적화된 함수 (함수 1의 장점)
+  function angleBetween(p0, pA, pB) {
+    const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
+    const bx = pB[0] - p0[0], by = pB[1] - p0[1];
+    if ((ax * ax + ay * ay) < 1e-12 || (bx * bx + by * by) < 1e-12) return 0;
+    const angle = Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+    return angle < 0 ? angle + 2 * Math.PI : angle;
+  }
+
+  // 메모리 효율적인 좌표 접근 헬퍼 함수들 (함수 1의 장점)
+  function createCoordinateHelpers(flatCoordinates, stride, offset) {
+    const getCoord = (vertexIdx) => {
+      const idx = offset + vertexIdx * stride;
+      return [flatCoordinates[idx], flatCoordinates[idx + 1]];
+    };
+    
+    const getM = (vertexIdx) => {
+      const idx = offset + vertexIdx * stride;
+      return stride > 2 ? flatCoordinates[idx + 2] : 0;
+    };
+    
+    return { getCoord, getM };
+  }
+
+  // 루프 감지를 위한 최적화된 함수 (함수 2의 장점)
+  function isLoopGeometry(flatCoordinates, offset, end, stride) {
+    const verticesCount = (end - offset) / stride;
+    if (verticesCount <= 2) return false;
+    
+    const firstIdx = offset;
+    const lastIdx = end - stride;
+    return flatCoordinates[firstIdx] === flatCoordinates[lastIdx] &&
+           flatCoordinates[firstIdx + 1] === flatCoordinates[lastIdx + 1];
+  }
+
+  // 각도 계산 최적화 (중복 계산 방지)
+  function calculateAngles(getCoord, currentIdx, verticesInLine, isLoop) {
+    let angle0 = -1, angle1 = -1;
+    
+    // angle0 계산
+    if (currentIdx > 0) {
+      const prev = getCoord(currentIdx - 1);
+      const next = (currentIdx < verticesInLine - 1)
+        ? getCoord(currentIdx + 1)
+        : (isLoop ? getCoord(1) : null);
+      if (next) {
+        angle0 = angleBetween(getCoord(currentIdx), next, prev);
+      }
+    } else if (isLoop && verticesInLine > 2) {
+      const prev = getCoord(verticesInLine - 2);
+      const next = getCoord(1);
+      angle0 = angleBetween(getCoord(currentIdx), next, prev);
+    }
+
+    // angle1 계산
+    if (currentIdx < verticesInLine - 1) {
+      const next = getCoord(currentIdx + 1);
+      const after = (currentIdx < verticesInLine - 2)
+        ? getCoord(currentIdx + 2)
+        : (isLoop ? getCoord(1) : null);
+      if (after) {
+        angle1 = angleBetween(next, getCoord(currentIdx), after);
+      }
+    } else if (isLoop && verticesInLine > 2 && currentIdx === verticesInLine - 1) {
+      const next = getCoord(1);
+      const after = getCoord(2);
+      angle1 = angleBetween(next, getCoord(currentIdx), after);
+    }
+    
+    return { angle0, angle1 };
+  }
+
+  // 메인 처리 루프
+  let renderIndex = 0;
+  let refCounter = 0;
+  const ANGLE_COSINE_CUTOFF = 0.985; // 상수화로 성능 향상
+
+  for (const entry of geometryRenderEntries) {
+    const { stride, flatCoordinates, pixelCoordinates, ends } = entry;
+    ++refCounter;
+    let offset = 0;
+
+    for (const end of entry.ends) {
+      // 커스텀 속성 처리
+      renderIndex += pushCustomAttributesInRenderInstructionsFromFeatures(
+        renderInstructions,
+        customAttributes,
+        entry,
+        renderIndex,
+        refCounter
+      );
+
+      const verticesInLine = (end - offset) / stride;
+      renderInstructions[renderIndex++] = verticesInLine;
+
+      // 루프 감지 (함수 2의 장점)
+      const isLoop = isLoopGeometry(flatCoordinates, offset, end, stride);
+      
+      // 좌표 접근 헬퍼 생성 (함수 1의 장점)
+      const { getCoord, getM } = createCoordinateHelpers(flatCoordinates, stride, offset);
+
+      let currentLength = 0;
+      let currentAngleTangentSum = 0;
+
+      // 정점 처리 루프
+      for (let i = 0; i < verticesInLine; i++) {
+        const pixelIndex = offset + i * stride;
+        
+        // 각도 계산
+        const { angle0, angle1 } = calculateAngles(getCoord, i, verticesInLine, isLoop);
+        
+        // 각도 탄젠트 합 업데이트
+        let newAngleTangentSum = currentAngleTangentSum;
+        if (angle0 !== -1 && Math.cos(angle0) <= ANGLE_COSINE_CUTOFF) {
+          newAngleTangentSum += Math.tan((angle0 - Math.PI) / 2);
+        }
+        if (angle1 !== -1 && Math.cos(angle1) <= ANGLE_COSINE_CUTOFF) {
+          newAngleTangentSum += Math.tan((Math.PI - angle1) / 2);
+        }
+
+        // 렌더링 명령어 저장
+        renderInstructions[renderIndex++] = pixelCoordinates[pixelIndex];     // x
+        renderInstructions[renderIndex++] = pixelCoordinates[pixelIndex + 1]; // y
+        renderInstructions[renderIndex++] = getM(i);                          // m
+        renderInstructions[renderIndex++] = angle0;
+        renderInstructions[renderIndex++] = angle1;
+        renderInstructions[renderIndex++] = currentLength;
+        renderInstructions[renderIndex++] = currentAngleTangentSum;
+
+        // 길이 업데이트 (다음 정점까지의 거리)
+        if (i < verticesInLine - 1) {
+          const current = getCoord(i);
+          const next = getCoord(i + 1);
+          currentLength += Math.sqrt(
+            (next[0] - current[0]) ** 2 + (next[1] - current[1]) ** 2
+          );
+        }
+        
+        currentAngleTangentSum = newAngleTangentSum;
+      }
+      
+      offset = end;
+    }
+  }
+
   return renderInstructions;
 }
