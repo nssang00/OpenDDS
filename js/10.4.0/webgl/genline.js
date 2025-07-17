@@ -1,15 +1,3 @@
-const worldCache = [null, null, null, null];
-function getWorld(idx) {
-  if (idx === null || idx < 0 || idx >= 4) return null;
-  if (!worldCache[idx]) {
-    const instrIdx = idxToInstr(idx);
-    worldCache[idx] = applyTransform(invertTransform, [
-      renderInstructions[instrIdx],
-      renderInstructions[instrIdx + 1]
-    ]);
-  }
-  return worldCache[idx];
-}
 
 function generateLineStringBuffers_(renderInstructions, customAttributesSize, transform) {
   const customAttrsCount = customAttributesSize;
