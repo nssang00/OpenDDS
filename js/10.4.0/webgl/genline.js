@@ -1,3 +1,35 @@
+for (const entry of geometryRenderEntries) {
+  const stride = entry.feature.stride_;
+  ++refCounter;
+  let offset = 0;
+
+  // 명확한 변수명
+  const customAttrValues = [];
+  const customAttrSize = pushCustomAttributesInRenderInstructionsFromFeatures(
+    customAttrValues,
+    customAttributes,
+    entry,
+    0,
+    refCounter
+  );
+
+  for (const end of entry.ends) {
+    for (let i = 0; i < customAttrSize; ++i)
+      renderInstructions[renderIndex++] = customAttrValues[i];
+
+    renderInstructions[renderIndex++] = (end - offset) / stride;
+
+    for (let i = offset; i < end; i += stride) {
+      renderInstructions[renderIndex++] = entry.pixelCoordinates[i];
+      renderInstructions[renderIndex++] = entry.pixelCoordinates[i + 1];
+      renderInstructions[renderIndex++] = stride === 3 ? entry.pixelCoordinates[i + 2] : 0;
+    }
+    offset = end;
+  }
+}
+
+
+
 ol.renderer/webgl/VectorTileLayer.js
 this.workerEnabled_ = !options.disableWorker;//kmg
 
