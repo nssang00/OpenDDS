@@ -1,10 +1,7 @@
 function generateLineStringBuffers_(renderInstructions, customAttributesSize, transform) {
   const customAttrsCount = customAttributesSize;
   const instructionsPerVertex = 3;
-  const floatsPerSegment = 2+1+2+1+2+1+1+customAttrsCount;
-  const invertTransform = createTransform();
-  makeInverseTransform(invertTransform, transform);
-
+  
   let currentInstructionsIndex = 0;
   let totalSegments = 0;
   while (currentInstructionsIndex < renderInstructions.length) {
@@ -13,13 +10,25 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     totalSegments += (verticesCount - 1);
     currentInstructionsIndex += verticesCount * instructionsPerVertex;
   }
+
+  const floatsPerSegment =
+    2 +                // p0(x, y)
+    1 +                // m0
+    2 +                // p1(x, y)
+    1 +                // m1
+    2 +                // angle0, angle1
+    1 +                // currentLength
+    1 +                // currentAngleTangentSum
+    customAttrsCount;  // customAttrs
   const totalFloats = totalSegments * floatsPerSegment;
   const instanceAttributes = new Float32Array(totalFloats);
   let bufferPos = 0;
 
+  const invertTransform = createTransform();
+  makeInverseTransform(invertTransform, transform);  
+
   currentInstructionsIndex = 0;
   while (currentInstructionsIndex < renderInstructions.length) {
-    // customAttributes
     const customAttributes = [];
     for (let i = 0; i < customAttrsCount; ++i)
       customAttributes[i] = renderInstructions[currentInstructionsIndex + i];
@@ -35,7 +44,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     let currentLength = 0;
     let currentAngleTangentSum = 0;
 
-    // ===== 최소 수정 캐시 =====
     const worldCache = new Array(verticesCount);
 
     function getWorld(idx) {
@@ -79,7 +87,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
         renderInstructions[segmentEndIndex + 2]
       ];
 
-      // world 좌표는 캐시로!
       const p0world = getWorld(idx0);
       const p1world = getWorld(idx1);
       const pBworld = getWorld(idxB);
