@@ -1,6 +1,9 @@
 function generateLineStringBuffers_(renderInstructions, customAttributesSize, transform) {
   const customAttrsCount = customAttributesSize;
-  const instructionsPerVertex = 3; // x, y, m
+  const instructionsPerVertex = 3;
+  const floatsPerSegment = 2+1+2+1+2+1+1+customAttrsCount;
+  const invertTransform = createTransform();
+  makeInverseTransform(invertTransform, transform);
 
   let currentInstructionsIndex = 0;
   let totalSegments = 0;
@@ -10,33 +13,23 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     totalSegments += (verticesCount - 1);
     currentInstructionsIndex += verticesCount * instructionsPerVertex;
   }
-
-  const floatsPerSegment =
-    2 +                // p0(x, y)
-    1 +                // m0
-    2 +                // p1(x, y)
-    1 +                // m1
-    2 +                // angle0, angle1
-    1 +                // currentLength
-    1 +                // currentAngleTangentSum
-    customAttrsCount;  // customAttrs
   const totalFloats = totalSegments * floatsPerSegment;
   const instanceAttributes = new Float32Array(totalFloats);
   let bufferPos = 0;
 
-  const invertTransform = createTransform();
-  makeInverseTransform(invertTransform, transform);
-
   currentInstructionsIndex = 0;
   while (currentInstructionsIndex < renderInstructions.length) {
-    // 커스텀 속성
+    // customAttributes
     const customAttributes = [];
-    for (let i = 0; i < customAttrsCount; ++i) {
+    for (let i = 0; i < customAttrsCount; ++i)
       customAttributes[i] = renderInstructions[currentInstructionsIndex + i];
-    }
     currentInstructionsIndex += customAttrsCount;
     const verticesCount = renderInstructions[currentInstructionsIndex++];
 
+    const baseIdx = currentInstructionsIndex;
+    const idxToInstr = idx => baseIdx + idx * instructionsPerVertex;
+
+    // 루프 여부
     const firstInstructionsIndex = currentInstructionsIndex;
     const lastInstructionsIndex = currentInstructionsIndex + (verticesCount - 1) * instructionsPerVertex;
     const isLoop =
@@ -46,56 +39,36 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     let currentLength = 0;
     let currentAngleTangentSum = 0;
 
-    // ---- 슬라이딩 윈도우 world 변환 ----
-    let prevWorld = null;
-    for (let i = 0; i < verticesCount - 1; i++) {
-      // p0, p1
-      const idx0 = currentInstructionsIndex + i * instructionsPerVertex;
-      const idx1 = currentInstructionsIndex + (i + 1) * instructionsPerVertex;
+    // 슬라이딩 캐시 4개 준비 (pB, p0, p1, pA)
+    // 캐시에는 [x, y]만 저장
+    const cache = [null, null, null, null];
+    // 처음 필요한 4개 모두 채움
+    for (let k = -1; k <= 2; ++k) {
+      let idx;
+      if (k === -1) idx = isLoop ? verticesCount - 2 : null;
+      else if (k < verticesCount) idx = k;
+      else idx = isLoop ? 1 : null;
+      cache[k + 1] = (idx !== null)
+        ? applyTransform(invertTransform, [
+            renderInstructions[idxToInstr(idx)],
+            renderInstructions[idxToInstr(idx) + 1]
+          ])
+        : null;
+    }
 
-      const p0 = [renderInstructions[idx0], renderInstructions[idx0 + 1]];
-      const p1 = [renderInstructions[idx1], renderInstructions[idx1 + 1]];
-      const m0 = renderInstructions[idx0 + 2];
-      const m1 = renderInstructions[idx1 + 2];
+    for (let i = 0; i < verticesCount - 1; ++i) {
+      // 현재 세그먼트용 pb/p0/p1/pa 사용
+      const pBworld = cache[0];
+      const p0world = cache[1];
+      const p1world = cache[2];
+      const pAworld = cache[3];
 
-      // world 변환, p0는 이전 루프의 p1world 재활용
-      let p0world;
-      if (i === 0) {
-        p0world = applyTransform(invertTransform, p0);
-      } else {
-        p0world = prevWorld; // 이전 루프에서 계산된 p1world
-      }
-      const p1world = applyTransform(invertTransform, p1);
+      // 원본 좌표
+      const p0idx = idxToInstr(i);
+      const p1idx = idxToInstr(i + 1);
+      const p0 = [renderInstructions[p0idx], renderInstructions[p0idx + 1], renderInstructions[p0idx + 2]];
+      const p1 = [renderInstructions[p1idx], renderInstructions[p1idx + 1], renderInstructions[p1idx + 2]];
 
-      // beforeWorld
-      let beforeWorld = null;
-      if (i > 0) {
-        const idxB = currentInstructionsIndex + (i - 1) * instructionsPerVertex;
-        beforeWorld = applyTransform(invertTransform, [
-          renderInstructions[idxB], renderInstructions[idxB + 1]
-        ]);
-      } else if (isLoop) {
-        const idxB = currentInstructionsIndex + (verticesCount - 2) * instructionsPerVertex;
-        beforeWorld = applyTransform(invertTransform, [
-          renderInstructions[idxB], renderInstructions[idxB + 1]
-        ]);
-      }
-
-      // afterWorld
-      let afterWorld = null;
-      if (i < verticesCount - 2) {
-        const idxA = currentInstructionsIndex + (i + 2) * instructionsPerVertex;
-        afterWorld = applyTransform(invertTransform, [
-          renderInstructions[idxA], renderInstructions[idxA + 1]
-        ]);
-      } else if (isLoop) {
-        const idxA = currentInstructionsIndex + 1 * instructionsPerVertex;
-        afterWorld = applyTransform(invertTransform, [
-          renderInstructions[idxA], renderInstructions[idxA + 1]
-        ]);
-      }
-
-      // 각도 함수 (동일)
       function angleBetween(p0, pA, pB) {
         const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
         const bx = pB[0] - p0[0], by = pB[1] - p0[1];
@@ -104,53 +77,62 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
         return angle < 0 ? angle + 2 * Math.PI : angle;
       }
 
-      // 각도
       let angle0 = -1, angle1 = -1;
       let newAngleTangentSum = currentAngleTangentSum;
-      if (beforeWorld) {
-        angle0 = angleBetween(p0world, p1world, beforeWorld);
-        if (Math.cos(angle0) <= 0.985) {
+      if (pBworld) {
+        angle0 = angleBetween(p0world, p1world, pBworld);
+        if (Math.cos(angle0) <= 0.985)
           newAngleTangentSum += Math.tan((angle0 - Math.PI) / 2);
-        }
       }
-      if (afterWorld) {
-        angle1 = angleBetween(p1world, p0world, afterWorld);
-        if (Math.cos(angle1) <= 0.985) {
+      if (pAworld) {
+        angle1 = angleBetween(p1world, p0world, pAworld);
+        if (Math.cos(angle1) <= 0.985)
           newAngleTangentSum += Math.tan((Math.PI - angle1) / 2);
-        }
       }
 
-      // 버퍼 기록
+      // 기록
       instanceAttributes[bufferPos++] = p0[0];
       instanceAttributes[bufferPos++] = p0[1];
-      instanceAttributes[bufferPos++] = m0;
+      instanceAttributes[bufferPos++] = p0[2];
       instanceAttributes[bufferPos++] = p1[0];
       instanceAttributes[bufferPos++] = p1[1];
-      instanceAttributes[bufferPos++] = m1;
+      instanceAttributes[bufferPos++] = p1[2];
       instanceAttributes[bufferPos++] = angle0;
       instanceAttributes[bufferPos++] = angle1;
       instanceAttributes[bufferPos++] = currentLength;
       instanceAttributes[bufferPos++] = currentAngleTangentSum;
-      for (let j = 0; j < customAttrsCount; ++j) {
+      for (let j = 0; j < customAttrsCount; ++j)
         instanceAttributes[bufferPos++] = customAttributes[j];
-      }
 
-      // 길이 누적
       currentLength += Math.sqrt(
         (p1world[0] - p0world[0]) * (p1world[0] - p0world[0]) +
         (p1world[1] - p0world[1]) * (p1world[1] - p0world[1])
       );
       currentAngleTangentSum = newAngleTangentSum;
 
-      // 다음 루프를 위해 p1world를 prevWorld에 저장
-      prevWorld = p1world;
+      // 캐시 shift: [pB, p0, p1, pA] → [p0, p1, pA, nextA]
+      cache[0] = cache[1];
+      cache[1] = cache[2];
+      cache[2] = cache[3];
+      // nextA 계산
+      let nextAIdx = null;
+      if (i + 2 < verticesCount)
+        nextAIdx = i + 2;
+      else if (isLoop)
+        nextAIdx = 1;
+      cache[3] = (nextAIdx !== null)
+        ? applyTransform(invertTransform, [
+            renderInstructions[idxToInstr(nextAIdx)],
+            renderInstructions[idxToInstr(nextAIdx) + 1]
+          ])
+        : null;
     }
     currentInstructionsIndex += verticesCount * instructionsPerVertex;
   }
 
   return {
-    indicesBuffer: new Uint32Array([0, 1, 3, 1, 2, 3]),
-    vertexAttributesBuffer: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-    instanceAttributesBuffer: instanceAttributes,
+    indicesBuffer : new Uint32Array([0, 1, 3, 1, 2, 3]),
+    vertexAttributesBuffer : new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+    instanceAttributesBuffer : instanceAttributes,
   };
 }
