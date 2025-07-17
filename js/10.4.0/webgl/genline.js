@@ -7,7 +7,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
 
   let currentInstructionsIndex = 0;
   let totalSegments = 0;
-  // Prepass: segment count
   while (currentInstructionsIndex < renderInstructions.length) {
     currentInstructionsIndex += customAttrsCount;
     const verticesCount = renderInstructions[currentInstructionsIndex++];
@@ -40,37 +39,36 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     let currentLength = 0;
     let currentAngleTangentSum = 0;
 
-    // ---- 1. 캐시 4개(pB, p0, p1, pA) 초기화 ----
-    const cache = [null, null, null, null];
-    // idx: pB(-1), p0(0), p1(1), pA(2)
-    for (let k = -1; k <= 2; ++k) {
-      let idx = null;
-      if (k === -1) idx = isLoop ? verticesCount - 2 : null;
-      else if (k < verticesCount) idx = k;
-      else idx = isLoop ? 1 : null;
+    // ===== 최소 수정 캐시 =====
+    const worldCache = new Array(verticesCount);
 
-      if (idx !== null) {
+    function getWorld(idx) {
+      if (idx === null || idx < 0 || idx >= verticesCount) return null;
+      if (!worldCache[idx]) {
         const instrIdx = idxToInstr(idx);
-        cache[k + 1] = applyTransform(invertTransform, [
+        worldCache[idx] = applyTransform(invertTransform, [
           renderInstructions[instrIdx],
           renderInstructions[instrIdx + 1]
         ]);
-      } else {
-        cache[k + 1] = null;
       }
+      return worldCache[idx];
     }
 
     for (let i = 0; i < verticesCount - 1; ++i) {
-      // cache: [pB, p0, p1, pA]
-      const pBworld = cache[0];
-      const p0world = cache[1];
-      const p1world = cache[2];
-      const pAworld = cache[3];
+      // idx 계산 (기존 코드 거의 그대로 유지)
+      const idx0 = i;
+      const idx1 = i + 1;
+      const idxB = (i > 0) ? i - 1 : (isLoop ? verticesCount - 2 : null);
+      const idxA = (i < verticesCount - 2) ? i + 2 : (isLoop ? 1 : null);
 
-      const p0idx = idxToInstr(i);
-      const p1idx = idxToInstr(i + 1);
+      const p0idx = idxToInstr(idx0);
+      const p1idx = idxToInstr(idx1);
       const p0 = [renderInstructions[p0idx], renderInstructions[p0idx + 1], renderInstructions[p0idx + 2]];
       const p1 = [renderInstructions[p1idx], renderInstructions[p1idx + 1], renderInstructions[p1idx + 2]];
+      const p0world = getWorld(idx0);
+      const p1world = getWorld(idx1);
+      const pBworld = getWorld(idxB);
+      const pAworld = getWorld(idxA);
 
       function angleBetween(p0, pA, pB) {
         const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
@@ -112,25 +110,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
         (p1world[1] - p0world[1]) * (p1world[1] - p0world[1])
       );
       currentAngleTangentSum = newAngleTangentSum;
-
-      // ---- 2. 캐시 shift 및 신규 pA 갱신 ----
-      cache[0] = cache[1];
-      cache[1] = cache[2];
-      cache[2] = cache[3];
-      // nextA index 계산
-      let nextAIdx = null;
-      if (i + 2 < verticesCount) nextAIdx = i + 2;
-      else if (isLoop) nextAIdx = 1;
-      // nextA 값 갱신
-      if (nextAIdx !== null) {
-        const instrIdx = idxToInstr(nextAIdx);
-        cache[3] = applyTransform(invertTransform, [
-          renderInstructions[instrIdx],
-          renderInstructions[instrIdx + 1]
-        ]);
-      } else {
-        cache[3] = null;
-      }
     }
     currentInstructionsIndex += verticesCount * instructionsPerVertex;
   }
