@@ -15,6 +15,12 @@ main.js
   style:styles,
   disableWorker: true,
 
+const label = `generateBuffers(${features.length})-${Date.now()}`;
+  console.time(label);
+
+  console.log('buffers', buffers.lineStringBuffers[2].array_.length);
+  console.timeEnd(label);
+  this.setReady();
     ////////
 
 
