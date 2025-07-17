@@ -1,3 +1,22 @@
+제목: [Feature] Add disableWorker option to disable WebGL rendering in Worker thread
+
+본문 예시:
+
+## Feature Request
+
+Currently, OpenLayers WebGL rendering always runs inside a Web Worker, which makes debugging or profiling difficult in some cases. This PR proposes adding a `disableWorker` option to disable the use of Worker-based WebGL rendering and run it on the main thread instead.
+
+## Use case
+
+- Easier debugging and profiling (e.g., Chrome DevTools)
+- Use in platforms that have limitations on worker usage
+- Performance testing for comparison between Worker and non-Worker mode
+
+## Proposal
+
+Add a `disableWorker` flag to the WebGL renderer options. If set to `true`, the renderer should run directly in the main thread.
+/////////////
+
 for (const entry of geometryRenderEntries) {
   const stride = entry.feature.stride_;
   ++refCounter;
