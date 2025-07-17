@@ -83,11 +83,9 @@ class TileGeometry extends BaseTileRepresentation {
     );
 
     //kmg
-    const useWorker = false;
-
     const label = `generateBuffers-${Date.now()}`;
     console.time(label);
-    if(useWorker)
+    if(this.styleRenderer_.workerEnabled_)
       this.batch_.addFeatures(features);
 
     const tileOriginX = sourceTiles[0].extent[0];
@@ -98,7 +96,7 @@ class TileGeometry extends BaseTileRepresentation {
       -tileOriginY,
     );
 
-    if(useWorker)
+    if(this.styleRenderer_.workerEnabled_)
     {
       this.styleRenderer_
       .generateBuffers(this.batch_, transform)
