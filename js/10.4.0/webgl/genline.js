@@ -3,7 +3,6 @@ for (const entry of geometryRenderEntries) {
   ++refCounter;
   let offset = 0;
 
-  // 명확한 변수명
   const customAttrValues = [];
   const customAttrSize = pushCustomAttributesInRenderInstructionsFromFeatures(
     customAttrValues,
