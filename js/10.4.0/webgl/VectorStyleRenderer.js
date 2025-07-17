@@ -148,7 +148,7 @@ class VectorStyleRenderer {
    * @param {import('../../webgl/Helper.js').default} helper Helper
    * @param {boolean} [enableHitDetection] Whether to enable the hit detection (needs compatible shader)
    */
-  constructor(styles, variables, helper, enableHitDetection) {
+  constructor(styles, variables, helper, enableHitDetection, enableWorker) {//kmg
     /**
      * @private
      * @type {import('../../webgl/Helper.js').default}
@@ -160,6 +160,11 @@ class VectorStyleRenderer {
      */
     this.hitDetectionEnabled_ = !!enableHitDetection;
 
+    /**
+     * @private
+     */
+    this.workerEnabled_ = !!enableWorker;
+    
     /**
      * @type {Array<StyleShaders>}
      * @private
