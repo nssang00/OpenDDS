@@ -1,3 +1,22 @@
+ol.renderer/webgl/VectorTileLayer.js
+this.workerEnabled_ = !options.disableWorker;//kmg
+
+this.styleRenderer_ = new VectorStyleRenderer(
+  this.workerEnabled_,//kmg
+  );
+
+ol/layer/WebGLVectorTile.js
+this.workerDisabled_ = options.disableWorker ?? false;//kmg
+createRenderer() {
+  cacheSize: this.getCacheSize(),
+  disableWorker: this.workerDisabled_,//kmg
+
+main.js
+  style:styles,
+  disableWorker: true,
+
+    ////////
+
 
 function generateLineStringBuffers_(renderInstructions, customAttributesSize, transform) {
   const customAttrsCount = customAttributesSize;
