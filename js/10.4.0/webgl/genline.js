@@ -1,3 +1,29 @@
+const worldCache = [
+  { idx: -1, world: null },
+  { idx: -1, world: null },
+  { idx: -1, world: null },
+  { idx: -1, world: null }
+];
+
+function getWorld(idx) {
+  if (idx === null || idx < 0 || idx >= verticesCount) return null;
+  // 캐시에 있으면 바로 반환
+  for (let i = 0; i < 4; ++i) {
+    if (worldCache[i].idx === idx) return worldCache[i].world;
+  }
+  // 캐시에 없으면 계산
+  const instrIdx = idxToInstr(idx);
+  const world = applyTransform(invertTransform, [
+    renderInstructions[instrIdx],
+    renderInstructions[instrIdx + 1]
+  ]);
+  // 캐시 업데이트: 가장 오래된 것을 shift, 새 값 push
+  worldCache.shift();
+  worldCache.push({ idx, world });
+  return world;
+}
+
+
 function generateLineStringBuffers_(renderInstructions, customAttributesSize, transform) {
   const customAttrsCount = customAttributesSize;
   const instructionsPerVertex = 3;
