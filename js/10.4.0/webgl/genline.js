@@ -1,4 +1,4 @@
-제목: [Feature] Add disableWorker option to disable WebGL rendering in Worker thread
+제목: [Feature]Add disableWorker Option to Switch from Worker-Based to CPU-Based Rendering
 
 본문 예시:
 
