@@ -2,19 +2,27 @@
 
 본문 예시:
 
-## Feature Request
+## 배경
 
-Currently, OpenLayers WebGL rendering always runs inside a Web Worker, which makes debugging or profiling difficult in some cases. This PR proposes adding a `disableWorker` option to disable the use of Worker-based WebGL rendering and run it on the main thread instead.
+현재 OpenLayers의 WebGL 렌더링은 항상 Web Worker를 통해 수행됩니다. 하지만 특정 환경에서는 Worker를 사용하는 것이 오히려 성능에 부정적인 영향을 주는 사례가 있습니다.
 
-## Use case
+저희 프로젝트에서는 약 1,100개의 피처를 렌더링할 때,
+- Worker 기반 렌더링: 약 **500ms**
+- 메인 스레드 렌더링(CPU 직접 처리): 약 **40ms**
 
-- Easier debugging and profiling (e.g., Chrome DevTools)
-- Use in platforms that have limitations on worker usage
-- Performance testing for comparison between Worker and non-Worker mode
+으로 큰 성능 차이가 발생하였습니다.
 
-## Proposal
+## 제안
 
-Add a `disableWorker` flag to the WebGL renderer options. If set to `true`, the renderer should run directly in the main thread.
+WebGLTileLayer 등에 `disableWorker: true` 옵션을 추가하여, 필요 시 Worker를 사용하지 않고 메인 스레드에서 렌더링할 수 있도록 기능을 확장합니다.
+
+## 활용 예시
+
+```js
+new WebGLTileLayer({
+  source: new VectorTileSource(...),
+  disableWorker: true,
+});
 /////////////
 
 for (const entry of geometryRenderEntries) {
