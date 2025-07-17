@@ -19,7 +19,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
 
   currentInstructionsIndex = 0;
   while (currentInstructionsIndex < renderInstructions.length) {
-    // customAttributes
     const customAttributes = [];
     for (let i = 0; i < customAttrsCount; ++i)
       customAttributes[i] = renderInstructions[currentInstructionsIndex + i];
@@ -29,7 +28,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     const baseIdx = currentInstructionsIndex;
     const idxToInstr = idx => baseIdx + idx * instructionsPerVertex;
 
-    // loop 여부
     const firstInstructionsIndex = currentInstructionsIndex;
     const lastInstructionsIndex = currentInstructionsIndex + (verticesCount - 1) * instructionsPerVertex;
     const isLoop =
@@ -39,30 +37,24 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     let currentLength = 0;
     let currentAngleTangentSum = 0;
 
-    // ===== 슬라이딩 윈도우 캐시 최적화 =====
     let worldB = null, world0 = null, world1 = null, worldA = null;
     let cachedIdxB = -1, cachedIdx0 = -1, cachedIdx1 = -1, cachedIdxA = -1;
 
     function getWorld(idx) {
       if (idx === null || idx < 0 || idx >= verticesCount) return null;
       
-      // 캐시 히트 확인
       if (idx === cachedIdxB) return worldB;
       if (idx === cachedIdx0) return world0;
       if (idx === cachedIdx1) return world1;
       if (idx === cachedIdxA) return worldA;
       
-      // 캐시 미스 - 계산 후 적절한 위치에 저장
       const instrIdx = idxToInstr(idx);
       const world = applyTransform(invertTransform, [
         renderInstructions[instrIdx],
         renderInstructions[instrIdx + 1]
       ]);
       
-      // 순차적 접근 패턴을 고려한 캐시 배치
-      // 다음 iteration에서 사용될 가능성이 높은 순서로 배치
       if (idx === cachedIdx0 + 1) {
-        // 슬라이딩: B <- 0, 0 <- 1, 1 <- new, A는 유지 또는 교체
         worldB = world0;
         cachedIdxB = cachedIdx0;
         world0 = world1;
@@ -70,7 +62,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
         world1 = world;
         cachedIdx1 = idx;
       } else {
-        // 일반적인 경우: 가장 오래된 것을 교체
         worldA = world;
         cachedIdxA = idx;
       }
@@ -79,7 +70,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     }
 
     for (let i = 0; i < verticesCount - 1; ++i) {
-      // idx 계산
       const idx0 = i;
       const idx1 = i + 1;
       const idxB = (i > 0) ? i - 1 : (isLoop ? verticesCount - 2 : null);
@@ -116,7 +106,6 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
           newAngleTangentSum += Math.tan((Math.PI - angle1) / 2);
       }
 
-      // 기록
       instanceAttributes[bufferPos++] = p0[0];
       instanceAttributes[bufferPos++] = p0[1];
       instanceAttributes[bufferPos++] = p0[2];
