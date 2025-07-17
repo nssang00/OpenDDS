@@ -7,6 +7,7 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
 
   let currentInstructionsIndex = 0;
   let totalSegments = 0;
+  // Prepass: segment count
   while (currentInstructionsIndex < renderInstructions.length) {
     currentInstructionsIndex += customAttrsCount;
     const verticesCount = renderInstructions[currentInstructionsIndex++];
@@ -29,7 +30,7 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     const baseIdx = currentInstructionsIndex;
     const idxToInstr = idx => baseIdx + idx * instructionsPerVertex;
 
-    // 루프 여부
+    // loop 여부
     const firstInstructionsIndex = currentInstructionsIndex;
     const lastInstructionsIndex = currentInstructionsIndex + (verticesCount - 1) * instructionsPerVertex;
     const isLoop =
@@ -39,31 +40,33 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     let currentLength = 0;
     let currentAngleTangentSum = 0;
 
-    // 슬라이딩 캐시 4개 준비 (pB, p0, p1, pA)
-    // 캐시에는 [x, y]만 저장
+    // ---- 1. 캐시 4개(pB, p0, p1, pA) 초기화 ----
     const cache = [null, null, null, null];
-    // 처음 필요한 4개 모두 채움
+    // idx: pB(-1), p0(0), p1(1), pA(2)
     for (let k = -1; k <= 2; ++k) {
-      let idx;
+      let idx = null;
       if (k === -1) idx = isLoop ? verticesCount - 2 : null;
       else if (k < verticesCount) idx = k;
       else idx = isLoop ? 1 : null;
-      cache[k + 1] = (idx !== null)
-        ? applyTransform(invertTransform, [
-            renderInstructions[idxToInstr(idx)],
-            renderInstructions[idxToInstr(idx) + 1]
-          ])
-        : null;
+
+      if (idx !== null) {
+        const instrIdx = idxToInstr(idx);
+        cache[k + 1] = applyTransform(invertTransform, [
+          renderInstructions[instrIdx],
+          renderInstructions[instrIdx + 1]
+        ]);
+      } else {
+        cache[k + 1] = null;
+      }
     }
 
     for (let i = 0; i < verticesCount - 1; ++i) {
-      // 현재 세그먼트용 pb/p0/p1/pa 사용
+      // cache: [pB, p0, p1, pA]
       const pBworld = cache[0];
       const p0world = cache[1];
       const p1world = cache[2];
       const pAworld = cache[3];
 
-      // 원본 좌표
       const p0idx = idxToInstr(i);
       const p1idx = idxToInstr(i + 1);
       const p0 = [renderInstructions[p0idx], renderInstructions[p0idx + 1], renderInstructions[p0idx + 2]];
@@ -110,29 +113,31 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
       );
       currentAngleTangentSum = newAngleTangentSum;
 
-      // 캐시 shift: [pB, p0, p1, pA] → [p0, p1, pA, nextA]
+      // ---- 2. 캐시 shift 및 신규 pA 갱신 ----
       cache[0] = cache[1];
       cache[1] = cache[2];
       cache[2] = cache[3];
-      // nextA 계산
+      // nextA index 계산
       let nextAIdx = null;
-      if (i + 2 < verticesCount)
-        nextAIdx = i + 2;
-      else if (isLoop)
-        nextAIdx = 1;
-      cache[3] = (nextAIdx !== null)
-        ? applyTransform(invertTransform, [
-            renderInstructions[idxToInstr(nextAIdx)],
-            renderInstructions[idxToInstr(nextAIdx) + 1]
-          ])
-        : null;
+      if (i + 2 < verticesCount) nextAIdx = i + 2;
+      else if (isLoop) nextAIdx = 1;
+      // nextA 값 갱신
+      if (nextAIdx !== null) {
+        const instrIdx = idxToInstr(nextAIdx);
+        cache[3] = applyTransform(invertTransform, [
+          renderInstructions[instrIdx],
+          renderInstructions[instrIdx + 1]
+        ]);
+      } else {
+        cache[3] = null;
+      }
     }
     currentInstructionsIndex += verticesCount * instructionsPerVertex;
   }
 
   return {
-    indicesBuffer : new Uint32Array([0, 1, 3, 1, 2, 3]),
-    vertexAttributesBuffer : new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
-    instanceAttributesBuffer : instanceAttributes,
+    indicesBuffer: new Uint32Array([0, 1, 3, 1, 2, 3]),
+    vertexAttributesBuffer: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+    instanceAttributesBuffer: instanceAttributes,
   };
 }
