@@ -652,8 +652,7 @@ class VectorStyleRenderer {
   //kmg
   async generateBuffersFromFeatures(features, transform) {
     
-    //const filteredFeatures = [];
-    const filteredFeatures = features;
+    const filteredFeatures = [];
 
     const featureIdSet = new Set();
     for (const styleShader of this.styleShaders) {
