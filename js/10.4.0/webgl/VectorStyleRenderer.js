@@ -1116,16 +1116,20 @@ function generateLineStringRenderInstructionsFromFeatures(
   
     ++refCounter;
     let offset = 0;
+
+    const customAttrValues = [];
+    const customAttrSize = pushCustomAttributesInRenderInstructionsFromFeatures(
+      customAttrValues,
+      customAttributes,
+      entry,
+      0,
+      refCounter
+    );
   
     for (const end of entry.ends) {
+      for (let i = 0; i < customAttrSize; ++i)
+        renderInstructions[renderIndex++] = customAttrValues[i];
 
-      renderIndex += pushCustomAttributesInRenderInstructionsFromFeatures(
-        renderInstructions,
-        customAttributes,
-        entry,
-        renderIndex,
-        refCounter
-      );
       // vertices count
       renderInstructions[renderIndex++] = (end - offset) / stride;
   
