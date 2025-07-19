@@ -23,3 +23,21 @@ bindBuffer(buffer) {
     this.bindBuffer(buffer);
     gl.bufferData(buffer.getType(), buffer.getArray(), buffer.getUsage());
   }
+
+
+const indicesBuffer = new WebGLArrayBuffer(
+          ELEMENT_ARRAY_BUFFER,
+          DYNAMIC_DRAW,
+        ).fromArrayBuffer(received.indicesBuffer);
+        const vertexAttributesBuffer = new WebGLArrayBuffer(
+          ARRAY_BUFFER,
+          DYNAMIC_DRAW,
+        ).fromArrayBuffer(received.vertexAttributesBuffer);
+        const instanceAttributesBuffer = new WebGLArrayBuffer(
+          ARRAY_BUFFER,
+          DYNAMIC_DRAW,
+        ).fromArrayBuffer(received.instanceAttributesBuffer);
+        this.helper_.flushBufferData(indicesBuffer);
+        this.helper_.flushBufferData(vertexAttributesBuffer);
+        this.helper_.flushBufferData(instanceAttributesBuffer);
+
