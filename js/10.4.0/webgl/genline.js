@@ -1,28 +1,31 @@
-제목: [Feature]Add disableWorker Option to Switch from Worker-Based to CPU-Based Rendering
+constructor(styles, variables, helper, enableHitDetection, enableWorker) {
+  // ...
+  this.workerEnabled_ = !!enableWorker;
 
-본문 예시:
+  this.customAttributes_ = {};
+  this.uniforms_ = {};
 
-## 배경
-
-현재 OpenLayers의 WebGL 렌더링은 항상 Web Worker를 통해 수행됩니다. 하지만 특정 환경에서는 Worker를 사용하는 것이 오히려 성능에 부정적인 영향을 주는 사례가 있습니다.
-
-저희 프로젝트에서는 약 1,100개의 피처를 렌더링할 때,
-- Worker 기반 렌더링: 약 **500ms**
-- 메인 스레드 렌더링(CPU 직접 처리): 약 **40ms**
-
-으로 큰 성능 차이가 발생하였습니다.
-
-## 제안
-
-WebGLTileLayer 등에 `disableWorker: true` 옵션을 추가하여, 필요 시 Worker를 사용하지 않고 메인 스레드에서 렌더링할 수 있도록 기능을 확장합니다.
-
-## 활용 예시
-
-```js
-new WebGLTileLayer({
-  source: new VectorTileSource(...),
-  disableWorker: true,
-});
+  if (!this.workerEnabled_) {
+    this.customAttributes_ = {};
+  } else {
+    // add hit detection attribute if enabled
+    if (this.hitDetectionEnabled_) {
+      this.customAttributes_['hitColor'] = { /* ... */ };
+    }
+    // add attributes & uniforms from shaders
+    for (const styleShader of this.styleShaders) {
+      for (const attributeName in styleShader.attributes) {
+        if (attributeName in this.customAttributes_) continue;
+        this.customAttributes_[attributeName] = styleShader.attributes[attributeName];
+      }
+      for (const uniformName in styleShader.uniforms) {
+        if (uniformName in this.uniforms_) continue;
+        this.uniforms_[uniformName] = styleShader.uniforms[uniformName];
+      }
+    }
+  }
+  // ...
+}
 /////////////
 
 for (const entry of geometryRenderEntries) {
