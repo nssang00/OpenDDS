@@ -41,3 +41,11 @@ const indicesBuffer = new WebGLArrayBuffer(
         this.helper_.flushBufferData(vertexAttributesBuffer);
         this.helper_.flushBufferData(instanceAttributesBuffer);
 
+this.helper_.useProgram(subRenderPass.program, frameState);
+    this.helper_.bindBuffer(vertexAttributesBuffer);
+    this.helper_.bindBuffer(indicesBuffer);
+    this.helper_.enableAttributes(subRenderPass.attributesDesc);
+    this.helper_.bindBuffer(instanceAttributesBuffer);
+    this.helper_.enableAttributesInstanced(
+      subRenderPass.instancedAttributesDesc,
+    );
