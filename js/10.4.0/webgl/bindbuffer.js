@@ -1,3 +1,21 @@
+class WebGLBufferCache {
+  constructor() {
+    this.cache = new WeakMap();
+  }
+
+  set(buffer, meta) {
+    this.cache.set(buffer, meta);
+  }
+
+  get(buffer) {
+    return this.cache.get(buffer);
+  }
+
+  has(buffer) {
+    return this.cache.has(buffer);
+  }
+}
+
 bindBuffer(buffer) {
     const gl = this.gl_;
     const bufferKey = getUid(buffer);
