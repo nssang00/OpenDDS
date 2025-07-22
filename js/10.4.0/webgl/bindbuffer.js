@@ -1,4 +1,59 @@
-    return [
+class WebGLBufferCache {
+  constructor(gl) {
+    this.gl = gl;
+    this.bufferCache = new Map(); // 버퍼를 저장할 Map 객체
+  }
+
+  // 버퍼를 생성하고 캐시에 저장 (한 번만 호출)
+  createBuffer(key, data, target = this.gl.ARRAY_BUFFER, usage = this.gl.STATIC_DRAW) {
+    if (this.bufferCache.has(key)) {
+      console.warn(`Buffer with key "${key}" already exists. Returning cached buffer.`);
+      return this.bufferCache.get(key);
+    }
+
+    const buffer = this.gl.createBuffer();
+    this.gl.bindBuffer(target, buffer);
+    this.gl.bufferData(target, data, usage);
+    this.bufferCache.set(key, buffer);
+    return buffer;
+  }
+
+  // 캐시에서 버퍼를 가져와 바인딩
+  bindBuffer(key, target = this.gl.ARRAY_BUFFER) {
+    if (this.bufferCache.has(key)) {
+      const buffer = this.bufferCache.get(key);
+      this.gl.bindBuffer(target, buffer);
+      return buffer;
+    }
+    console.warn(`Buffer with key "${key}" not found in cache.`);
+    return null;
+  }
+
+  // 캐시된 버퍼 삭제
+  deleteBuffer(key) {
+    if (this.bufferCache.has(key)) {
+      const buffer = this.bufferCache.get(key);
+      this.gl.deleteBuffer(buffer);
+      this.bufferCache.delete(key);
+    }
+  }
+
+  // 모든 버퍼 정리
+  clear() {
+    for (const buffer of this.bufferCache.values()) {
+      this.gl.deleteBuffer(buffer);
+    }
+    this.bufferCache.clear();
+  }
+
+  // 캐시 크기 반환
+  size() {
+    return this.bufferCache.size;
+  }
+}
+
+//////
+return [
       this.helper_.flushBufferData2(ELEMENT_ARRAY_BUFFER, buffers.indicesBuffer, DYNAMIC_DRAW),
       this.helper_.flushBufferData2(ARRAY_BUFFER, buffers.vertexAttributesBuffer, DYNAMIC_DRAW),
       this.helper_.flushBufferData2(ARRAY_BUFFER, buffers.instanceAttributesBuffer, DYNAMIC_DRAW),
