@@ -1,5 +1,3 @@
-    const filteredFeatures = [];
-    //const filteredFeatures = features;
 
     const featureIdSet = new Set();
     for (const styleShader of this.styleShaders) {
@@ -9,17 +7,12 @@
 
       for (const feature of filtered) {
         let featureId = feature.getId() || feature.ol_uid || feature.properties_.id;
-        if(featureId === undefined) {
-          filteredFeatures.push(feature);
-          continue;
-        }
-        if (!featureIdSet.has(featureId)) {
-          featureIdSet.add(featureId);
+        if (!featureIdSet.has(featureId) || featureId === undefined) {
+          featureId != null && featureIdSet.add(featureId);
           filteredFeatures.push(feature);
         }
       }
     }
-
 
 bindBuffer(buffer) {
     const gl = this.gl_;
