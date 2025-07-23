@@ -1,30 +1,93 @@
-  //kmg
-  bindBuffer2(buffer) {
-    const gl = this.gl_;
+    const filteredFeatures = [];
+    //const filteredFeatures = features;
 
-    if(this.webglBufferCache_.has(buffer)) {
-      const bufferCache = this.webglBufferCache_.get(buffer);
-      gl.bindBuffer(bufferCache.target, buffer);
+    const featureIdSet = new Set();
+    for (const styleShader of this.styleShaders) {
+      const filtered = styleShader.featureFilter
+        ? features.filter(styleShader.featureFilter)
+        : features;
+
+      for (const feature of filtered) {
+        let featureId = feature.getId() || feature.ol_uid || feature.properties_.id;
+        if(featureId === undefined) {
+          filteredFeatures.push(feature);
+          continue;
+        }
+        if (!featureIdSet.has(featureId)) {
+          featureIdSet.add(featureId);
+          filteredFeatures.push(feature);
+        }
+      }
     }
-  }
 
-  getSize(buffer) {
-    return this.webglBufferCache_.get(buffer)?.size ?? 0;
-  }
-      
-  flushBufferData2(target, data, usage) {
+
+bindBuffer(buffer) {
     const gl = this.gl_;
-    const buffer = gl.createBuffer();
+    //kmg
+    if(buffer instanceof WebGLBuffer) {
+      if(this.webGlBufferCache_.has(buffer)) {
+        const bufferCache = this.webGlBufferCache_.get(buffer);
+        gl.bindBuffer(bufferCache.target, buffer);
+      }
+      return;
+    }
 
-    gl.bindBuffer(target, buffer);
-    gl.bufferData(target, data, usage);
+    const bufferKey = getUid(buffer);
+    let bufferCache = this.bufferCache_[bufferKey];
+    if (!bufferCache) {
+      const webGlBuffer = gl.createBuffer();
+      bufferCache = {
+        buffer: buffer,
+        webGlBuffer: webGlBuffer,
+      };
+      this.bufferCache_[bufferKey] = bufferCache;
+    }
+    gl.bindBuffer(buffer.getType(), bufferCache.webGlBuffer);
+  }
 
-    const bufferCache = { target: target, size: data?.length ?? 0};
-    this.webglBufferCache_.set(buffer, bufferCache);    
+  /**
+   * Update the data contained in the buffer array; this is required for the
+   * new data to be rendered
+   * @param {import("./Buffer").default} buffer Buffer.
+   */
+  
+  flushBufferData(buffer, target, usage) {
+    const gl = this.gl_;
+    //kmg
+    if(buffer instanceof Uint32Array || buffer instanceof Float32Array)
+    {
+      const webGlBuffer = gl.createBuffer();
 
-    return buffer;
-  } 
+      gl.bindBuffer(target, webGlBuffer);
+      gl.bufferData(target, buffer, usage);
 
-  deleteBuffer2(buf) {
-    delete this.webglBufferCache_.delete(buf);
-  }  
+      const bufferCache = { target: target, size: buffer?.length ?? 0};
+      this.webGlBufferCache_.set(webGlBuffer, bufferCache);    
+
+      return webGlBuffer;
+    } 
+
+    this.bindBuffer(buffer);
+    gl.bufferData(buffer.getType(), buffer.getArray(), buffer.getUsage());
+  }
+  
+
+  /**
+   * @param {import("./Buffer.js").default} buf Buffer.
+   */
+  deleteBuffer(buf) {
+    //kmg
+    if(buf instanceof WebGLBuffer) {
+      delete this.webGlBufferCache_.delete(buf);
+      return;
+    }
+
+    const bufferKey = getUid(buf);
+    // Note: gl.deleteBuffer is not called here since we let WebGL garbage collect it automatically
+    delete this.bufferCache_[bufferKey];
+  }
+
+  //kmg
+  getSize(buffer) {
+    return this.webGlBufferCache_.get(buffer)?.size ?? 0;
+  }
