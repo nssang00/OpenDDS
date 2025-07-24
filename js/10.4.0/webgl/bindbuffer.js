@@ -1,54 +1,67 @@
-import Feature from 'ol/Feature';
-import {Polygon} from 'ol/geom';
 
-const DUMMY_ID = '__dummy_polygon__';
+import RenderFeature from 'ol/render/Feature.js';
+import GeometryType   from 'ol/geom/GeometryType.js';
 
-/* -------------------------------------------
-   1) 오프-스크린 더미 폴리곤 생성 함수
-   ------------------------------------------- */
+const DUMMY_ID = '__dummy_rf__';
+
+/* -------------------------------------------------
+   더미 RenderFeature 생성
+   ------------------------------------------------- */
 function makeOffScreenDummy() {
-  // EPSG:3857 좌표. 4,000,000 m 는 일반 뷰포트 밖.
-  const OFF = 4000000;
-  const ring = [[
-    [OFF, OFF],
-    [OFF + 1, OFF],
-    [OFF + 1, OFF + 1],
-    [OFF,     OFF + 1],
-    [OFF,     OFF]
-  ]];
+  const OFF = 4000000;               // EPSG:3857 화면 밖 좌표
+  const flat = [
+    OFF, OFF,        // ↘︎ 1
+    OFF + 1, OFF,    // ↘︎ 2  ┐ 1×1 m 사각형
+    OFF + 1, OFF+1,  // ↘︎ 3  │
+    OFF,     OFF+1,  // ↘︎ 4  ┘
+    OFF,     OFF     // ↘︎ 닫힘
+  ];
+  const ends = [flat.length];        // 단일 ring → ends 배열 1개
 
-  const dummy = new Feature({
-    geometry: new Polygon(ring),
-  });
-  dummy.setId(DUMMY_ID);          // 중복 삽입 방지
-  return dummy;
+  return new RenderFeature(
+    GeometryType.POLYGON,            // geometry type
+    flat,                            // flatCoordinates
+    ends,                            // ends (ring 끝 인덱스)
+    null,                            // properties
+    DUMMY_ID                         // id
+  );
 }
 
+/* -------------------------------------------------
+   generateBuffersFromFeatures 수정
+   ------------------------------------------------- */
 async generateBuffersFromFeatures(features, transform) {
   const filteredFeatures = [];
-  const featureIdSet = new Set();
+  const featureIdSet     = new Set();
 
   for (const styleShader of this.styleShaders) {
-    const filtered = styleShader.featureFilter
-      ? features.filter(styleShader.featureFilter)
-      : features;
+    const subset = styleShader.featureFilter
+        ? features.filter(styleShader.featureFilter)
+        : features;
 
-    for (const feature of filtered) {
-      const fid = feature.getId() || feature.ol_uid;
+    for (const rf of subset) {
+      const fid = rf.getId() ?? rf.ol_uid;
       if (!featureIdSet.has(fid)) {
         featureIdSet.add(fid);
-        filteredFeatures.push(feature);
+        filteredFeatures.push(rf);
       }
     }
   }
+
+  /* ✨ 폴리곤이 1개뿐일 때 더미 RenderFeature 삽입 */
   if (
-    filteredFeatures.length === 1 &&          // 실제 폴리곤 1개
-    !featureIdSet.has(DUMMY_ID)               // 아직 더미 없음
+    filteredFeatures.length === 1 &&
+    !featureIdSet.has(DUMMY_ID)
   ) {
-    const dummy = makeOffScreenDummy();
-    filteredFeatures.push(dummy);
+    const dummyRF = makeOffScreenDummy();
+    filteredFeatures.push(dummyRF);
     featureIdSet.add(DUMMY_ID);
   }
+
+  /* 이후: filteredFeatures → attribute/vertex 버퍼 생성 ... */
+}
+
+
 
   /* 3) 이후 generateBuffersFromFeatures 에서
         filteredFeatures 배열을 사용해
