@@ -1,3 +1,16 @@
+function fnv1aHash(input) {
+  let hash = 0x811c9dc5; // FNV-1a 32-bit offset basis
+  
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    hash = hash >>> 0; // Ensure unsigned 32-bit after each operation
+  }
+  
+  return hash >>> 0; // Return as unsigned 32-bit integer
+}
+
+
 function fnv1a(str) {
   let hash = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
