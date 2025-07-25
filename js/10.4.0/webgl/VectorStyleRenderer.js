@@ -666,13 +666,13 @@ class VectorStyleRenderer {
         : features;
 
       for (const feature of filtered) {
-        const featureId = feature.getId() || feature.ol_uid;
-        if (!featureIdSet.has(featureId)) {
-          featureIdSet.add(featureId);
+        let featureId = feature.getId() || feature.ol_uid || feature.properties_.id;
+        if (!featureIdSet.has(featureId) || featureId === undefined) {
+          featureId != null && featureIdSet.add(featureId);
           filteredFeatures.push(feature);
         }
       }
-    }
+    }    
 
     const featuresBatch = {
       polygonFeatures: [],
