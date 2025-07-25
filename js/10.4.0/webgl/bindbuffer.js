@@ -1,12 +1,13 @@
-const styleShaders = ruleStyles.map(style => {
-  const parsed = parseLiteralStyle(style, variables, currentFilter);
-  delete parsed.attributes;
-  return {
-    ...parsed,
-    ...(featureFilter && { featureFilter }),
-    ...(contextFilter && { contextFilter }),
-  };
-});
+      // parse each style and convert to shader
+      const styleShaders = ruleStyles.map((style) =>
+        ({//kmg
+          ...parseLiteralStyle(style, variables, currentFilter),
+          attributes: {},
+          ...(featureFilter && {featureFilter}), 
+          ...(contextFilter && {contextFilter}),
+        })
+        
+      );
 
 ////////
     const featureIdSet = new Set();
