@@ -8,6 +8,21 @@ function fnv1a(str) {
   return hash.toString(16);
 }
 
+
+function fnv1aHash(input) {
+  let hash = 0x811c9dc5; // FNV-1a 32-bit offset basis
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash +=
+      (hash << 1) +
+      (hash << 4) +
+      (hash << 7) +
+      (hash << 8) +
+      (hash << 24);
+  }
+  return hash >>> 0; // Return as unsigned 32-bit integer
+}
+
 const filter = [
   'all',
   ['==', ['source-layer'], 'landuse'],
