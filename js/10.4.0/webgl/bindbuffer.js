@@ -1,3 +1,23 @@
+const styleIdToFeatures = new Map();
+
+for (const styleShader of this.styleShaders) {
+  const { styleId, featureFilter } = styleShader;
+
+  if (styleIdToFeatures.has(styleId)) continue;
+
+  const filtered = featureFilter
+    ? features.filter(featureFilter)
+    : features;
+
+  styleIdToFeatures.set(styleId, filtered);
+}
+
+for (const [styleId, filtered] of styleIdToFeatures.entries()) {
+  // styleId, filtered로 처리
+}
+
+
+
 function fnv1aHash(input) {
   let hash = 0x811c9dc5; // FNV-1a 32-bit offset basis
   
