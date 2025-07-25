@@ -1,4 +1,25 @@
-      // parse each style and convert to shader
+function fnv1a(str) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    hash = hash >>> 0;
+  }
+  return hash.toString(16);
+}
+
+const filter = [
+  'all',
+  ['==', ['source-layer'], 'landuse'],
+  ['==', ['get', 'type'], 'hospital'],
+];
+
+const json = JSON.stringify(filter);
+const hashKey = fnv1a(json);
+
+console.log(hashKey); // 예: "9e53a472"
+
+// parse each style and convert to shader
       const styleShaders = ruleStyles.map((style) =>
         ({//kmg
           ...parseLiteralStyle(style, variables, currentFilter),
