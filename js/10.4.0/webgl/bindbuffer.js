@@ -12,8 +12,8 @@ for (const styleShader of this.styleShaders) {
   styleIdToFeatures.set(styleId, filtered);
 }
 
-for (const [styleId, filtered] of styleIdToFeatures.entries()) {
-  // styleId, filtered로 처리
+for (const [styleId, filtered] of styleIdToFeatures) {
+  
 }
 
 
