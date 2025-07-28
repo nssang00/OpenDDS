@@ -1,3 +1,14 @@
+const styleShaders = ruleStyles.map((style) => {
+  const { builder, ...parsed } = parseLiteralStyle(style, variables, currentFilter);
+  builder.setDiscardExpression(false);
+  return {
+    ...parsed,
+    ...(featureFilter && { featureFilter }),
+    ...(contextFilter && { contextFilter }),
+  };
+});
+
+/////////////////
 const styleIdToFeatures = new Map();
 
 for (const styleShader of this.styleShaders) {
