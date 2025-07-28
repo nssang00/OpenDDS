@@ -1,8 +1,8 @@
 const styleShaders = ruleStyles.map((style) => {
-  const { builder, ...parsed } = parseLiteralStyle(style, variables, currentFilter);
-  builder.setDiscardExpression(false);
+  const parsedStyle = parseLiteralStyle(style, variables, currentFilter);
+  parsed.builder.setDiscardExpression(false);
   return {
-    ...parsed,
+    ...parsedStyle,
     ...(featureFilter && { featureFilter }),
     ...(contextFilter && { contextFilter }),
   };
