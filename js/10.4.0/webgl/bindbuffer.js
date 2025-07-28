@@ -1,3 +1,12 @@
+const filteredBuffers = buffer.filteredBuffers?.get(renderPass.filterId);
+if (!filteredBuffers) continue;
+
+if (renderPass.contextFilter?.(frameState.viewState.resolution) === false) {
+  continue;
+}
+
+
+
 const styleShaders = ruleStyles.map((style) => {
   const parsedStyle = parseLiteralStyle(style, variables, currentFilter);
   parsedStyle.builder.setDiscardExpression(false);
