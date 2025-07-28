@@ -1,3 +1,4 @@
+//claude
 function generatePolygonBuffers_(instructions, customAttributesSize) {
   const customAttrsCount = customAttributesSize;  
   const instructionsPerVertex = 2; // x, y
@@ -84,3 +85,5 @@ function generatePolygonBuffers_(instructions, customAttributesSize) {
     instanceAttributesBuffer: new Float32Array([]),
   };
 }
+
+//chatgpt
