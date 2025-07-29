@@ -1,41 +1,81 @@
-function generatePolygonBuffers(instructions, customAttrsCount) {
-  const verticesCap = instructions.length;          // 대충 넉넉히
-  const verts = new Float32Array(verticesCap);
-  const idxs  = new Uint32Array(verticesCap * 1.5); // rough upper bound
+async generateBuffersFromFeatures(features, transform) {
+  const filteredFeatures = [];
+  const featureIdSet = new Set();
 
-  let instr = 0, vPtr = 0, iPtr = 0, polyVertexBase = 0;
-  const holes = [];
+  for (const styleShader of this.styleShaders) {
+    const filtered = styleShader.featureFilter
+      ? features.filter(styleShader.featureFilter)
+      : features;
 
-  while (instr < instructions.length) {
-    const attrs = instructions.subarray(instr, instr += customAttrsCount);
-
-    const rings = instructions[instr++];
-    holes.length = rings - 1;      // reuse array
-    let polyVertCount = 0;
-
-    for (let r = 0; r < rings; ++r) {
-      polyVertCount += instructions[instr++];
-      if (r < rings - 1) holes[r] = polyVertCount;
+    for (const feature of filtered) {
+      let featureId = feature.getId() || feature.ol_uid || feature.properties_.id;
+      if (!featureIdSet.has(featureId) || featureId === undefined) {
+        featureId != null && featureIdSet.add(featureId);
+        filteredFeatures.push(feature);
+      }
     }
-
-    const flat = instructions.subarray(instr, instr += polyVertCount * 2);
-
-    for (let v = 0; v < polyVertCount; ++v, ++vPtr) {
-      const base = vPtr * (2 + customAttrsCount);
-      verts[base] = flat[v*2];
-      verts[base+1] = flat[v*2+1];
-      for (let a = 0; a < customAttrsCount; ++a) verts[base+2+a] = attrs[a];
-    }
-
-    const res = earcut(flat, holes, 2);
-    for (let j = 0; j < res.length; ++j) idxs[iPtr++] = res[j] + polyVertexBase;
-
-    polyVertexBase += polyVertCount;
   }
 
-  return {
-    vertexAttributesBuffer: verts.subarray(0, vPtr * (2 + customAttrsCount)),
-    indicesBuffer: idxs.subarray(0, iPtr),
-    instanceAttributesBuffer: new Float32Array(0),
-  };
+  // 내부 함수 정의 (featuresBatch 생성 + 버퍼 생성)
+  function createBuffers(filteredFeatures, transform) {
+    const featuresBatch = {
+      polygonFeatures: [],
+      lineStringFeatures: [],
+      pointFeatures: []
+    };
+
+    for (const feature of filteredFeatures) {
+      const geometryType = feature.getGeometry().getType();
+      if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+        featuresBatch.polygonFeatures.push(feature);
+        if (this.hasStroke_) featuresBatch.lineStringFeatures.push(feature);
+      } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
+        featuresBatch.lineStringFeatures.push(feature);
+      } else if (geometryType === 'Point' || geometryType === 'MultiPoint') {
+        featuresBatch.pointFeatures.push(feature);
+      }
+    }
+
+    if (
+      featuresBatch.polygonFeatures.length === 0 &&
+      featuresBatch.lineStringFeatures.length === 0 &&
+      featuresBatch.pointFeatures.length === 0
+    ) {
+      return null;
+    }
+
+    const renderInstructions = this.generateRenderInstructionsFromFeatures_(featuresBatch, transform);
+
+    const label = `generateBuffersForType2_-${Date.now()}`;
+    console.time(label);
+
+    const polygonBuffers = this.generateWebGLBuffersFromInstructions_(
+      renderInstructions.polygonInstructions,
+      'Polygon', transform
+    );
+    const lineStringBuffers = this.generateWebGLBuffersFromInstructions_(
+      renderInstructions.lineStringInstructions,
+      'LineString', transform
+    );
+    const pointBuffers = this.generateWebGLBuffersFromInstructions_(
+      renderInstructions.pointInstructions,
+      'Point', transform
+    );
+
+    const invertVerticesTransform = makeInverseTransform(createTransform(), transform);
+    console.timeEnd(label);
+
+    return {
+      polygonBuffers,
+      lineStringBuffers,
+      pointBuffers,
+      invertVerticesTransform,
+    };
+  }
+
+  // 내부 함수에서 this를 쓰면 바인딩 문제 있을 수 있으니, 화살표 함수로 선언하는 게 안전합니다!
+  // const createBuffers = (filteredFeatures, transform) => { ... }
+
+  // 생성 및 반환
+  return createBuffers.call(this, filteredFeatures, transform);
 }
