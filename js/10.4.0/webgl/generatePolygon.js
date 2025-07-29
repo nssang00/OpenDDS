@@ -16,8 +16,8 @@ async generateBuffersFromFeatures(features, transform) {
     }
   }
 
-  // 내부 함수 정의 (featuresBatch 생성 + 버퍼 생성)
-  function createBuffers(filteredFeatures, transform) {
+  // 내부 화살표 함수: featuresBatch 분류 및 버퍼 생성
+  const createBuffers = (filteredFeatures, transform) => {
     const featuresBatch = {
       polygonFeatures: [],
       lineStringFeatures: [],
@@ -71,11 +71,8 @@ async generateBuffersFromFeatures(features, transform) {
       pointBuffers,
       invertVerticesTransform,
     };
-  }
-
-  // 내부 함수에서 this를 쓰면 바인딩 문제 있을 수 있으니, 화살표 함수로 선언하는 게 안전합니다!
-  // const createBuffers = (filteredFeatures, transform) => { ... }
+  };
 
   // 생성 및 반환
-  return createBuffers.call(this, filteredFeatures, transform);
+  return createBuffers(filteredFeatures, transform);
 }
