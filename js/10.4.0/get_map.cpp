@@ -12,9 +12,25 @@
 #define GAA_FLAG_INCLUDE_PREFIX 0x00000010
 #endif
 
+// 가상 어댑터 문자열 필터
 bool IsVirtualAdapter(const char* desc) {
     if (!desc) return false;
-    return strstr(desc, "Virtual") || strstr(desc, "VMware") || strstr(desc, "Hyper-V") || strstr(desc, "Loopback") || strstr(desc, "Bluetooth") || strstr(desc, "TAP") || strstr(desc, "Miniport");
+    return strstr(desc, "Virtual") || strstr(desc, "VMware") || strstr(desc, "Hyper-V") ||
+           strstr(desc, "Loopback") || strstr(desc, "Bluetooth") || strstr(desc, "TAP") ||
+           strstr(desc, "Miniport");
+}
+
+// IPv4 기본 게이트웨이 있는지 확인
+bool HasValidIPv4Gateway(IP_ADAPTER_ADDRESSES* adapter) {
+    IP_ADAPTER_GATEWAY_ADDRESS_LH* gw = adapter->FirstGatewayAddress;
+    while (gw != NULL) {
+        SOCKADDR* sa = gw->Address.lpSockaddr;
+        if (sa && sa->sa_family == AF_INET) {
+            return true;  // IPv4 기본 게이트웨이 존재
+        }
+        gw = gw->Next;
+    }
+    return false;
 }
 
 void PrintActivePhysicalAdapters() {
@@ -49,23 +65,23 @@ void PrintActivePhysicalAdapters() {
         WideCharToMultiByte(CP_ACP, 0, adapter->Description, -1, descA, sizeof(descA), NULL, NULL);
         printf("Description: %s\n", descA);
 
-        // 조건 1: OperStatus
+        // 조건 1: 활성화 상태 확인
         if (adapter->OperStatus != IfOperStatusUp) {
             printf("-- 필터됨: 비활성 상태 (OperStatus != UP)\n");
             continue;
         } else {
-            printf("OK: 활성화된 상태\n");
+            printf("OK: 활성화 상태\n");
         }
 
-        // 조건 2: 디폴트 게이트웨이 확인
-        if (adapter->FirstGatewayAddress == NULL) {
-            printf("-- 필터됨: 디폴트 게이트웨이 없음\n");
+        // 조건 2: IPv4 디폴트 게이트웨이 존재
+        if (!HasValidIPv4Gateway(adapter)) {
+            printf("-- 필터됨: 유효한 IPv4 디폴트 게이트웨이 없음\n");
             continue;
         } else {
-            printf("OK: 디폴트 게이트웨이 있음\n");
+            printf("OK: IPv4 디폴트 게이트웨이 존재\n");
         }
 
-        // 조건 3: 가상 어댑터 여부
+        // 조건 3: 가상 어댑터 필터링
         if (IsVirtualAdapter(descA)) {
             printf("-- 필터됨: 가상 어댑터로 판단됨\n");
             continue;
@@ -73,7 +89,7 @@ void PrintActivePhysicalAdapters() {
             printf("OK: 물리적 어댑터로 판단됨\n");
         }
 
-        // 최종 통과
+        // 최종 출력 대상
         printf("** 출력 대상 **\n");
 
         printf("MAC Address: ");
