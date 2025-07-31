@@ -1,5 +1,5 @@
-// 헤더 포함 순서 매우 중요!
-#include <winsock2.h>      // winsock2를 가장 먼저!
+// 헤더 순서 매우 중요!
+#include <winsock2.h>
 #include <ws2tcpip.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -9,17 +9,14 @@
 #include <Wbemidl.h>
 #include <wincrypt.h>
 #include <iostream>
+#include <iomanip>
 #include <string>
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "wbemuuid.lib")
 #pragma comment(lib, "crypt32.lib")
 #pragma comment(lib, "ws2_32.lib")
 
-// AF_IPX 매크로 재정의 (충돌 방지)
-#ifdef AF_IPX
-#undef AF_IPX
-#endif
-#define AF_IPX 9999  // 원하는 값으로 재정의
+// MAC, CPU, BIOS, HDD 시리얼을 기반으로 6자리 코드 생성
 
 // SHA256 해시 함수 (바이너리 결과 반환)
 std::string sha256(const std::string& input) {
@@ -48,26 +45,32 @@ int extract6DigitCode(const std::string& hash) {
     return value % 1000000;
 }
 
-// MAC 주소 (활성/실제/이더넷) 가져오기
+// 활성/물리/이더넷/기본게이트웨이 MAC 주소 얻기 (GAA_FLAG_INCLUDE_PREFIX 사용)
 std::string getMacAddress() {
-    IP_ADAPTER_INFO adapterInfo[16];
-    DWORD buflen = sizeof(adapterInfo);
-    if (GetAdaptersInfo(adapterInfo, &buflen) != NO_ERROR) return "";
-    PIP_ADAPTER_INFO pAdapter = adapterInfo;
-    while (pAdapter) {
-        // 비활성/가상/루프백/기본 게이트웨이 없는 어댑터는 제외
-        if (pAdapter->Type == MIB_IF_TYPE_ETHERNET &&
-            pAdapter->AddressLength == 6 &&
-            pAdapter->DhcpEnabled && // DHCP 사용(네트워크 실제 사용중)
-            pAdapter->GatewayList.IpAddress.String[0] != '0') // 기본 게이트웨이 존재
-        {
-            char mac[18];
-            sprintf_s(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
-                      pAdapter->Address[0], pAdapter->Address[1], pAdapter->Address[2],
-                      pAdapter->Address[3], pAdapter->Address[4], pAdapter->Address[5]);
-            return std::string(mac);
+    ULONG flags = GAA_FLAG_INCLUDE_PREFIX;
+    ULONG bufLen = 0;
+    GetAdaptersAddresses(AF_UNSPEC, flags, NULL, NULL, &bufLen);
+    std::vector<BYTE> buffer(bufLen);
+    IP_ADAPTER_ADDRESSES* pAddresses = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
+    if (GetAdaptersAddresses(AF_UNSPEC, flags, NULL, pAddresses, &bufLen) != NO_ERROR)
+        return "";
+
+    for (auto p = pAddresses; p; p = p->Next) {
+        // 실제 활성화된 이더넷, Wi-Fi, (Bluetooth 제외) 중 가상아님 + MAC 6바이트 + 게이트웨이 있음
+        if ((p->IfType == IF_TYPE_ETHERNET_CSMACD || p->IfType == IF_TYPE_IEEE80211) &&
+            p->PhysicalAddressLength == 6 &&
+            (p->OperStatus == IfOperStatusUp)) {
+            // 기본 게이트웨이가 있는지 확인
+            for (auto gw = p->FirstGatewayAddress; gw; gw = gw->Next) {
+                if (gw->Address.lpSockaddr && gw->Address.lpSockaddr->sa_family == AF_INET) {
+                    char mac[18];
+                    sprintf_s(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+                        p->PhysicalAddress[0], p->PhysicalAddress[1], p->PhysicalAddress[2],
+                        p->PhysicalAddress[3], p->PhysicalAddress[4], p->PhysicalAddress[5]);
+                    return std::string(mac);
+                }
+            }
         }
-        pAdapter = pAdapter->Next;
     }
     return "";
 }
@@ -84,7 +87,7 @@ std::string getCpuId() {
     return std::string(id);
 }
 
-// WMI 쿼리 유틸리티 (BIOS/HDD 등)
+// WMI 쿼리 (BIOS/HDD 등)
 std::string queryWMI(const std::wstring& className, const std::wstring& propName) {
     HRESULT hres;
     std::string result;
@@ -134,10 +137,9 @@ int main() {
     std::string disk = queryWMI(L"Win32_PhysicalMedia", L"SerialNumber");
 
     std::string combined = mac + cpu + bios + disk;
-    std::string hash = sha256("MYAPP_SALT_" + combined); // SALT는 임의로 교체 가능!
+    std::string hash = sha256("MYAPP_SALT_" + combined); // 반드시 고유한 salt!
     int code = extract6DigitCode(hash);
 
-    std::cout << "AF_IPX: " << AF_IPX << std::endl;
     std::cout << "인증 코드: " << std::setfill('0') << std::setw(6) << code << std::endl;
 
     return 0;
