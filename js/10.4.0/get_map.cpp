@@ -1,116 +1,173 @@
-#include <winsock2.h>      // 반드시 먼저!
-#include <ws2tcpip.h>
-#include <windows.h>
+#include <winsock2.h>
 #include <iphlpapi.h>
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
+#include <iostream>
+#include <vector>
+#include <iomanip>
+#include <string>
+#include <algorithm>
+#include <cwctype>
+
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "ws2_32.lib")
 
-#ifndef INET6_ADDRSTRLEN
-#define INET6_ADDRSTRLEN 46
-#endif
+// 어댑터 설명을 분석하여 가상 어댑터 여부 판단
+bool IsVirtualAdapter(const wchar_t* description) {
+    if (!description) return true;
 
-BOOL isPhysicalAdapter(const char* desc) {
-    char lower[512];
-    int i;
-    memset(lower, 0, sizeof(lower));
-    for (i = 0; desc[i] && i < sizeof(lower) - 1; ++i)
-        lower[i] = (char)tolower(desc[i]);
+    std::wstring desc(description);
+    std::transform(desc.begin(), desc.end(), desc.begin(), 
+        [](wchar_t c) { return std::towlower(c); });
 
-    return strstr(lower, "virtual") == NULL &&
-           strstr(lower, "vmware") == NULL &&
-           strstr(lower, "loopback") == NULL &&
-           strstr(lower, "hyper-v") == NULL &&
-           strstr(lower, "bluetooth") == NULL;
+    // 가상 어댑터 키워드 목록
+    const std::vector<std::wstring> virtualKeywords = {
+        L"virtual", L"hyper-v", L"vmware", L"vpn", 
+        L"tunnel", L"teredo", L"pseudo", L"microsoft",
+        L"ppp", L"tap", L"wireguard", L"openvpn",
+        L"loopback", L"npcap", L"winpcap", L"radmin"
+    };
+
+    for (const auto& keyword : virtualKeywords) {
+        if (desc.find(keyword) != std::wstring::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int main() {
-    ULONG bufSize = 0;
-    DWORD ret;
-    IP_ADAPTER_ADDRESSES* pAddrs = NULL;
-    IP_ADAPTER_ADDRESSES* best = NULL;
-    ULONG bestMetric = ~0U;
+    // 1. 어댑터 주소 정보 가져오기
+    ULONG bufferSize = 0;
+    DWORD result = GetAdaptersAddresses(
+        AF_UNSPEC,
+        GAA_FLAG_INCLUDE_GATEWAYS,
+        NULL,
+        NULL,
+        &bufferSize
+    );
 
-    // 1. 크기 확인
-    ret = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &bufSize);
-    if (ret != ERROR_BUFFER_OVERFLOW) {
-        printf("GetAdaptersAddresses 초기 호출 실패: %lu\n", ret);
+    if (result != ERROR_BUFFER_OVERFLOW) {
+        std::cerr << "GetAdaptersAddresses failed: " << result << std::endl;
         return 1;
     }
 
-    pAddrs = (IP_ADAPTER_ADDRESSES*)malloc(bufSize);
-    if (!pAddrs) {
-        printf("메모리 할당 실패\n");
+    PIP_ADAPTER_ADDRESSES pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(bufferSize);
+    result = GetAdaptersAddresses(
+        AF_UNSPEC,
+        GAA_FLAG_INCLUDE_GATEWAYS,
+        NULL,
+        pAddresses,
+        &bufferSize
+    );
+
+    if (result != ERROR_SUCCESS) {
+        std::cerr << "GetAdaptersAddresses failed: " << result << std::endl;
+        free(pAddresses);
         return 1;
     }
 
-    // 2. 실제 어댑터 정보 획득
-    ret = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, pAddrs, &bufSize);
-    if (ret != NO_ERROR) {
-        printf("GetAdaptersAddresses 실패: %lu\n", ret);
-        free(pAddrs);
+    // 2. 라우팅 테이블 가져오기
+    PMIB_IPFORWARDTABLE pIpForwardTable = NULL;
+    DWORD tableSize = 0;
+    if (GetIpForwardTable(NULL, &tableSize, TRUE) != ERROR_INSUFFICIENT_BUFFER) {
+        std::cerr << "GetIpForwardTable size failed" << std::endl;
+        free(pAddresses);
         return 1;
     }
 
-    // 3. 조건에 맞는 어댑터 선별
-    {
-        IP_ADAPTER_ADDRESSES* p;
-        for (p = pAddrs; p != NULL; p = p->Next) {
-            if (p->OperStatus != IfOperStatusUp) continue;
-            if (p->PhysicalAddressLength == 0) continue;
-            if (p->FirstGatewayAddress == NULL) continue;
-            if (!isPhysicalAdapter(p->Description)) continue;
-            // Metric 비교
-            if (p->Ipv4Metric < bestMetric) {
-                bestMetric = p->Ipv4Metric;
-                best = p;
+    pIpForwardTable = (PMIB_IPFORWARDTABLE)malloc(tableSize);
+    if (GetIpForwardTable(pIpForwardTable, &tableSize, TRUE) != NO_ERROR) {
+        std::cerr << "GetIpForwardTable failed" << std::endl;
+        free(pAddresses);
+        free(pIpForwardTable);
+        return 1;
+    }
+
+    // 3. 가장 낮은 메트릭의 기본 게이트웨이 찾기
+    DWORD bestMetric = 0xFFFFFFFF;
+    DWORD bestInterfaceIndex = 0;
+    ULONG bestGateway = 0;
+
+    for (DWORD i = 0; i < pIpForwardTable->dwNumEntries; i++) {
+        MIB_IPFORWARDROW& row = pIpForwardTable->table[i];
+        
+        // 기본 게이트웨이 확인 (목적지 0.0.0.0)
+        if (row.dwForwardDest == 0) {
+            // 메트릭 비교 (낮을수록 우선순위 높음)
+            if (row.dwForwardMetric1 < bestMetric) {
+                bestMetric = row.dwForwardMetric1;
+                bestInterfaceIndex = row.dwForwardIfIndex;
+                bestGateway = row.dwForwardNextHop;
             }
         }
     }
 
-    // 4. 출력
-    if (best) {
-        // FriendlyName (WCHAR*) → ANSI 변환 (NULL이면 AdapterName 사용)
-        char friendlyName[256] = {0};
-        if (best->FriendlyName && wcslen(best->FriendlyName) > 0) {
-            WideCharToMultiByte(CP_ACP, 0, best->FriendlyName, -1, friendlyName, sizeof(friendlyName), NULL, NULL);
-        } else {
-            strncpy(friendlyName, best->AdapterName, sizeof(friendlyName) - 1);
-            friendlyName[sizeof(friendlyName) - 1] = 0;
-        }
+    // 4. 해당 인터페이스의 어댑터 정보 출력
+    PIP_ADAPTER_ADDRESSES pCurrent = pAddresses;
+    bool found = false;
 
-        printf("선택된 어댑터 이름: %s\n", friendlyName);
-        printf("설명: %s\n", best->Description);
+    while (pCurrent) {
+        // 가상 어댑터 검출
+        bool isVirtual = IsVirtualAdapter(pCurrent->Description);
 
-        printf("MAC 주소: ");
+        // 필터링 조건
+        if (pCurrent->OperStatus == IfOperStatusUp &&          // 활성 상태
+            pCurrent->IfType != IF_TYPE_SOFTWARE_LOOPBACK &&  // 루프백 제외
+            !(pCurrent->Flags & IP_ADAPTER_NO_PHYSICAL_ADDRESS) && // 물리적 주소 존재
+            !isVirtual &&                                     // 가상 어댑터 제외
+            pCurrent->IfIndex == bestInterfaceIndex)          // 메트릭 최저 인터페이스
         {
-            UINT i;
-            for (i = 0; i < best->PhysicalAddressLength; ++i) {
-                printf("%02X", best->PhysicalAddress[i]);
-                if (i != best->PhysicalAddressLength - 1)
-                    printf("-");
+            char friendlyName[256];
+            WideCharToMultiByte(CP_ACP, 0, pCurrent->FriendlyName, -1,
+                friendlyName, sizeof(friendlyName), NULL, NULL);
+
+            char desc[256];
+            WideCharToMultiByte(CP_ACP, 0, pCurrent->Description, -1,
+                desc, sizeof(desc), NULL, NULL);
+
+            std::cout << "\n=== Selected Network Adapter ===" << std::endl;
+            std::cout << "Description: " << desc << std::endl;
+            std::cout << "Friendly Name: " << friendlyName << std::endl;
+            std::cout << "Interface Index: " << pCurrent->IfIndex << std::endl;
+            std::cout << "MAC Address: ";
+            for (DWORD i = 0; i < pCurrent->PhysicalAddressLength; i++) {
+                printf("%02X", pCurrent->PhysicalAddress[i]);
+                if (i < pCurrent->PhysicalAddressLength - 1) std::cout << "-";
             }
-        }
+            std::cout << std::endl;
 
-        printf("\n기본 게이트웨이: ");
-        {
-            SOCKADDR* sa = best->FirstGatewayAddress->Address.lpSockaddr;
-            char ipStr[INET6_ADDRSTRLEN] = {0};
-            int nameret = getnameinfo(sa,
-                        (sa->sa_family == AF_INET) ? sizeof(SOCKADDR_IN) : sizeof(SOCKADDR_IN6),
-                        ipStr, sizeof(ipStr),
-                        NULL, 0, NI_NUMERICHOST);
-            if (nameret == 0)
-                printf("%s\n", ipStr);
-            else
-                printf("(주소 변환 실패)\n");
+            // IPv4 주소 출력
+            PIP_ADAPTER_UNICAST_ADDRESS_LH pUnicast = pCurrent->FirstUnicastAddress;
+            while (pUnicast) {
+                if (pUnicast->Address.lpSockaddr->sa_family == AF_INET) {
+                    SOCKADDR_IN* ipv4 = (SOCKADDR_IN*)pUnicast->Address.lpSockaddr;
+                    std::cout << "IPv4 Address: " << inet_ntoa(ipv4->sin_addr) << std::endl;
+                }
+                pUnicast = pUnicast->Next;
+            }
+
+            // 게이트웨이 정보 출력
+            if (bestGateway != 0) {
+                SOCKADDR_IN gatewayAddr;
+                gatewayAddr.sin_addr.s_addr = bestGateway;
+                gatewayAddr.sin_family = AF_INET;
+                std::cout << "Default Gateway: " << inet_ntoa(gatewayAddr.sin_addr) << std::endl;
+            } else {
+                std::cout << "Default Gateway: Not Found" << std::endl;
+            }
+
+            std::cout << "Interface Metric: " << bestMetric << std::endl;
+            found = true;
+            break;
         }
-    } else {
-        printf("조건에 맞는 어댑터를 찾을 수 없습니다.\n");
+        pCurrent = pCurrent->Next;
     }
 
-    free(pAddrs);
+    if (!found) {
+        std::cout << "No active physical adapter with default gateway found." << std::endl;
+    }
+
+    // 5. 정리
+    free(pAddresses);
+    free(pIpForwardTable);
     return 0;
 }
