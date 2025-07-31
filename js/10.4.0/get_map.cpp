@@ -43,7 +43,7 @@ int extract6DigitCode(const std::string& hash) {
     return value % 1000000;
 }
 
-// 활성/실제 MAC 주소 얻기 (관리자 권한 필요 없음)
+// 활성/실제 MAC 주소 얻기
 std::string getMacAddress() {
     ULONG flags = GAA_FLAG_INCLUDE_PREFIX;
     ULONG bufLen = 0;
@@ -67,7 +67,7 @@ std::string getMacAddress() {
     return "";
 }
 
-// CPU ID 얻기 (관리자 권한 필요 없음)
+// CPU ID 얻기
 std::string getCpuId() {
     int cpuInfo[4] = { -1 };
     __cpuid(cpuInfo, 0);
@@ -79,7 +79,7 @@ std::string getCpuId() {
     return std::string(id);
 }
 
-// WMI로 BIOS Serial 얻기 (거의 모든 PC에서 일반 권한 가능)
+// WMI로 BIOS Serial 얻기
 std::string getBiosSerial() {
     HRESULT hres;
     std::string result;
