@@ -3,12 +3,18 @@
 #include <ws2tcpip.h>
 #include <iostream>
 #include <vector>
+#include <string.h>
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "ws2_32.lib")
 
+// 가상 어댑터 여부 검사
+bool IsVirtualAdapter(const char* desc) {
+    if (!desc) return false;
+    return strstr(desc, "Virtual") || strstr(desc, "VMware") || strstr(desc, "Hyper-V") || strstr(desc, "Loopback") || strstr(desc, "TAP");
+}
+
 int main() {
-    // 초기화
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         std::cerr << "WSAStartup failed.\n";
@@ -18,8 +24,8 @@ int main() {
     // 어댑터 정보 조회
     ULONG bufferSize = 0;
     DWORD result = GetAdaptersAddresses(
-        AF_UNSPEC,                      // IPv4 + IPv6
-        GAA_FLAG_INCLUDE_GATEWAYS,      // 게이트웨이 포함
+        AF_UNSPEC,
+        GAA_FLAG_INCLUDE_GATEWAYS,
         NULL,
         NULL,
         &bufferSize
@@ -31,7 +37,6 @@ int main() {
         return 1;
     }
 
-    // 버퍼 할당
     PIP_ADAPTER_ADDRESSES adapterAddresses = (PIP_ADAPTER_ADDRESSES)malloc(bufferSize);
     if (!adapterAddresses) {
         std::cerr << "Memory allocation failed.\n";
@@ -39,7 +44,6 @@ int main() {
         return 1;
     }
 
-    // 실제 정보 가져오기
     result = GetAdaptersAddresses(
         AF_UNSPEC,
         GAA_FLAG_INCLUDE_GATEWAYS,
@@ -57,31 +61,38 @@ int main() {
 
     // 어댑터 순회
     for (PIP_ADAPTER_ADDRESSES adapter = adapterAddresses; adapter != NULL; adapter = adapter->Next) {
-        // 활성 어댑터만 처리
+        // 1. 활성 어댑터만 처리
         if (adapter->OperStatus != IfOperStatusUp) continue;
 
-        std::cout << "Adapter: " << adapter->FriendlyName << "\n";
+        // 2. 가상 어댑터 필터링
+        char descA[256] = {0};
+        WideCharToMultiByte(CP_ACP, 0, adapter->Description, -1, descA, sizeof(descA), NULL, NULL);
+        if (IsVirtualAdapter(descA)) continue;
 
-        // IP 주소 출력
-        PIP_ADAPTER_UNICAST_ADDRESS unicast = adapter->FirstUnicastAddress;
-        while (unicast != NULL) {
-            char ipStr[INET6_ADDRSTRLEN];
-            DWORD ipStrSize = sizeof(ipStr);
-            if (WSAAddressToStringA(
-                unicast->Address.lpSockaddr,
-                unicast->Address.iSockaddrLength,
-                NULL,
-                ipStr,
-                &ipStrSize
-            ) == 0) {
-                std::cout << "  IP Address: " << ipStr << "\n";
-            }
-            unicast = unicast->Next;
-        }
-
-        // 기본 게이트웨이 출력
+        // 3. 디폴트 게이트웨이 존재 여부 확인 (IPv4/IPv6 둘 다 허용)
         PIP_ADAPTER_GATEWAY_ADDRESS_LH gateway = adapter->FirstGatewayAddress;
-        if (gateway != NULL) {
+        bool hasGateway = false;
+        while (gateway != NULL) {
+            if (gateway->Address.lpSockaddr != NULL) {
+                hasGateway = true;
+                break;
+            }
+            gateway = gateway->Next;
+        }
+        if (!hasGateway) continue;
+
+        // MAC 주소 출력
+        std::cout << "Adapter: " << descA << std::endl;
+        std::cout << "  MAC Address: ";
+        for (UINT i = 0; i < adapter->PhysicalAddressLength; i++) {
+            if (i) std::cout << "-";
+            printf("%02X", adapter->PhysicalAddress[i]);
+        }
+        std::cout << std::endl;
+
+        // 디폴트 게이트웨이(모두 출력)
+        gateway = adapter->FirstGatewayAddress;
+        while (gateway != NULL) {
             char gatewayStr[INET6_ADDRSTRLEN];
             DWORD gatewaySize = sizeof(gatewayStr);
             if (WSAAddressToStringA(
@@ -91,14 +102,13 @@ int main() {
                 gatewayStr,
                 &gatewaySize
             ) == 0) {
-                std::cout << "  Default Gateway: " << gatewayStr << "\n";
+                std::cout << "  Default Gateway: " << gatewayStr << std::endl;
             }
+            gateway = gateway->Next;
         }
-
-        std::cout << "\n";
+        std::cout << std::endl;
     }
 
-    // 정리
     free(adapterAddresses);
     WSACleanup();
     return 0;
