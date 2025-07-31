@@ -8,7 +8,6 @@
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "ws2_32.lib")
 
-// 일부 환경에서는 정의되지 않음 (Visual Studio 2008 등)
 #ifndef GAA_FLAG_INCLUDE_PREFIX
 #define GAA_FLAG_INCLUDE_PREFIX 0x00000010
 #endif
@@ -38,31 +37,51 @@ void PrintActivePhysicalAdapters() {
         return;
     }
 
-    for (IP_ADAPTER_ADDRESSES* adapter = pAddresses; adapter != NULL; adapter = adapter->Next) {
-        // 조건 1: 활성화된 어댑터
-        if (adapter->OperStatus != IfOperStatusUp)
-            continue;
+    int index = 0;
+    for (IP_ADAPTER_ADDRESSES* adapter = pAddresses; adapter != NULL; adapter = adapter->Next, ++index) {
+        printf("\n==> 어댑터 #%d 검사 시작\n", index);
 
-        // 조건 2: 디폴트 게이트웨이 존재
-        if (adapter->FirstGatewayAddress == NULL)
-            continue;
+        // 어댑터 이름 출력
+        printf("AdapterName: %s\n", adapter->AdapterName);
 
-        // 조건 3: 가상 어댑터 필터링
+        // Description 변환
         char descA[256] = {0};
         WideCharToMultiByte(CP_ACP, 0, adapter->Description, -1, descA, sizeof(descA), NULL, NULL);
-        if (IsVirtualAdapter(descA))
+        printf("Description: %s\n", descA);
+
+        // 조건 1: OperStatus
+        if (adapter->OperStatus != IfOperStatusUp) {
+            printf("-- 필터됨: 비활성 상태 (OperStatus != UP)\n");
             continue;
+        } else {
+            printf("OK: 활성화된 상태\n");
+        }
 
-        // 출력
-        printf("Adapter Name : %s\n", adapter->AdapterName);
-        printf("Description  : %s\n", descA);
+        // 조건 2: 디폴트 게이트웨이 확인
+        if (adapter->FirstGatewayAddress == NULL) {
+            printf("-- 필터됨: 디폴트 게이트웨이 없음\n");
+            continue;
+        } else {
+            printf("OK: 디폴트 게이트웨이 있음\n");
+        }
 
-        printf("MAC Address  : ");
+        // 조건 3: 가상 어댑터 여부
+        if (IsVirtualAdapter(descA)) {
+            printf("-- 필터됨: 가상 어댑터로 판단됨\n");
+            continue;
+        } else {
+            printf("OK: 물리적 어댑터로 판단됨\n");
+        }
+
+        // 최종 통과
+        printf("** 출력 대상 **\n");
+
+        printf("MAC Address: ");
         for (UINT i = 0; i < adapter->PhysicalAddressLength; i++) {
             if (i) printf("-");
             printf("%02X", adapter->PhysicalAddress[i]);
         }
-        printf("\n\n");
+        printf("\n");
     }
 
     free(pAddresses);
