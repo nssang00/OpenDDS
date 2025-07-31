@@ -1,7 +1,7 @@
-#include <winsock2.h>     
-#include <ws2tcpip.h>      // getnameinfo
-#include <windows.h>       
-#include <iphlpapi.h>      
+#include <winsock2.h>      
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <iphlpapi.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -58,7 +58,11 @@ int main() {
     }
 
     if (best) {
-        printf("선택된 어댑터 이름: %ws\n", best->FriendlyName);
+        // WCHAR* → char* 변환 (FriendlyName)
+        char friendlyName[256] = {0};
+        WideCharToMultiByte(CP_ACP, 0, best->FriendlyName, -1, friendlyName, sizeof(friendlyName), NULL, NULL);
+
+        printf("선택된 어댑터 이름: %s\n", friendlyName);
         printf("설명: %s\n", best->Description);
 
         printf("MAC 주소: ");
