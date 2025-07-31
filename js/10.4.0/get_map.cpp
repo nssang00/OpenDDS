@@ -49,3 +49,32 @@ int main() {
     PrintPrimaryMacAddress();
     return 0;
 }
+
+
+///////
+#include <winsock2.h>
+#include <iphlpapi.h>
+#include <vector>
+
+std::string GetPrimaryMacAddress() {
+    ULONG bufLen = 0;
+    GetAdaptersAddresses(AF_UNSPEC, 0, NULL, NULL, &bufLen);
+    std::vector<BYTE> buffer(bufLen);
+    PIP_ADAPTER_ADDRESSES pAdapter = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
+
+    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_GATEWAYS, NULL, pAdapter, &bufLen) == ERROR_SUCCESS) {
+        for (; pAdapter; pAdapter = pAdapter->Next) {
+            // 물리적 어댑터 + 게이트웨이 존재 확인
+            if (pAdapter->PhysicalAddressLength != 6 || pAdapter->FirstGatewayAddress == NULL)
+                continue;
+
+            char mac[18];
+            sprintf_s(mac, "%02X-%02X-%02X-%02X-%02X-%02X",
+                pAdapter->PhysicalAddress[0], pAdapter->PhysicalAddress[1],
+                pAdapter->PhysicalAddress[2], pAdapter->PhysicalAddress[3],
+                pAdapter->PhysicalAddress[4], pAdapter->PhysicalAddress[5]);
+            return std::string(mac);
+        }
+    }
+    return ""; // Fallback
+}
