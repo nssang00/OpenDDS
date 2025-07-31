@@ -1,65 +1,81 @@
-#include <windows.h>
+#include <winsock2.h>
 #include <iphlpapi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <windows.h>
 
 #pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
 
-void PrintAdapterDescription(WCHAR* wdesc) {
-    char desc[512]; // 충분한 크기의 버퍼
-    int len = WideCharToMultiByte(CP_ACP, 0, wdesc, -1, desc, sizeof(desc), NULL, NULL);
-    if (len > 0) {
-        printf("Description  : %s\n", desc);
-    } else {
-        printf("Description  : <conversion failed>\n");
-    }
-}
+// 일부 환경에서는 정의되지 않음 (Visual Studio 2008 등)
+#ifndef GAA_FLAG_INCLUDE_PREFIX
+#define GAA_FLAG_INCLUDE_PREFIX 0x00000010
+#endif
 
-bool IsVirtualAdapter(WCHAR* wdesc) {
-    char desc[512];
-    int len = WideCharToMultiByte(CP_ACP, 0, wdesc, -1, desc, sizeof(desc), NULL, NULL);
-    if (len > 0) {
-        return strstr(desc, "Virtual") || strstr(desc, "VMware") || strstr(desc, "Hyper-V") || strstr(desc, "Loopback");
-    }
-    return false;
+bool IsVirtualAdapter(const char* desc) {
+    if (!desc) return false;
+    return strstr(desc, "Virtual") || strstr(desc, "VMware") || strstr(desc, "Hyper-V") || strstr(desc, "Loopback") || strstr(desc, "Bluetooth") || strstr(desc, "TAP") || strstr(desc, "Miniport");
 }
 
 void PrintActivePhysicalAdapters() {
-    ULONG bufLen = 0;
-    GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &bufLen);
-    IP_ADAPTER_ADDRESSES* pAddrs = (IP_ADAPTER_ADDRESSES*)malloc(bufLen);
-    
-    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, pAddrs, &bufLen) == NO_ERROR) {
-        for (IP_ADAPTER_ADDRESSES* adapter = pAddrs; adapter != NULL; adapter = adapter->Next) {
-            if (adapter->OperStatus != IfOperStatusUp)
-                continue;
-            if (IsVirtualAdapter(adapter->Description))
-                continue;
-            if (adapter->FirstGatewayAddress == NULL)
-                continue;
-
-            printf("Adapter Name : %s\n", adapter->AdapterName);
-            PrintAdapterDescription(adapter->Description);
-
-            printf("MAC Address  : ");
-            for (UINT i = 0; i < adapter->PhysicalAddressLength; i++) {
-                if (i) printf("-");
-                printf("%02X", adapter->PhysicalAddress[i]);
-            }
-            printf("\n\n");
-        }
+    ULONG bufferSize = 0;
+    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &bufferSize) != ERROR_BUFFER_OVERFLOW) {
+        printf("Failed to get buffer size.\n");
+        return;
     }
 
-    free(pAddrs);
+    IP_ADAPTER_ADDRESSES* pAddresses = (IP_ADAPTER_ADDRESSES*)malloc(bufferSize);
+    if (!pAddresses) {
+        printf("Memory allocation failed.\n");
+        return;
+    }
+
+    DWORD result = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, pAddresses, &bufferSize);
+    if (result != NO_ERROR) {
+        printf("GetAdaptersAddresses failed with error: %lu\n", result);
+        free(pAddresses);
+        return;
+    }
+
+    for (IP_ADAPTER_ADDRESSES* adapter = pAddresses; adapter != NULL; adapter = adapter->Next) {
+        // 조건 1: 활성화된 어댑터
+        if (adapter->OperStatus != IfOperStatusUp)
+            continue;
+
+        // 조건 2: 디폴트 게이트웨이 존재
+        if (adapter->FirstGatewayAddress == NULL)
+            continue;
+
+        // 조건 3: 가상 어댑터 필터링
+        char descA[256] = {0};
+        WideCharToMultiByte(CP_ACP, 0, adapter->Description, -1, descA, sizeof(descA), NULL, NULL);
+        if (IsVirtualAdapter(descA))
+            continue;
+
+        // 출력
+        printf("Adapter Name : %s\n", adapter->AdapterName);
+        printf("Description  : %s\n", descA);
+
+        printf("MAC Address  : ");
+        for (UINT i = 0; i < adapter->PhysicalAddressLength; i++) {
+            if (i) printf("-");
+            printf("%02X", adapter->PhysicalAddress[i]);
+        }
+        printf("\n\n");
+    }
+
+    free(pAddresses);
 }
 
 int main() {
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2,2), &wsa) == 0) {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) {
         PrintActivePhysicalAdapters();
         WSACleanup();
     } else {
-        printf("WSAStartup failed\n");
+        printf("WSAStartup failed.\n");
     }
+
     return 0;
 }
