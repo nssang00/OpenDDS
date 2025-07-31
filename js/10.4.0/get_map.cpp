@@ -1,173 +1,141 @@
-#include <winsock2.h>
+#include <windows.h>
 #include <iphlpapi.h>
+#include <intrin.h>
+#include <comdef.h>
+#include <Wbemidl.h>
+#include <wincrypt.h>
 #include <iostream>
-#include <vector>
-#include <iomanip>
 #include <string>
-#include <algorithm>
-#include <cwctype>
-
+#include <vector>
 #pragma comment(lib, "iphlpapi.lib")
-#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "wbemuuid.lib")
+#pragma comment(lib, "crypt32.lib")
 
-// 어댑터 설명을 분석하여 가상 어댑터 여부 판단
-bool IsVirtualAdapter(const wchar_t* description) {
-    if (!description) return true;
+// Base64 SHA256 해시 함수
+std::string sha256(const std::string& input) {
+    HCRYPTPROV hProv = 0;
+    HCRYPTHASH hHash = 0;
+    BYTE hash[32];
+    DWORD hashLen = sizeof(hash);
+    std::string result;
 
-    std::wstring desc(description);
-    std::transform(desc.begin(), desc.end(), desc.begin(), 
-        [](wchar_t c) { return std::towlower(c); });
-
-    // 가상 어댑터 키워드 목록
-    const std::vector<std::wstring> virtualKeywords = {
-        L"virtual", L"hyper-v", L"vmware", L"vpn", 
-        L"tunnel", L"teredo", L"pseudo", L"microsoft",
-        L"ppp", L"tap", L"wireguard", L"openvpn",
-        L"loopback", L"npcap", L"winpcap", L"radmin"
-    };
-
-    for (const auto& keyword : virtualKeywords) {
-        if (desc.find(keyword) != std::wstring::npos) {
-            return true;
-        }
+    if (CryptAcquireContext(&hProv, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) &&
+        CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash) &&
+        CryptHashData(hHash, (BYTE*)input.c_str(), input.length(), 0) &&
+        CryptGetHashParam(hHash, HP_HASHVAL, hash, &hashLen, 0)) {
+        for (DWORD i = 0; i < hashLen; ++i)
+            result += static_cast<char>(hash[i]);
     }
-    return false;
+
+    if (hHash) CryptDestroyHash(hHash);
+    if (hProv) CryptReleaseContext(hProv, 0);
+    return result;
+}
+
+// 6자리 코드 추출
+int extract6DigitCode(const std::string& hash) {
+    uint32_t value = 0;
+    for (int i = 0; i < 4 && i < hash.size(); ++i)
+        value = (value << 8) | static_cast<unsigned char>(hash[i]);
+    return value % 1000000;
+}
+
+// MAC 주소 가져오기
+std::string getMacAddress() {
+    IP_ADAPTER_INFO adapterInfo[16];
+    DWORD buflen = sizeof(adapterInfo);
+    if (GetAdaptersInfo(adapterInfo, &buflen) != NO_ERROR) return "";
+
+    PIP_ADAPTER_INFO pAdapter = adapterInfo;
+    while (pAdapter) {
+        if (pAdapter->Type == MIB_IF_TYPE_ETHERNET && pAdapter->AddressLength == 6) {
+            char mac[18];
+            sprintf_s(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+                      pAdapter->Address[0], pAdapter->Address[1], pAdapter->Address[2],
+                      pAdapter->Address[3], pAdapter->Address[4], pAdapter->Address[5]);
+            return std::string(mac);
+        }
+        pAdapter = pAdapter->Next;
+    }
+    return "";
+}
+
+// CPU ID
+std::string getCpuId() {
+    int cpuInfo[4] = { -1 };
+    __cpuid(cpuInfo, 0);
+    char id[13];
+    memcpy(id, &cpuInfo[1], 4); // EBX
+    memcpy(id + 4, &cpuInfo[3], 4); // EDX
+    memcpy(id + 8, &cpuInfo[2], 4); // ECX
+    id[12] = '\0';
+    return std::string(id);
+}
+
+// WMI 쿼리 유틸
+std::string queryWMI(const std::wstring& className, const std::wstring& propName) {
+    HRESULT hres;
+
+    hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if (FAILED(hres)) return "";
+
+    hres = CoInitializeSecurity(NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL);
+    if (FAILED(hres)) return "";
+
+    IWbemLocator* pLocator = nullptr;
+    hres = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (LPVOID*)&pLocator);
+    if (FAILED(hres)) return "";
+
+    IWbemServices* pServices = nullptr;
+    hres = pLocator->ConnectServer(
+        _bstr_t(L"ROOT\\CIMV2"), NULL, NULL, 0, NULL, 0, 0, &pServices);
+    if (FAILED(hres)) return "";
+
+    hres = CoSetProxyBlanket(pServices, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE,
+        NULL, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+
+    IEnumWbemClassObject* pEnumerator = nullptr;
+    hres = pServices->ExecQuery(
+        bstr_t("WQL"),
+        bstr_t(std::wstring(L"SELECT * FROM " + className).c_str()),
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+        NULL, &pEnumerator);
+
+    if (FAILED(hres)) return "";
+
+    IWbemClassObject* pObj = nullptr;
+    ULONG uReturn = 0;
+    std::string result;
+
+    if (pEnumerator && pEnumerator->Next(WBEM_INFINITE, 1, &pObj, &uReturn) == S_OK) {
+        VARIANT vtProp;
+        if (SUCCEEDED(pObj->Get(propName.c_str(), 0, &vtProp, 0, 0)) && vtProp.vt == VT_BSTR) {
+            result = _bstr_t(vtProp.bstrVal);
+            VariantClear(&vtProp);
+        }
+        pObj->Release();
+    }
+
+    if (pEnumerator) pEnumerator->Release();
+    if (pServices) pServices->Release();
+    if (pLocator) pLocator->Release();
+    CoUninitialize();
+    return result;
 }
 
 int main() {
-    // 1. 어댑터 주소 정보 가져오기
-    ULONG bufferSize = 0;
-    DWORD result = GetAdaptersAddresses(
-        AF_UNSPEC,
-        GAA_FLAG_INCLUDE_GATEWAYS,
-        NULL,
-        NULL,
-        &bufferSize
-    );
+    std::string mac = getMacAddress();
+    std::string cpu = getCpuId();
+    std::string bios = queryWMI(L"Win32_BIOS", L"SerialNumber");
+    std::string disk = queryWMI(L"Win32_PhysicalMedia", L"SerialNumber");
 
-    if (result != ERROR_BUFFER_OVERFLOW) {
-        std::cerr << "GetAdaptersAddresses failed: " << result << std::endl;
-        return 1;
-    }
+    std::string combined = mac + cpu + bios + disk;
+    std::string hash = sha256("MYAPP_SALT_" + combined);
+    int code = extract6DigitCode(hash);
 
-    PIP_ADAPTER_ADDRESSES pAddresses = (PIP_ADAPTER_ADDRESSES)malloc(bufferSize);
-    result = GetAdaptersAddresses(
-        AF_UNSPEC,
-        GAA_FLAG_INCLUDE_GATEWAYS,
-        NULL,
-        pAddresses,
-        &bufferSize
-    );
-
-    if (result != ERROR_SUCCESS) {
-        std::cerr << "GetAdaptersAddresses failed: " << result << std::endl;
-        free(pAddresses);
-        return 1;
-    }
-
-    // 2. 라우팅 테이블 가져오기
-    PMIB_IPFORWARDTABLE pIpForwardTable = NULL;
-    DWORD tableSize = 0;
-    if (GetIpForwardTable(NULL, &tableSize, TRUE) != ERROR_INSUFFICIENT_BUFFER) {
-        std::cerr << "GetIpForwardTable size failed" << std::endl;
-        free(pAddresses);
-        return 1;
-    }
-
-    pIpForwardTable = (PMIB_IPFORWARDTABLE)malloc(tableSize);
-    if (GetIpForwardTable(pIpForwardTable, &tableSize, TRUE) != NO_ERROR) {
-        std::cerr << "GetIpForwardTable failed" << std::endl;
-        free(pAddresses);
-        free(pIpForwardTable);
-        return 1;
-    }
-
-    // 3. 가장 낮은 메트릭의 기본 게이트웨이 찾기
-    DWORD bestMetric = 0xFFFFFFFF;
-    DWORD bestInterfaceIndex = 0;
-    ULONG bestGateway = 0;
-
-    for (DWORD i = 0; i < pIpForwardTable->dwNumEntries; i++) {
-        MIB_IPFORWARDROW& row = pIpForwardTable->table[i];
-        
-        // 기본 게이트웨이 확인 (목적지 0.0.0.0)
-        if (row.dwForwardDest == 0) {
-            // 메트릭 비교 (낮을수록 우선순위 높음)
-            if (row.dwForwardMetric1 < bestMetric) {
-                bestMetric = row.dwForwardMetric1;
-                bestInterfaceIndex = row.dwForwardIfIndex;
-                bestGateway = row.dwForwardNextHop;
-            }
-        }
-    }
-
-    // 4. 해당 인터페이스의 어댑터 정보 출력
-    PIP_ADAPTER_ADDRESSES pCurrent = pAddresses;
-    bool found = false;
-
-    while (pCurrent) {
-        // 가상 어댑터 검출
-        bool isVirtual = IsVirtualAdapter(pCurrent->Description);
-
-        // 필터링 조건
-        if (pCurrent->OperStatus == IfOperStatusUp &&          // 활성 상태
-            pCurrent->IfType != IF_TYPE_SOFTWARE_LOOPBACK &&  // 루프백 제외
-            !(pCurrent->Flags & IP_ADAPTER_NO_PHYSICAL_ADDRESS) && // 물리적 주소 존재
-            !isVirtual &&                                     // 가상 어댑터 제외
-            pCurrent->IfIndex == bestInterfaceIndex)          // 메트릭 최저 인터페이스
-        {
-            char friendlyName[256];
-            WideCharToMultiByte(CP_ACP, 0, pCurrent->FriendlyName, -1,
-                friendlyName, sizeof(friendlyName), NULL, NULL);
-
-            char desc[256];
-            WideCharToMultiByte(CP_ACP, 0, pCurrent->Description, -1,
-                desc, sizeof(desc), NULL, NULL);
-
-            std::cout << "\n=== Selected Network Adapter ===" << std::endl;
-            std::cout << "Description: " << desc << std::endl;
-            std::cout << "Friendly Name: " << friendlyName << std::endl;
-            std::cout << "Interface Index: " << pCurrent->IfIndex << std::endl;
-            std::cout << "MAC Address: ";
-            for (DWORD i = 0; i < pCurrent->PhysicalAddressLength; i++) {
-                printf("%02X", pCurrent->PhysicalAddress[i]);
-                if (i < pCurrent->PhysicalAddressLength - 1) std::cout << "-";
-            }
-            std::cout << std::endl;
-
-            // IPv4 주소 출력
-            PIP_ADAPTER_UNICAST_ADDRESS_LH pUnicast = pCurrent->FirstUnicastAddress;
-            while (pUnicast) {
-                if (pUnicast->Address.lpSockaddr->sa_family == AF_INET) {
-                    SOCKADDR_IN* ipv4 = (SOCKADDR_IN*)pUnicast->Address.lpSockaddr;
-                    std::cout << "IPv4 Address: " << inet_ntoa(ipv4->sin_addr) << std::endl;
-                }
-                pUnicast = pUnicast->Next;
-            }
-
-            // 게이트웨이 정보 출력
-            if (bestGateway != 0) {
-                SOCKADDR_IN gatewayAddr;
-                gatewayAddr.sin_addr.s_addr = bestGateway;
-                gatewayAddr.sin_family = AF_INET;
-                std::cout << "Default Gateway: " << inet_ntoa(gatewayAddr.sin_addr) << std::endl;
-            } else {
-                std::cout << "Default Gateway: Not Found" << std::endl;
-            }
-
-            std::cout << "Interface Metric: " << bestMetric << std::endl;
-            found = true;
-            break;
-        }
-        pCurrent = pCurrent->Next;
-    }
-
-    if (!found) {
-        std::cout << "No active physical adapter with default gateway found." << std::endl;
-    }
-
-    // 5. 정리
-    free(pAddresses);
-    free(pIpForwardTable);
+    printf("인증 코드: %06d\n", code);
     return 0;
 }
