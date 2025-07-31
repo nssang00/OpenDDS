@@ -1,4 +1,3 @@
-// 헤더 순서 매우 중요!
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #define WIN32_LEAN_AND_MEAN
