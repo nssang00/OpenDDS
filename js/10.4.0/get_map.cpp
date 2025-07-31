@@ -1,9 +1,11 @@
-#include <windows.h>
-#include <iphlpapi.h>
-#include <ws2tcpip.h>
+#include <winsock2.h>     
+#include <ws2tcpip.h>      // getnameinfo
+#include <windows.h>       
+#include <iphlpapi.h>      
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "ws2_32.lib")
 
