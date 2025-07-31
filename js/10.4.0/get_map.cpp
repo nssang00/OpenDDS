@@ -1,56 +1,30 @@
-#include <iostream>
+#define _WIN32_WINNT 0x0600
+#include <winsock2.h>
 #include <iphlpapi.h>
 #include <windows.h>
-#include <tchar.h>
+#include <iostream>
 
 #pragma comment(lib, "iphlpapi.lib")
 
-bool IsPhysicalAdapter(const IP_ADAPTER_ADDRESSES* adapter) {
-    // 가상 어댑터는 Description 또는 FriendlyName에 "virtual", "VMware", "loopback" 등을 포함할 수 있음
-    std::wstring desc = adapter->Description;
-    std::wstring friendly = adapter->FriendlyName;
-    for (auto& str : {desc, friendly}) {
-        for (auto& c : str) c = towlower(c);
-        if (str.find(L"virtual") != std::wstring::npos ||
-            str.find(L"vmware") != std::wstring::npos ||
-            str.find(L"loopback") != std::wstring::npos)
-            return false;
-    }
-    return true;
-}
-
-void PrintMacAddress(const BYTE* addr, DWORD len) {
-    for (DWORD i = 0; i < len; i++) {
-        if (i > 0) std::cout << "-";
-        printf("%02X", addr[i]);
-    }
-    std::cout << std::endl;
-}
-
 int main() {
-    ULONG outBufLen = 15000;
-    IP_ADAPTER_ADDRESSES* adapterAddresses = (IP_ADAPTER_ADDRESSES*)malloc(outBufLen);
+    ULONG bufferSize = 15000;
+    IP_ADAPTER_ADDRESSES* pAddrs = (IP_ADAPTER_ADDRESSES*)malloc(bufferSize);
 
-    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, adapterAddresses, &outBufLen) == NO_ERROR) {
-        IP_ADAPTER_ADDRESSES* adapter = adapterAddresses;
-
-        while (adapter) {
-            if (adapter->PhysicalAddressLength != 0 &&
-                (adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK) &&
-                (adapter->OperStatus == IfOperStatusUp) &&
-                IsPhysicalAdapter(adapter)) {
-
-                std::wcout << L"Adapter: " << adapter->FriendlyName << std::endl;
+    DWORD result = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, pAddrs, &bufferSize);
+    if (result == NO_ERROR) {
+        for (IP_ADAPTER_ADDRESSES* adapter = pAddrs; adapter != NULL; adapter = adapter->Next) {
+            if (adapter->PhysicalAddressLength > 0) {
                 std::cout << "MAC: ";
-                PrintMacAddress(adapter->PhysicalAddress, adapter->PhysicalAddressLength);
-                break; // 대표 어댑터 하나만 출력
+                for (DWORD i = 0; i < adapter->PhysicalAddressLength; ++i) {
+                    printf("%02X%s", adapter->PhysicalAddress[i], (i < adapter->PhysicalAddressLength - 1) ? "-" : "\n");
+                }
+                break; // 하나만 출력
             }
-            adapter = adapter->Next;
         }
     } else {
         std::cerr << "GetAdaptersAddresses failed." << std::endl;
     }
 
-    free(adapterAddresses);
+    free(pAddrs);
     return 0;
 }
