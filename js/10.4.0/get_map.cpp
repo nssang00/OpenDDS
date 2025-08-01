@@ -272,3 +272,25 @@ int main() {
 
     return 0;
 }
+
+std::string LicenseCodeFromHash(const std::string& hash, int digits = 6) {
+    // 1. 유효성 검사
+    if (hash.empty() || hash.length() < 16) 
+        throw std::invalid_argument("Hash string too short");
+    if (digits <= 0 || digits > 19) 
+        throw std::invalid_argument("Digits must be 1-19");
+
+    unsigned long long n;
+    try {
+        n = std::stoull(hash.substr(0, 16), nullptr, 16); // 64비트
+    } catch (...) {
+        throw std::runtime_error("Hex conversion failed");
+    }
+
+    unsigned long long mod = std::pow(10, digits);
+    n %= mod;
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%0*llu", digits, n);
+    return std::string(buf);
+}
