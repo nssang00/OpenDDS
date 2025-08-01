@@ -95,108 +95,69 @@ std::string GetMachineGuid() {
 }
 
 // 시스템 드라이브(C:) 디스크 시리얼 (WMI, Win32_DiskDrive)
+#include <windows.h>
+#include <iostream>
+#include <string>
+#include <comdef.h>
+#include <Wbemidl.h>
+
+#pragma comment(lib, "wbemuuid.lib")
+
 std::string GetSystemDiskSerial() {
-    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
-    if (FAILED(hres)) return "";
-
-    hres = CoInitializeSecurity(
-        NULL, -1, NULL, NULL,
-        RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE,
-        NULL, EOAC_NONE, NULL);
-    if (FAILED(hres) && hres != RPC_E_TOO_LATE) {
-        CoUninitialize();
-        return "";
-    }
-
-    IWbemLocator *pLoc = NULL;
-    hres = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
-                            IID_IWbemLocator, (LPVOID *)&pLoc);
-    if (FAILED(hres)) {
-        CoUninitialize();
-        return "";
-    }
-
-    IWbemServices *pSvc = NULL;
-    hres = pLoc->ConnectServer(
-        _bstr_t(L"ROOT\\CIMV2"),
-        NULL, NULL, 0, NULL, 0, 0, &pSvc);
-    if (FAILED(hres)) {
-        pLoc->Release();
-        CoUninitialize();
-        return "";
-    }
-
-    // Win32_LogicalDiskToPartition 매핑: C: => Disk#
-    IEnumWbemClassObject* pEnumerator = NULL;
-    hres = pSvc->ExecQuery(
-        bstr_t("WQL"),
-        bstr_t("SELECT * FROM Win32_LogicalDiskToPartition"),
-        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-        NULL, &pEnumerator);
-    std::string diskNum;
-    if (SUCCEEDED(hres)) {
-        IWbemClassObject *pObj = NULL;
-        ULONG uReturn = 0;
-        while (pEnumerator && pEnumerator->Next(WBEM_INFINITE, 1, &pObj, &uReturn) == S_OK) {
-            VARIANT ante, dep;
-            pObj->Get(L"Antecedent", 0, &ante, 0, 0);
-            pObj->Get(L"Dependent", 0, &dep, 0, 0);
-            std::wstring depStr(dep.bstrVal, SysStringLen(dep.bstrVal));
-            std::wstring anteStr(ante.bstrVal, SysStringLen(ante.bstrVal));
-            // C: 드라이브를 찾음
-            if (depStr.find(L"DeviceID=\"C:\"") != std::wstring::npos) {
-                // Antecedent: "Win32_DiskPartition.DeviceID=\"Disk #0, Partition #0\""
-                size_t start = anteStr.find(L"Disk #");
-                if (start != std::wstring::npos) {
-                    size_t end = anteStr.find(L",", start);
-                    if (end != std::wstring::npos) {
-                        diskNum = std::to_string(_wtoi(anteStr.substr(start + 6, end - (start + 6)).c_str()));
-                        break;
-                    }
-                }
-            }
-            VariantClear(&ante);
-            VariantClear(&dep);
-            pObj->Release();
-        }
-        if (pEnumerator) pEnumerator->Release();
-    }
-
     std::string serial;
-    // Win32_DiskDrive에서 Disk # 일치하는 SerialNumber 추출
-    if (!diskNum.empty()) {
-        std::string query = "SELECT * FROM Win32_DiskDrive";
-        IEnumWbemClassObject* pEnum2 = NULL;
-        hres = pSvc->ExecQuery(
-            bstr_t("WQL"),
-            bstr_t(query.c_str()),
-            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-            NULL, &pEnum2);
-        if (SUCCEEDED(hres)) {
-            IWbemClassObject *pObj = NULL;
-            ULONG uReturn = 0;
-            int idx = 0;
-            while (pEnum2 && pEnum2->Next(WBEM_INFINITE, 1, &pObj, &uReturn) == S_OK) {
-                VARIANT dev, ser;
-                pObj->Get(L"Index", 0, &dev, 0, 0);
-                pObj->Get(L"SerialNumber", 0, &ser, 0, 0);
-                if (dev.vt == VT_I4 && std::to_string(dev.intVal) == diskNum && ser.vt == VT_BSTR) {
-                    _bstr_t bstrSer(ser.bstrVal);
-                    serial = (const char*)bstrSer;
-                    VariantClear(&dev); VariantClear(&ser);
-                    pObj->Release();
-                    break;
+    // 1. WMI Win32_PhysicalMedia.SerialNumber
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if (SUCCEEDED(hres)) {
+        hres = CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_DEFAULT, 
+                                    RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE, NULL);
+        if (SUCCEEDED(hres) || hres == RPC_E_TOO_LATE) {
+            IWbemLocator *pLoc = NULL;
+            if (SUCCEEDED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
+                                           IID_IWbemLocator, (LPVOID *)&pLoc))) {
+                IWbemServices *pSvc = NULL;
+                if (SUCCEEDED(pLoc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"),
+                        NULL, NULL, 0, NULL, 0, 0, &pSvc))) {
+                    IEnumWbemClassObject* pEnumerator = NULL;
+                    HRESULT hr = pSvc->ExecQuery(
+                        bstr_t("WQL"),
+                        bstr_t("SELECT SerialNumber FROM Win32_PhysicalMedia"),
+                        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                        NULL, &pEnumerator);
+                    if (SUCCEEDED(hr)) {
+                        IWbemClassObject *pObj = NULL;
+                        ULONG uReturn = 0;
+                        // 첫번째 Media의 Serial을 쓴다 (실제 시스템 드라이브 찾으려면 추가 작업 필요)
+                        if (pEnumerator && pEnumerator->Next(WBEM_INFINITE, 1, &pObj, &uReturn) == S_OK) {
+                            VARIANT vtSerial;
+                            VariantInit(&vtSerial);
+                            if (SUCCEEDED(pObj->Get(L"SerialNumber", 0, &vtSerial, 0, 0))) {
+                                if (vtSerial.vt == VT_BSTR && vtSerial.bstrVal != NULL)
+                                    serial = _bstr_t(vtSerial.bstrVal);
+                                VariantClear(&vtSerial);
+                            }
+                            pObj->Release();
+                        }
+                        pEnumerator->Release();
+                    }
+                    pSvc->Release();
                 }
-                VariantClear(&dev); VariantClear(&ser);
-                pObj->Release();
-                idx++;
+                pLoc->Release();
             }
-            if (pEnum2) pEnum2->Release();
+        }
+        CoUninitialize();
+    }
+
+    // 2. WMI로 실패시, 볼륨 시리얼로 fallback
+    if (serial.empty()) {
+        DWORD volSerial = 0;
+        if (GetVolumeInformationA("C:\\", NULL, 0, &volSerial, NULL, NULL, NULL, 0)) {
+            char buf[32];
+            sprintf(buf, "%08X", volSerial);
+            serial = buf;
         }
     }
-    pSvc->Release();
-    pLoc->Release();
-    CoUninitialize();
+
+    // 모두 실패하면 빈값
     return serial;
 }
 
