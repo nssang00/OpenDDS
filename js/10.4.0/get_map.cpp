@@ -183,9 +183,8 @@ std::string ToSHA256(const std::string& input) {
     return hex;
 }
 
-// SHA256에서 숫자 6~8자리 라이선스 추출
+// LicenseCodeFromHash: SHA256 해시에서 앞 12자리 → 6자리 숫자
 std::string LicenseCodeFromHash(const std::string& hash, int digits = 6) {
-    // 앞 12자리 16진수 → 10진수 변환 후 자릿수 제한
     unsigned long long n = std::stoull(hash.substr(0, 12), nullptr, 16);
     unsigned long long mod = 1;
     for (int i = 0; i < digits; ++i) mod *= 10;
@@ -198,6 +197,57 @@ std::string LicenseCodeFromHash(const std::string& hash, int digits = 6) {
     return buf;
 }
 
+// FNV-1a (32bit) 해시로 6자리 숫자 추출
+uint32_t Fnv1a(const std::string& data) {
+    uint32_t hash = 2166136261U;
+    for (size_t i = 0; i < data.size(); ++i) {
+        hash ^= (uint8_t)data[i];
+        hash *= 16777619U;
+    }
+    return hash;
+}
+std::string LicenseCodeFromFnv1a(const std::string& hash, int digits = 6) {
+    uint32_t h = Fnv1a(hash);
+    uint32_t mod = 1;
+    for (int i = 0; i < digits; ++i) mod *= 10;
+    uint32_t n = h % mod;
+    uint32_t minval = 1;
+    for (int i = 1; i < digits; ++i) minval *= 10;
+    if (n < minval) n += minval;
+    char buf[16];
+    sprintf(buf, "%0*u", digits, n);
+    return buf;
+}
+
+// CRC32 (단순 구현)
+uint32_t crc32(const std::string& s) {
+    uint32_t crc = 0xFFFFFFFF;
+    for (auto c : s) {
+        crc ^= (uint8_t)c;
+        for (int k = 0; k < 8; ++k)
+            crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+    }
+    return ~crc;
+}
+std::string LicenseCodeFromCRC32(const std::string& hash, int digits = 6) {
+    uint32_t h = crc32(hash);
+    uint32_t mod = 1;
+    for (int i = 0; i < digits; ++i) mod *= 10;
+    uint32_t n = h % mod;
+    uint32_t minval = 1;
+    for (int i = 1; i < digits; ++i) minval *= 10;
+    if (n < minval) n += minval;
+    char buf[16];
+    sprintf(buf, "%0*u", digits, n);
+    return buf;
+}
+
+int main() {
+    std::string sha256hash = "2AF13D4D2FC8E5A118BDE44C23B3CF4A1F8C42D0B21E9E3E7D1385CFED6A3C1C";
+    std::cout << "LicenseCodeFromHash : " << LicenseCodeFromHash(sha256hash, 6) << std::endl;
+    std::cout << "LicenseCodeFromFnv1a: " << LicenseCodeFromFnv1a(sha256hash, 6) << std::endl;
+    std::cout << "LicenseCodeFromCRC32: " << LicenseCodeFromCRC32(sha256hash, 6) << std::endl;
+}
 int main() {
     std::string machineGuid = GetMachineGuid();
     std::string mac = GetPrimaryMacAddress();
@@ -215,6 +265,10 @@ int main() {
 
     std::cout << "라이선스 코드(6자리): " << license6 << std::endl;
     std::cout << "라이선스 코드(8자리): " << license8 << std::endl;
+
+    std::cout << "LicenseCodeFromHash : " << LicenseCodeFromHash(sha256hash, 6) << std::endl;
+    std::cout << "LicenseCodeFromFnv1a: " << LicenseCodeFromFnv1a(sha256hash, 6) << std::endl;
+    std::cout << "LicenseCodeFromCRC32: " << LicenseCodeFromCRC32(sha256hash, 6) << std::endl;    
 
     return 0;
 }
