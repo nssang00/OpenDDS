@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>3 D 쌓기나무 (등각)</title>
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+/* ───── 공통 레이아웃 ───── */
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}
+body{min-height:100vh;padding:20px;display:flex;flex-direction:column;align-items:center;
+     background:linear-gradient(135deg,#1a2a6c,#b21f1f,#fdbb2d);color:#fff}
+.container{max-width:1400px;width:100%}
+header{text-align:center;padding:32px 0 18px}
+h1{font-size:2.6rem;display:flex;gap:10px;align-items:center;justify-content:center;
+    text-shadow:0 2px 9px rgba(0,0,0,.4)}
+.subtitle{font-size:1.05rem;opacity:.9;margin:12px auto;max-width:780px;text-align:center}
+
+/* ───── 입력 격자 ───── */
+.content{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;margin-top:18px}
+.input-section{max-width:420px;width:100%;padding:22px;border-radius:18px;
+    background:rgba(255,255,255,.15);backdrop-filter:blur(10px);
+    box-shadow:0 10px 28px rgba(0,0,0,.3)}
+.section-title{display:flex;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:8px;
+    border-bottom:2px solid rgba(255,255,255,.25)}
+.section-title i{font-size:1.7rem;color:#ffcc00}
+.input-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.grid-cell{width:70px;height:70px;border-radius:10px;background:rgba(0,0,0,.28);
+           border:2px solid rgba(255,255,255,.35);cursor:pointer;transition:.2s}
+.grid-cell.active{background:#43a047;border-color:#8bc34a;
+                  box-shadow:0 0 14px rgba(67,160,71,.75);transform:scale(1.05)}
+.grid-cell:hover{transform:scale(1.05);border-color:#4caf50}
+.grid-label{margin-top:6px;font-size:.9rem;opacity:.9;text-align:center}
+
+/* ───── 3 D 뷰 ───── */
+.visualization-section{max-width:520px;width:100%;height:560px;padding:22px;border-radius:18px;
+    background:rgba(255,255,255,.1);backdrop-filter:blur(10px);
+    box-shadow:0 10px 28px rgba(0,0,0,.32);display:flex;flex-direction:column;align-items:center}
+.scene{flex:1;position:relative;display:flex;align-items:center;justify-content:center;
+       perspective:1800px}
+#blocks-container{
+  position:absolute;width:250px;height:250px;top:50%;left:50%;
+  transform-style:preserve-3d;transform-origin:center;
+  /*   translate → Y 45° → X 35.264°   */
+  transform:translate(-50%,-50%) rotateY(45deg) rotateX(35.264deg) scale(1);
+}
+.block{position:absolute;width:50px;height:50px;transform-style:preserve-3d;
+       animation:appear .35s ease-out}
+@keyframes appear{from{transform:scale(.1);opacity:0}to{transform:scale(1);opacity:1}}
+.block-face{position:absolute;width:100%;height:100%;background:rgba(76,175,80,.9);
+            border:1px solid rgba(0,0,0,.35)}
+.block-face.front {transform:translateZ(25px);background:rgba(139,195,74,.94)}
+.block-face.back  {transform:rotateY(180deg) translateZ(25px);background:rgba(105,165,60,.94)}
+.block-face.right {transform:rotateY( 90deg) translateZ(25px);background:rgba(67,160,71,.94)}
+.block-face.left  {transform:rotateY(-90deg) translateZ(25px);background:rgba(56,142,60,.94)}
+.block-face.top   {transform:rotateX( 90deg) translateZ(25px);background:rgba(46,125,50,.94)}
+.block-face.bottom{transform:rotateX(-90deg) translateZ(25px);background:rgba(27,94,32,.94)}
+
+.axis-label{position:absolute;font-size:1rem;font-weight:700;text-shadow:0 0 4px rgba(0,0,0,.6)}
+#lab-top   {top:-18px;left:calc(50% - .6rem)}   /* Z ↑ 12 시 */
+#lab-front {bottom:-18px;left:-12px}            /* Y ↙ 7 시 */
+#lab-side  {bottom:-18px;right:-12px}           /* X ↘ 5 시 */
+
+/* ───── 버튼 ───── */
+.controls{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;margin:22px 0}
+button{padding:12px 25px;border:none;border-radius:50px;font-size:1rem;font-weight:600;color:#fff;
+       cursor:pointer;display:flex;align-items:center;gap:8px;
+       box-shadow:0 4px 15px rgba(0,0,0,.25);transition:.3s}
+#visualize-btn{background:linear-gradient(to right,#4caf50,#8bc34a)}
+#reset-btn    {background:linear-gradient(to right,#f44336,#ff9800)}
+#random-btn   {background:linear-gradient(to right,#2196f3,#21cbf3)}
+button:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(0,0,0,.32)}
+
+/* ───── 반응형 ───── */
+@media(max-width:1200px){.content{flex-direction:column;align-items:center}
+  .grid-cell{width:60px;height:60px}}
+@media(max-width:768px){h1{font-size:2.2rem}.grid-cell{width:50px;height:50px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1><i class="fas fa-cubes"></i> 3 D 쌓기나무</h1>
+    <p class="subtitle">위(12 시)·앞(7 시)·옆(5 시) 축 기준 등각 뷰</p>
+  </header>
+
+  <div class="content">
+    <!-- Top -->
+    <div class="input-section">
+      <div class="section-title"><i class="fas fa-binoculars"></i><h2>위 (Top)</h2></div>
+      <div id="top-grid" class="input-grid"></div><div class="grid-label">X-Y 평면</div>
+    </div>
+    <!-- Front -->
+    <div class="input-section">
+      <div class="section-title"><i class="fas fa-eye"></i><h2>앞 (Front)</h2></div>
+      <div id="front-grid" class="input-grid"></div><div class="grid-label">X-Z 평면</div>
+    </div>
+    <!-- Side -->
+    <div class="input-section">
+      <div class="section-title"><i class="fas fa-vector-square"></i><h2>옆 (Side)</h2></div>
+      <div id="side-grid" class="input-grid"></div><div class="grid-label">Y-Z 평면</div>
+    </div>
+
+    <!-- 3D -->
+    <div class="visualization-section">
+      <div class="scene">
+        <div id="blocks-container">
+          <span id="lab-top" class="axis-label">위</span>
+          <span id="lab-front" class="axis-label">앞</span>
+          <span id="lab-side" class="axis-label">옆</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="visualize-btn"><i class="fas fa-sync-alt"></i> 3D 업데이트</button>
+    <button id="random-btn"><i class="fas fa-random"></i> 랜덤</button>
+    <button id="reset-btn"><i class="fas fa-trash"></i> 초기화</button>
+  </div>
+</div>
+
+<!-- ───── JavaScript ───── -->
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  const $=id=>document.getElementById(id);
+  const gTop=$('top-grid'),gFront=$('front-grid'),gSide=$('side-grid'),box=$('blocks-container');
+
+  let topView,frontView,sideView;
+
+  /* 그리드 UI */
+  function makeGrid(container,arr){
+    container.innerHTML='';
+    for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+      const cell=document.createElement('div');
+      cell.className='grid-cell';cell.dataset.row=r;cell.dataset.col=c;
+      if(arr[r][c]){cell.classList.add('active');cell.innerHTML='<i class="fas fa-cube"></i>';}
+      cell.onclick=function(){
+        const [row,col]=[+this.dataset.row,+this.dataset.col];
+        arr[row][col]^=1;
+        this.classList.toggle('active');
+        this.innerHTML=arr[row][col]?'<i class="fas fa-cube"></i>':'';
+        draw3D();
+      };
+      container.appendChild(cell);
+    }
+  }
+
+  /* 블록 DOM */
+  const mkBlock=(x,y,z)=>{
+    const d=document.createElement('div');
+    d.className='block';
+    d.style.transform=`translate3d(${(x-1.5)*50}px,${-z*50}px,${(1.5-y)*50}px)`;
+    ['front','back','right','left','top','bottom'].forEach(f=>{
+      const face=document.createElement('div');face.className=`block-face ${f}`;d.appendChild(face);
+    });
+    return d;
+  };
+
+  /* 3D 렌더 */
+  function draw3D(){
+    box.querySelectorAll('.block').forEach(n=>n.remove());
+    for(let x=0;x<4;x++)for(let y=0;y<4;y++)for(let z=0;z<4;z++){
+      if(topView[y][x] && frontView[3-z][x] && sideView[3-z][y])
+        box.appendChild(mkBlock(x,y,z));
+    }
+  }
+
+  /* 예시 구조 */
+  function setExample(){
+    topView   = Array.from({length:4},()=>Array(4).fill(0));
+    frontView = Array.from({length:4},()=>Array(4).fill(0));
+    sideView  = Array.from({length:4},()=>Array(4).fill(0));
+    // 2×2 바닥 + 기둥
+    topView[2][1]=topView[2][2]=topView[3][1]=topView[3][2]=1;
+    frontView[3][1]=frontView[3][2]=1; sideView[3][1]=sideView[3][2]=1;
+    frontView[2][1]=frontView[1][1]=1; sideView[2][1]=sideView[1][1]=1;
+    makeGrid(gTop,topView);makeGrid(gFront,frontView);makeGrid(gSide,sideView);
+    draw3D();
+  }
+
+  /* 랜덤 */
+  const randomAll=()=>{
+    const rnd=()=>Math.random()>.7?1:0;
+    topView  = Array.from({length:4},()=>Array.from({length:4},rnd));
+    frontView= Array.from({length:4},()=>Array.from({length:4},rnd));
+    sideView = Array.from({length:4},()=>Array.from({length:4},rnd));
+    makeGrid(gTop,topView);makeGrid(gFront,frontView);makeGrid(gSide,sideView);
+    draw3D();
+  };
+
+  /* 회전 & 줌 :   Y (좌우)  /   X (위아래) */
+  let drag=false,lx=0,ly=0,rx=35.264,ry=45,sc=1;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  function applyTf(){
+    box.style.transform=
+      `translate(-50%,-50%) rotateY(${ry}deg) rotateX(${rx}deg) scale(${sc})`;
+  }
+  box.addEventListener('mousedown',e=>{drag=true;lx=e.clientX;ly=e.clientY});
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;
+    ry+=dx*0.4;rx+=dy*0.4;rx=clamp(rx,-90,90);applyTf();
+  });
+  window.addEventListener('mouseup',()=>drag=false);
+  box.addEventListener('touchstart',e=>{drag=true;const t=e.touches[0];lx=t.clientX;ly=t.clientY},{passive:true});
+  window.addEventListener('touchmove',e=>{
+    if(!drag)return;
+    const t=e.touches[0];const dx=t.clientX-lx,dy=t.clientY-ly;lx=t.clientX;ly=t.clientY;
+    ry+=dx*0.4;rx+=dy*0.4;rx=clamp(rx,-90,90);applyTf();
+  },{passive:true});
+  window.addEventListener('touchend',()=>drag=false);
+  box.addEventListener('wheel',e=>{e.preventDefault();sc=clamp(sc+e.deltaY*-0.001,0.4,2);applyTf();},{passive:false});
+
+  /* 버튼 */
+  $('visualize-btn').onclick=draw3D;
+  $('random-btn').onclick=randomAll;
+  $('reset-btn').onclick=setExample;
+
+  /* 시작 */
+  setExample();
+});
+</script>
+</body>
+</html>
