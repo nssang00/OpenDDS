@@ -14,14 +14,13 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "wbemuuid.lib")
 
-// 가상 어댑터 여부 검사
 bool IsVirtualAdapter(const char* desc) {
     if (!desc) return false;
     return strstr(desc, "Virtual") || strstr(desc, "VMware") || strstr(desc, "Hyper-V") ||
            strstr(desc, "Loopback") || strstr(desc, "TAP");
 }
 
-// 대표 MAC 주소 (Metric 최소)
+// 대표 MAC 주소 (metric 최소)
 std::string GetPrimaryMacAddress() {
     ULONG bufferSize = 0;
     GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_GATEWAYS, NULL, NULL, &bufferSize);
@@ -223,6 +222,21 @@ std::string ToSHA256(const std::string& input) {
     return hex;
 }
 
+// SHA256에서 숫자 6~8자리 라이선스 추출
+std::string LicenseCodeFromHash(const std::string& hash, int digits = 6) {
+    // 앞 12자리 16진수 → 10진수 변환 후 자릿수 제한
+    unsigned long long n = std::stoull(hash.substr(0, 12), nullptr, 16);
+    unsigned long long mod = 1;
+    for (int i = 0; i < digits; ++i) mod *= 10;
+    n = n % mod;
+    unsigned long long minval = 1;
+    for (int i = 1; i < digits; ++i) minval *= 10;
+    if (n < minval) n += minval;
+    char buf[16];
+    sprintf(buf, "%0*llu", digits, n);
+    return buf;
+}
+
 int main() {
     std::string machineGuid = GetMachineGuid();
     std::string mac = GetPrimaryMacAddress();
@@ -234,9 +248,12 @@ int main() {
 
     std::string seed = machineGuid + mac + disk;
     std::string hash = ToSHA256(seed);
-    std::string license = hash.substr(0, 6);
 
-    std::cout << "라이선스 코드(6자리): " << license << std::endl;
+    std::string license6 = LicenseCodeFromHash(hash, 6);
+    std::string license8 = LicenseCodeFromHash(hash, 8);
+
+    std::cout << "라이선스 코드(6자리): " << license6 << std::endl;
+    std::cout << "라이선스 코드(8자리): " << license8 << std::endl;
 
     return 0;
 }
