@@ -185,16 +185,25 @@ std::string ToSHA256(const std::string& input) {
 
 // LicenseCodeFromHash: SHA256 해시에서 앞 12자리 → 6자리 숫자
 std::string LicenseCodeFromHash(const std::string& hash, int digits = 6) {
-    unsigned long long n = std::stoull(hash.substr(0, 12), nullptr, 16);
-    unsigned long long mod = 1;
-    for (int i = 0; i < digits; ++i) mod *= 10;
-    n = n % mod;
-    unsigned long long minval = 1;
-    for (int i = 1; i < digits; ++i) minval *= 10;
-    if (n < minval) n += minval;
-    char buf[16];
-    sprintf(buf, "%0*llu", digits, n);
-    return buf;
+    // 1. 유효성 검사
+    if (hash.empty() || hash.length() < 16) 
+        throw std::invalid_argument("Hash string too short");
+    if (digits <= 0 || digits > 19) 
+        throw std::invalid_argument("Digits must be 1-19");
+
+    unsigned long long n;
+    try {
+        n = std::stoull(hash.substr(0, 16), nullptr, 16); // 64비트
+    } catch (...) {
+        throw std::runtime_error("Hex conversion failed");
+    }
+
+    unsigned long long mod = std::pow(10, digits);
+    n %= mod;
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%0*llu", digits, n);
+    return std::string(buf);
 }
 
 // FNV-1a (32bit) 해시로 6자리 숫자 추출
@@ -271,26 +280,4 @@ int main() {
     std::cout << "LicenseCodeFromCRC32: " << LicenseCodeFromCRC32(sha256hash, 6) << std::endl;    
 
     return 0;
-}
-
-std::string LicenseCodeFromHash(const std::string& hash, int digits = 6) {
-    // 1. 유효성 검사
-    if (hash.empty() || hash.length() < 16) 
-        throw std::invalid_argument("Hash string too short");
-    if (digits <= 0 || digits > 19) 
-        throw std::invalid_argument("Digits must be 1-19");
-
-    unsigned long long n;
-    try {
-        n = std::stoull(hash.substr(0, 16), nullptr, 16); // 64비트
-    } catch (...) {
-        throw std::runtime_error("Hex conversion failed");
-    }
-
-    unsigned long long mod = std::pow(10, digits);
-    n %= mod;
-
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%0*llu", digits, n);
-    return std::string(buf);
 }
