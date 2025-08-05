@@ -20,6 +20,16 @@ bool IsVirtualAdapter(const char* desc) {
            strstr(desc, "Loopback") || strstr(desc, "TAP");
 }
 
+bool IsVirtualAdapter(const std::string& desc) {
+    std::string s = desc;
+    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+    return s.find("virtual") != std::string::npos ||
+           s.find("vmware") != std::string::npos ||
+           s.find("loopback") != std::string::npos ||
+           s.find("tunnel") != std::string::npos ||
+           s.find("pseudo") != std::string::npos;
+}
+
 // 대표 MAC 주소 (metric 최소)
 std::string GetPrimaryMacAddress() {
     ULONG bufferSize = 0;
@@ -74,6 +84,56 @@ std::string GetPrimaryMacAddress() {
         mac = macStr;
     }
     free(adapterAddresses);
+    return mac;
+}
+
+/////////
+
+std::string GetPrimaryMacAddress() {
+    ULONG size = 0;
+    if (GetAdaptersAddresses(AF_UNSPEC, 0, NULL, NULL, &size) != ERROR_BUFFER_OVERFLOW) return "";
+    PIP_ADAPTER_ADDRESSES addrs = (PIP_ADAPTER_ADDRESSES)malloc(size);
+    if (!addrs) return "";
+
+    if (GetAdaptersAddresses(AF_UNSPEC, 0, NULL, addrs, &size) != NO_ERROR) {
+        free(addrs);
+        return "";
+    }
+
+    PIP_ADAPTER_ADDRESSES best = nullptr, fallback = nullptr;
+    ULONG bestMetric = ~0U, fallbackMetric = ~0U;
+
+    for (auto p = addrs; p; p = p->Next) {
+        if (p->OperStatus != IfOperStatusUp || p->PhysicalAddressLength == 0) continue;
+        char descA[256] = {0};
+        WideCharToMultiByte(CP_ACP, 0, p->Description, -1, descA, sizeof(descA), NULL, NULL);
+        if (IsVirtualAdapter(descA)) continue;
+
+        bool hasGateway = p->FirstGatewayAddress && p->FirstGatewayAddress->Address.lpSockaddr;
+        if (hasGateway && p->Ipv4Metric < bestMetric) {
+            best = p;
+            bestMetric = p->Ipv4Metric;
+        }
+        if (!hasGateway && p->Ipv4Metric < fallbackMetric) {
+            fallback = p;
+            fallbackMetric = p->Ipv4Metric;
+        }
+    }
+
+    auto adapter = best ? best : fallback;
+    std::string mac;
+    if (adapter) {
+        char macstr[32] = {0};
+        char* p = macstr;
+        for (UINT i = 0; i < adapter->PhysicalAddressLength; ++i) {
+            if (i) *p++ = '-';
+            sprintf(p, "%02X", adapter->PhysicalAddress[i]);
+            p += 2;
+        }
+        mac = macstr;
+    }
+
+    free(addrs);
     return mac;
 }
 
