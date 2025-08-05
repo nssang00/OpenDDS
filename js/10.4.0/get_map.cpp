@@ -161,6 +161,76 @@ std::string GetSystemDiskSerial() {
     return serial;
 }
 
+#include <windows.h>
+#include <winioctl.h>
+#include <string>
+#include <stdexcept>
+#include <vector>
+
+// 디스크 시리얼 번호를 문자열로 반환하는 함수 (예: PhysicalDrive0)
+std::string GetDiskSerialNumber(int diskNumber = 0) {
+    std::wstring devicePath = L"\\\\.\\PhysicalDrive" + std::to_wstring(diskNumber);
+
+    // 디스크 핸들 열기
+    HANDLE hDevice = CreateFileW(
+        devicePath.c_str(),
+        0, // GENERIC_READ/WRITE 없어도 동작함
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        0,
+        NULL
+    );
+
+    if (hDevice == INVALID_HANDLE_VALUE) {
+        throw std::runtime_error("CreateFile failed. Error code: " + std::to_string(GetLastError()));
+    }
+
+    // STORAGE_PROPERTY_QUERY 설정
+    STORAGE_PROPERTY_QUERY query = {};
+    query.PropertyId = StorageDeviceProperty;
+    query.QueryType = PropertyStandardQuery;
+
+    // 버퍼 준비
+    std::vector<BYTE> buffer(1024);
+    DWORD bytesReturned = 0;
+
+    BOOL result = DeviceIoControl(
+        hDevice,
+        IOCTL_STORAGE_QUERY_PROPERTY,
+        &query,
+        sizeof(query),
+        buffer.data(),
+        (DWORD)buffer.size(),
+        &bytesReturned,
+        NULL
+    );
+
+    CloseHandle(hDevice);
+
+    if (!result) {
+        throw std::runtime_error("DeviceIoControl failed. Error code: " + std::to_string(GetLastError()));
+    }
+
+    auto descriptor = reinterpret_cast<STORAGE_DEVICE_DESCRIPTOR*>(buffer.data());
+    if (descriptor->SerialNumberOffset != 0 &&
+        descriptor->SerialNumberOffset < buffer.size()) {
+        
+        const char* serial = reinterpret_cast<const char*>(buffer.data() + descriptor->SerialNumberOffset);
+
+        std::string cleaned;
+        for (char c : std::string(serial)) {
+            if (isprint(static_cast<unsigned char>(c)) && c != ' ' && c != '\n' && c != '\r') {
+                cleaned += c;
+            }
+        }
+
+        return cleaned;
+    }
+
+    return "";
+}
+
 // SHA256 해시 (Windows API)
 std::string ToSHA256(const std::string& input) {
     HCRYPTPROV hProv = 0;
