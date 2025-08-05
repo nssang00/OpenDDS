@@ -84,6 +84,19 @@ std::string GetPrimaryMacAddress() {
 }
 
 /////////
+#include <intrin.h>
+
+std::string GetCPUID() {
+    int cpuInfo[4] = {0};
+    char cpuID[33] = {0};
+
+    // CPUID function 0x01, EAX: Processor Info and Feature Bits
+    __cpuid(cpuInfo, 1);
+    sprintf(cpuID, "%08X%08X", cpuInfo[0], cpuInfo[3]);
+    // EAX(0) + EDX(3) 합침 (더 많은 정보 필요시 반복 사용 가능)
+
+    return std::string(cpuID);
+}
 
 std::string GetPrimaryMacAddress() {
     ULONG size = 0;
