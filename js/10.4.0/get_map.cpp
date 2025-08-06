@@ -98,6 +98,62 @@ std::string GetCPUID() {
     return std::string(cpuID);
 }
 
+///////////
+
+
+std::string GetBiosUUID() {
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if (FAILED(hres)) return "";
+
+    hres = CoInitializeSecurity(NULL, -1, NULL, NULL,
+                                RPC_C_AUTHN_LEVEL_DEFAULT,
+                                RPC_C_IMP_LEVEL_IMPERSONATE,
+                                NULL, EOAC_NONE, NULL);
+
+    IWbemLocator* pLoc = nullptr;
+    IWbemServices* pSvc = nullptr;
+    IEnumWbemClassObject* pEnumerator = nullptr;
+    IWbemClassObject* pObj = nullptr;
+
+    std::string uuid = "";
+
+    do {
+        if (FAILED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
+                                    IID_IWbemLocator, (LPVOID*)&pLoc))) break;
+
+        if (FAILED(pLoc->ConnectServer(
+            _bstr_t(L"ROOT\\CIMV2"), NULL, NULL, 0, NULL, 0, 0, &pSvc))) break;
+
+        if (FAILED(CoSetProxyBlanket(
+            pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL,
+            RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE))) break;
+
+        if (FAILED(pSvc->ExecQuery(
+            bstr_t("WQL"),
+            bstr_t("SELECT UUID FROM Win32_ComputerSystemProduct"),
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+            NULL, &pEnumerator))) break;
+
+        ULONG uReturn = 0;
+        if (pEnumerator->Next(WBEM_INFINITE, 1, &pObj, &uReturn) == S_OK && uReturn) {
+            VARIANT vtProp;
+            if (SUCCEEDED(pObj->Get(L"UUID", 0, &vtProp, 0, 0))) {
+                _bstr_t bstr(vtProp.bstrVal);
+                uuid = (const char*)bstr;
+                VariantClear(&vtProp);
+            }
+            pObj->Release();
+        }
+    } while (0);
+
+    if (pEnumerator) pEnumerator->Release();
+    if (pSvc) pSvc->Release();
+    if (pLoc) pLoc->Release();
+    CoUninitialize();
+
+    return uuid;
+}
+
 std::string GetPrimaryMacAddress() {
     ULONG size = 0;
     if (GetAdaptersAddresses(AF_UNSPEC, 0, NULL, NULL, &size) != ERROR_BUFFER_OVERFLOW) return "";
