@@ -14,16 +14,17 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "wbemuuid.lib")
 
+
 bool IsVirtualAdapter(const std::string& desc) {
     std::string s = desc;
     std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-    return s.find("virtual") != std::string::npos ||
-           s.find("vmware") != std::string::npos ||
-           s.find("hyper-v") != std::string::npos ||
-           s.find("loopback") != std::string::npos ||
-           s.find("tunnel") != std::string::npos ||
-           s.find("pseudo") != std::string::npos ||
-           s.find("tap") != std::string::npos;
+    const std::string keywords[] = {"virtual", "vmware", "hyper-v", "loopback", "tunnel", "pseudo", "tap"};
+    for (const auto& keyword : keywords) {
+        if (s.find(keyword) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // 대표 MAC 주소 (metric 최소)
