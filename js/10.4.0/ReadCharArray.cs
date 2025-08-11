@@ -3,6 +3,23 @@ public override void ReadCharArray(Array value, int length)
     int rows = value.GetLength(0);
     int cols = value.GetLength(1);
     char[,] charArray = (char[,])value;
+    char[] rowChars = new char[cols];
+
+    Array.Clear(charArray, 0, charArray.Length);
+
+    for (int row = 0; row < rows; r++)
+    {
+        int n = ReadChars(rowChars, cols);
+        Buffer.BlockCopy(rowChars, 0, charArray, (row * cols) * sizeof(char), n * sizeof(char));
+    }
+}
+
+
+public override void ReadCharArray(Array value, int length)
+{
+    int rows = value.GetLength(0);
+    int cols = value.GetLength(1);
+    char[,] charArray = (char[,])value;
     char[] rowChars = new char[cols]; 
 
     for (int r = 0; r < rows; r++)
