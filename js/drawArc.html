@@ -16,15 +16,13 @@ function nmToRadius(nm) {
   return minR + t * (maxR - minR);
 }    
 
-// 섹터 그리기
 function drawArc(sectr1, sectr2, valnmrNm) {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
 
-  // 디폴트 값
-  const thickness = 12;   // 도넛 두께(px)
+  const thickness = 5; 
   const spokeLen  = 100;  // 점선 길이(px)
 
   // 외경/내경 계산
@@ -36,11 +34,6 @@ function drawArc(sectr1, sectr2, valnmrNm) {
   const start = toRad(sectr1);
   const end   = toRad(sectr2);
 
-  // 배경
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // 도넛 섹터
   ctx.beginPath();
   ctx.arc(cx, cy, outerRadius, start, end);        // 바깥 호
   ctx.arc(cx, cy, innerRadius, end, start, true);  // 안쪽 호 (반대 방향)
