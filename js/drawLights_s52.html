@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>S-52/S-57 Lights: Sector Test (SECTR1/SECTR2/VALNMR/COLOUR + Zoom/Lat)</title>
+  <style>
+    body { background:#ffffff; color:#000; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif; margin:0; display:grid; grid-template-rows:auto 1fr; height:100vh; }
+    header { padding:10px; background:#ddd; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    label { font-size:13px; }
+    input, select { height:28px; background:#f5f5f5; border:1px solid #aaa; color:#000; border-radius:6px; padding:4px 6px; }
+    input[type="number"]{ width:90px; }
+    input[type="range"]{ width:180px; }
+    button { background:#666; border:none; color:#fff; border-radius:8px; padding:6px 12px; cursor:pointer; }
+    canvas { width:100%; height:100%; display:block; background:#ffffff; }
+    small { color:#333 }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>S-57 LIGHTS</strong>
+    <label>SECTR1 (°): <input id="sectr1" type="number" step="0.1" value="45"></label>
+    <label>SECTR2 (°): <input id="sectr2" type="number" step="0.1" value="120"></label>
+    <label>VALNMR (NM): <input id="valnmr" type="number" step="0.1" min="0.1" value="1.0"></label>
+    <label>COLOUR:
+      <select id="colour">
+        <option value="1">1 White</option>
+        <option value="3">3 Red</option>
+        <option value="4" selected>4 Green</option>
+        <option value="6">6 Yellow</option>
+        <option value="5">5 Blue</option>
+        <option value="9">9 Amber</option>
+        <option value="11">11 Orange</option>
+      </select>
+    </label>
+    <label>Width(px): <input id="widthpx" type="number" step="0.5" min="1" value="6"></label>
+
+    <label>Zoom: <input id="zoom" type="range" min="8" max="20" step="1" value="14"> <span id="zoomOut">14</span></label>
+    <label>Lat(°): <input id="lat" type="number" step="0.1" min="-75" max="75" value="37.0"></label>
+
+    <button id="drawBtn">그리기</button>
+    <small>각도 기준: 3시=270°, 6시=360°, 9시=90°, 12시=180° • 경계 점선은 원을 벗어나 강조</small>
+  </header>
+  <canvas id="cv"></canvas>
+
+  <script>
+    const TAU = Math.PI*2; const DEG2RAD = Math.PI/180;
+    const canvas = document.getElementById('cv');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas(){ canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
+    window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+    // === S-57 COLOUR 코드 매핑 (간단 버전) ===
+    const COLOUR_TABLE = {
+      1: '#ffffff', // White
+      3: '#ff3b30', // Red
+      4: '#34c759', // Green
+      5: '#007aff', // Blue
+      6: '#ffd60a', // Yellow
+      9: '#ffbf00', // Amber
+      11:'#ff8800'  // Orange
+    };
+
+    // WebMercator 근사 m/px → NM→px
+    function metersPerPixel(latDeg=37, zoom=12){ return (156543.03392 * Math.cos(latDeg*DEG2RAD)) / Math.pow(2, zoom); }
+    function nmToPx(nm, lat, zoom){ return (nm*1852) / metersPerPixel(lat, zoom); }
+
+    // 사용자 요구 각도계: 3시=270, 6시=360, 9시=90, 12시=180 → Canvas 각(라디안)
+    function toCanvasAngle(deg){ const rad = (deg - 270) * DEG2RAD; return normalizeAngle(rad); }
+    function normalizeAngle(a){ a = a % TAU; if (a < 0) a += TAU; return a; }
+    function normalizeArc(a0, a1){ a0 = normalizeAngle(a0); a1 = normalizeAngle(a1); if (a1 < a0) a1 += TAU; return [a0, a1]; }
+
+    function drawSector({sectr1, sectr2, valnmr, colourCode, widthPx, zoom, lat}){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const cx = canvas.width/2, cy = canvas.height/2;
+
+      const rOuter = nmToPx(valnmr, lat, zoom); // VALNMR → px (줌/위도 반영)
+      const rInner = Math.max(1, rOuter - widthPx); // 두께(px)
+
+      let a0 = toCanvasAngle(sectr1), a1 = toCanvasAngle(sectr2);
+      [a0, a1] = normalizeArc(a0, a1);
+
+      const fillColor = COLOUR_TABLE[colourCode] || '#000000';
+
+      // 1) 고리(annular sector) 채움
+      ctx.beginPath();
+      ctx.arc(cx, cy, rOuter, a0, a1);
+      ctx.arc(cx, cy, rInner, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.globalAlpha = 0.4; // 채움은 은근하게
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // 2) 원호 테두리(안/바깥) = 검정 고정
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#000000';
+      ctx.beginPath(); ctx.arc(cx, cy, rOuter, a0, a1); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, rInner, a0, a1); ctx.stroke();
+      ctx.restore();
+
+      // 3) 경계각(sectr1, sectr2) 라디얼 점선 — 원 밖으로 확장
+      const extend = rOuter * 1.5;
+      ctx.save();
+      ctx.setLineDash([8,6]);
+      ctx.lineWidth = 2; ctx.strokeStyle = '#000000';
+      for (const ang of [a0, a1]){
+        const ex = cx + Math.cos(ang) * extend;
+        const ey = cy + Math.sin(ang) * extend;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
+      }
+      ctx.restore();
+
+      // 4) 중심점
+      ctx.beginPath(); ctx.arc(cx, cy, 3, 0, TAU); ctx.fillStyle = '#000'; ctx.fill();
+    }
+
+    // UI wiring
+    const $sectr1 = document.getElementById('sectr1');
+    const $sectr2 = document.getElementById('sectr2');
+    const $valnmr = document.getElementById('valnmr');
+    const $colour = document.getElementById('colour');
+    const $widthpx = document.getElementById('widthpx');
+    const $zoom = document.getElementById('zoom');
+    const $zoomOut = document.getElementById('zoomOut');
+    const $lat = document.getElementById('lat');
+    const $drawBtn = document.getElementById('drawBtn');
+
+    function gather(){
+      return {
+        sectr1: Number($sectr1.value),
+        sectr2: Number($sectr2.value),
+        valnmr: Math.max(0.01, Number($valnmr.value)),
+        colourCode: Number($colour.value),
+        widthPx: Math.max(1, Number($widthpx.value) || 6),
+        zoom: Number($zoom.value),
+        lat: Number($lat.value)
+      };
+    }
+
+    function redraw(){
+      $zoomOut.textContent = String($zoom.value);
+      drawSector(gather());
+    }
+
+    $drawBtn.addEventListener('click', redraw);
+    [$sectr1,$sectr2,$valnmr,$colour,$widthpx,$zoom,$lat].forEach(el => el.addEventListener('input', redraw));
+
+    // 초기 렌더
+    redraw();
+    // ==========================
+  // 공개 API (함수로 인자 전달해서 렌더)
+  // ==========================
+  // 1) 단일 섹터 라이트 그리기
+  //    drawLightSector(canvas, {
+  //      sectr1, sectr2, valnmr, colourCode, widthPx,
+  //      zoom, lat, extendFactor
+  //    })
+  //    - extendFactor: 경계 점선을 rOuter*extendFactor 만큼 뻗음 (기본 1.5)
+  //
+  // 2) 여러 개 라이트 그리기
+  //    drawLights(canvas, lightsArray, { zoom, lat })
+  //    - lightsArray: [{ sectr1, sectr2, valnmr, colourCode, widthPx, extendFactor, cx, cy }...]
+  //    - cx, cy를 주면 개별 위치에 그림. 없으면 캔버스 중앙에 그림.
+  (function exposeAPI(){
+    const TAU = Math.PI*2; const DEG2RAD = Math.PI/180;
+    const COLOUR_TABLE = {
+      1: '#ffffff', 3: '#ff3b30', 4: '#34c759', 5: '#007aff', 6: '#ffd60a', 9: '#ffbf00', 11:'#ff8800'
+    };
+    const metersPerPixel = (latDeg=37, zoom=12) => (156543.03392 * Math.cos(latDeg*DEG2RAD)) / Math.pow(2, zoom);
+    const nmToPx = (nm, lat, zoom) => (nm*1852) / metersPerPixel(lat, zoom);
+    const normA = (a)=>{ a%=TAU; if(a<0)a+=TAU; return a; };
+    const toCanvasAngle = (deg)=> normA((deg - 270) * DEG2RAD);
+    const normArc = (a0,a1)=>{ a0=normA(a0); a1=normA(a1); if(a1<a0)a1+=TAU; return [a0,a1]; };
+
+    function drawOne(ctx, canvas, p){
+      const {
+        sectr1, sectr2, valnmr, colourCode=1, widthPx=6,
+        zoom=14, lat=37, extendFactor=1.5,
+        cx = canvas.width/2, cy = canvas.height/2,
+        fillAlpha=0.4
+      } = p;
+
+      const rOuter = nmToPx(valnmr, lat, zoom);
+      const rInner = Math.max(1, rOuter - widthPx);
+      let a0 = toCanvasAngle(sectr1), a1 = toCanvasAngle(sectr2); [a0,a1] = normArc(a0,a1);
+      const fillColor = COLOUR_TABLE[colourCode] || '#000000';
+
+      // 채움
+      ctx.beginPath(); ctx.arc(cx, cy, rOuter, a0, a1); ctx.arc(cx, cy, rInner, a1, a0, true); ctx.closePath();
+      ctx.fillStyle = fillColor; ctx.globalAlpha = fillAlpha; ctx.fill(); ctx.globalAlpha = 1;
+      // 테두리(검정)
+      ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = '#000000';
+      ctx.beginPath(); ctx.arc(cx, cy, rOuter, a0, a1); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, rInner, a0, a1); ctx.stroke(); ctx.restore();
+      // 경계 점선 (원 밖으로)
+      const extend = rOuter * (extendFactor ?? 1.5);
+      ctx.save(); ctx.setLineDash([8,6]); ctx.lineWidth = 2; ctx.strokeStyle = '#000000';
+      for (const ang of [a0,a1]){ const ex = cx + Math.cos(ang)*extend, ey = cy + Math.sin(ang)*extend; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke(); }
+      ctx.restore();
+      // 중심점
+      ctx.beginPath(); ctx.arc(cx, cy, 3, 0, TAU); ctx.fillStyle = '#000'; ctx.fill();
+    }
+
+    window.drawLightSector = function(canvas, params){
+      const ctx = canvas.getContext('2d');
+      // 배경을 지우고 단일 라이트 렌더
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      drawOne(ctx, canvas, params);
+    };
+
+    window.drawLights = function(canvas, lightsArray, common={}){
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      for (const item of lightsArray){ drawOne(ctx, canvas, { ...common, ...item }); }
+    };
+  })();
+
+  </script>
+</body>
+</html>
