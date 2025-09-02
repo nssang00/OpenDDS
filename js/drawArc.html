@@ -8,6 +8,17 @@
   <canvas id="canvas" width="640" height="480"></canvas>
 
   <script>
+    
+const S52_LIGHT_COLORS = [
+  "#FFFFFF", // 0 WHITE
+  "#FFFF00", // 1 YELLOW
+  "#FF0000", // 2 RED
+  "#00FF00", // 3 GREEN
+  "#0000FF", // 4 BLUE
+  "#FFA500", // 5 ORANGE
+  "#FF00FF", // 6 MAGENTA
+  "#00FFFF"  // 7 CYAN
+];    
 
 function nmToRadius(nm) {
   const minNm=0, maxNm=25, minR=30, maxR=120;
@@ -16,7 +27,7 @@ function nmToRadius(nm) {
   return minR + t * (maxR - minR);
 }    
 
-function drawArc(sectr1, sectr2, valnmrNm) {
+function drawArc(sectr1, sectr2, valnmrNm, colorIndex) {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   const cx = canvas.width / 2;
@@ -39,7 +50,8 @@ function drawArc(sectr1, sectr2, valnmrNm) {
   ctx.arc(cx, cy, innerRadius, end, start, true);  // 안쪽 호 (반대 방향)
   ctx.closePath();
 
-  ctx.fillStyle = '#F4DA48';
+  const fillColor = S52_LIGHT_COLORS[(colorIndex|0) % S52_LIGHT_COLORS.length];
+  ctx.fillStyle = fillColor;
   ctx.fill();
   ctx.strokeStyle = 'black';
   ctx.lineWidth = 1;
@@ -53,14 +65,12 @@ function drawArc(sectr1, sectr2, valnmrNm) {
   ctx.moveTo(cx, cy);
   ctx.lineTo(cx + Math.cos(end) * spokeLen, cy + Math.sin(end) * spokeLen);
   ctx.stroke();
-  ctx.setLineDash([]);
 
-  // PNG DataURL 반환
   return canvas.toDataURL('image/png');
 }
 
-// 사용 예시
-const url = drawArc(207, 176, 10); // VALNMR=18 NM
+
+const url = drawArc(207, 176, 4, 2);
 console.log(url);
   </script>
 </body>
