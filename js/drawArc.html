@@ -1,49 +1,74 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Simple Donut Arc</title>
+  <meta charset="utf-8" />
+  <title>Donut Arc from VALNMR</title>
 </head>
 <body>
   <canvas id="canvas" width="640" height="480"></canvas>
-  
+
   <script>
-function drawArc(sectr1, sectr2) {
-  const ctx = document.getElementById('canvas').getContext('2d');
-  
-  // 배경
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, 640, 480);
-  
-  // 각도 변환 (12시=180° → Canvas 각도)
+
+function nmToRadius(nm) {
+  const minNm=0, maxNm=25, minR=30, maxR=120;
+  const clamped = Math.max(minNm, Math.min(maxNm, nm ?? 0));
+  const t = Math.sqrt((clamped - minNm) / Math.max(1e-6, (maxNm - minNm)));
+  return minR + t * (maxR - minR);
+}    
+
+// 섹터 그리기
+function drawArc(sectr1, sectr2, valnmrNm) {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  // 디폴트 값
+  const thickness = 12;   // 도넛 두께(px)
+  const spokeLen  = 100;  // 점선 길이(px)
+
+  // 외경/내경 계산
+  const outerRadius = nmToRadius(valnmrNm);
+  const innerRadius = Math.max(1, outerRadius - thickness);
+
+  // 각도 변환 (12시=180° → Canvas 라디안)
   const toRad = deg => (deg - 270) * Math.PI / 180;
   const start = toRad(sectr1);
-  const end = toRad(sectr2);
-  
-  // 도넛 섹터 그리기
+  const end   = toRad(sectr2);
+
+  // 배경
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 도넛 섹터
   ctx.beginPath();
-  ctx.arc(150, 150, 50, start, end);      // 바깥 호
-  ctx.arc(150, 150, 40, end, start, true); // 안쪽 호 (역방향)
+  ctx.arc(cx, cy, outerRadius, start, end);        // 바깥 호
+  ctx.arc(cx, cy, innerRadius, end, start, true);  // 안쪽 호 (반대 방향)
   ctx.closePath();
-  
-  // 채우기 및 테두리
+
   ctx.fillStyle = '#F4DA48';
   ctx.fill();
   ctx.strokeStyle = 'black';
+  ctx.lineWidth = 1;
   ctx.stroke();
-  
-  // 경계선 (점선)
+
+  // 점선 경계 (항상 일정 길이)
   ctx.setLineDash([5, 2]);
   ctx.beginPath();
-  ctx.moveTo(150, 150);
-  ctx.lineTo(150 + Math.cos(start) * 100, 150 + Math.sin(start) * 100);
-  ctx.moveTo(150, 150);
-  ctx.lineTo(150 + Math.cos(end) * 100, 150 + Math.sin(end) * 100);
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(start) * spokeLen, cy + Math.sin(start) * spokeLen);
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(end) * spokeLen, cy + Math.sin(end) * spokeLen);
   ctx.stroke();
+  ctx.setLineDash([]);
+
+  // PNG DataURL 반환
+  return canvas.toDataURL('image/png');
 }
 
-// 함수 호출
-drawArc(207, 176);
+// 사용 예시
+const url = drawArc(207, 176, 10); // VALNMR=18 NM
+console.log(url);
   </script>
 </body>
 </html>
