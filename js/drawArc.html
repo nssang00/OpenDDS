@@ -10,16 +10,17 @@
   <script>
     
 function nmToRadius(nm) {
-  const minNm=0, maxNm=25, minR=30, maxR=120;
+  const minNm=0, maxNm=25, minR=10, maxR=120;
   const clamped = Math.max(minNm, Math.min(maxNm, nm ?? 0));
   const t = Math.sqrt((clamped - minNm) / Math.max(1e-6, (maxNm - minNm)));
   return minR + t * (maxR - minR);
 }    
 
-function drawArc(sectr1, sectr2, valnmrNm, colorIndex) {      const COLORS = [
-        "#FFFFFF", "#FFFF00", "#FF0000", "#00FF00", 
-        "#0000FF", "#FFA500", "#FF00FF", "#00FFFF"
-      ];  
+function drawArc(sectr1, sectr2, valnmrNm, colorIndex) {
+  const COLORS = [
+    "#FFFFFF", "#FFFF00", "#FF0000", "#00FF00", 
+    "#0000FF", "#FFA500", "#FF00FF", "#00FFFF"
+  ];  
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   const cx = canvas.width / 2;
