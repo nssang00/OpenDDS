@@ -1,61 +1,64 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Html5 Canvas</title>
-    <meta charset="utf-8">
-    <style type="text/css">
-    </style>
-    <script type="text/javascript">
-var arc={
-    cx:150, cy:150,
-    innerRadius:40, outerRadius:50,
-    startAngle:((176 +90)* Math.PI) / 180, endAngle:((207+90) * Math.PI) / 180
+  <meta charset="utf-8">
+  <title>Html5 Canvas</title>
+  <script>
+var arc = {
+  cx:150, cy:150,
+  innerRadius:40, outerRadius:50,
+  sectr1:207,  // 예시: 207 → 176 (시계방향, 0° 랩어라운드)
+  sectr2:176
+};
+
+function toRadCustom(deg){
+  // 사용자 정의 각도계: 12시=180°, 3시=270°, 6시=360°, 9시=90°
+  // Canvas(3시=0rad, 시계방향 증가)로 변환
+  return (deg - 270) * Math.PI / 180;
 }
 
+function drawArc(a, fill, stroke, strokewidth){
+  const cvs = document.getElementById('myCanvas');
+  const ctx = cvs.getContext('2d');
 
-function drawArc(a, fill, stroke, strokewidth) {
-    var ctx = document.getElementById('myCanvas').getContext("2d");
-    ctx.beginPath();
+  // 0) 배경 흰색
+  ctx.save();
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
+  ctx.restore();
 
-    // Swap startAngle and endAngle to draw in the opposite direction
-    ctx.arc(a.cx, a.cy, a.outerRadius, a.startAngle, a.endAngle, true);
-    ctx.arc(a.cx, a.cy, a.innerRadius, a.endAngle, a.startAngle);
+  // 1) 각도 변환
+  const start = toRadCustom(a.sectr1);
+  const end   = toRadCustom(a.sectr2);
 
-    ctx.closePath();
-    ctx.fillStyle = fill;
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = strokewidth;
-    ctx.fill();
-    ctx.stroke();
-    // Set the dash pattern
-    ctx.setLineDash([5, 2]);
+  // 2) 도넛 섹터: sectr1 -> sectr2 (시계방향)
+  ctx.beginPath();
+  ctx.arc(a.cx, a.cy, a.outerRadius, start, end, false); // clockwise sweep
+  ctx.arc(a.cx, a.cy, a.innerRadius, end, start, true);  // 반대방향으로 닫기
+  ctx.closePath();
 
-    // Draw a dash line from the center to the outer radius at the start angle
-    ctx.moveTo(a.cx, a.cy);
-    ctx.lineTo(
-        a.cx + Math.cos(a.startAngle) * (a.outerRadius * 2),
-        a.cy + Math.sin(a.startAngle) * (a.outerRadius * 2)
-    );
+  // 3) 스타일 (테두리는 검정 고정)
+  ctx.fillStyle   = fill;
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth   = strokewidth;
+  ctx.fill();
+  ctx.stroke();
 
-    // Draw a dash line from the center to the outer radius at the end angle
-    ctx.moveTo(a.cx, a.cy);
-    ctx.lineTo(
-        a.cx + Math.cos(a.endAngle) * (a.outerRadius * 2),
-        a.cy + Math.sin(a.endAngle) * (a.outerRadius * 2)
-    );
+  // 4) 경계 점선(각각 sectr1/sectr2 방향으로 원 밖까지)
+  ctx.setLineDash([5,2]);
+  ctx.beginPath();
+  ctx.moveTo(a.cx, a.cy);
+  ctx.lineTo(a.cx + Math.cos(start) * (a.outerRadius * 2),
+             a.cy + Math.sin(start) * (a.outerRadius * 2));
+  ctx.moveTo(a.cx, a.cy);
+  ctx.lineTo(a.cx + Math.cos(end) * (a.outerRadius * 2),
+             a.cy + Math.sin(end) * (a.outerRadius * 2));
+  ctx.stroke();
 
-    ctx.stroke();
-
-    // Reset the dash pattern to default (solid line)
-    ctx.setLineDash([]);
 }
-
-    </script>
- 
+  </script>
 </head>
 <body onload="drawArc(arc,'#F4DA48','black',1);">
- 
-    <canvas id="myCanvas" height="480" width="640">
-    </canvas>
-</body> 
+  <canvas id="myCanvas" width="640" height="480"></canvas>
+</body>
 </html>
