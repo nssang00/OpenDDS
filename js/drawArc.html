@@ -9,17 +9,6 @@
 
   <script>
     
-const S52_LIGHT_COLORS = [
-  "#FFFFFF", // 0 WHITE
-  "#FFFF00", // 1 YELLOW
-  "#FF0000", // 2 RED
-  "#00FF00", // 3 GREEN
-  "#0000FF", // 4 BLUE
-  "#FFA500", // 5 ORANGE
-  "#FF00FF", // 6 MAGENTA
-  "#00FFFF"  // 7 CYAN
-];    
-
 function nmToRadius(nm) {
   const minNm=0, maxNm=25, minR=30, maxR=120;
   const clamped = Math.max(minNm, Math.min(maxNm, nm ?? 0));
@@ -27,7 +16,10 @@ function nmToRadius(nm) {
   return minR + t * (maxR - minR);
 }    
 
-function drawArc(sectr1, sectr2, valnmrNm, colorIndex) {
+function drawArc(sectr1, sectr2, valnmrNm, colorIndex) {      const COLORS = [
+        "#FFFFFF", "#FFFF00", "#FF0000", "#00FF00", 
+        "#0000FF", "#FFA500", "#FF00FF", "#00FFFF"
+      ];  
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   const cx = canvas.width / 2;
@@ -50,7 +42,7 @@ function drawArc(sectr1, sectr2, valnmrNm, colorIndex) {
   ctx.arc(cx, cy, innerRadius, end, start, true);  // 안쪽 호 (반대 방향)
   ctx.closePath();
 
-  const fillColor = S52_LIGHT_COLORS[(colorIndex|0) % S52_LIGHT_COLORS.length];
+  const fillColor = COLORS[(colorIndex|0) % COLORS.length];
   ctx.fillStyle = fillColor;
   ctx.fill();
   ctx.strokeStyle = 'black';
