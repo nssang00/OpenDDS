@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <title>Donut Arc (centered transparent PNG)</title>
-
 </head>
 <body>
   <div id="result"></div>
@@ -19,7 +18,7 @@ function drawArcCenteredPNG(sectr1, sectr2, valnmrNm, colorIndex = 0) {
   const MIN_R  = 10, MAX_R  = 120;  // px 반경(예시)
   const THICKNESS = 5;              // 도넛 두께
   const LINE_WIDTH = 1;
-  const spokeLen = 100;            // 점선 길이(px, 고정) 
+  const spokeLen = 100;             // 점선 길이(px, 고정) 
 
   // nm → 반경
   const nm = Math.max(MIN_NM, Math.min(MAX_NM, valnmrNm ?? 0));
@@ -28,12 +27,12 @@ function drawArcCenteredPNG(sectr1, sectr2, valnmrNm, colorIndex = 0) {
   const innerRadius = Math.max(1, outerRadius - THICKNESS);
 
   const toRad = deg => (deg - 270) * Math.PI / 180;
-  const s = toRad(sectr1);
-  const e = toRad(sectr2);
+  const startAngle = toRad(sectr1);
+  const endAngle   = toRad(sectr2);
 
   // 스포크 끝점 좌표 (중심 기준)
-  const spoke1 = { x: Math.cos(s) * spokeLen, y: Math.sin(s) * spokeLen };
-  const spoke2 = { x: Math.cos(e) * spokeLen, y: Math.sin(e) * spokeLen };
+  const spoke1 = { x: Math.cos(startAngle) * spokeLen, y: Math.sin(startAngle) * spokeLen };
+  const spoke2 = { x: Math.cos(endAngle)   * spokeLen, y: Math.sin(endAngle)   * spokeLen };
 
   // 바운딩 박스: 외접원 + 스포크 끝점
   const r = outerRadius;
@@ -48,16 +47,15 @@ function drawArcCenteredPNG(sectr1, sectr2, valnmrNm, colorIndex = 0) {
 
   const canvas = document.createElement('canvas');
   canvas.width  = Math.floor(width);
-  canvas.height = Math.floor(heightr);
+  canvas.height = Math.floor(height);
 
   const ctx = canvas.getContext('2d');
-  ctx.scale(1, 1);
-
   ctx.translate(width/2, height/2);
 
+  // 도넛 섹터
   ctx.beginPath();
-  ctx.arc(0, 0, outerRadius, s, e);
-  ctx.arc(0, 0, innerRadius, e, s, true);
+  ctx.arc(0, 0, outerRadius, startAngle, endAngle);
+  ctx.arc(0, 0, innerRadius, endAngle, startAngle, true);
   ctx.closePath();
 
   ctx.fillStyle = COLORS[(colorIndex|0) % COLORS.length];
@@ -66,6 +64,7 @@ function drawArcCenteredPNG(sectr1, sectr2, valnmrNm, colorIndex = 0) {
   ctx.lineWidth = LINE_WIDTH;
   ctx.stroke();
 
+  // 스포크
   ctx.setLineDash([5, 2]);
   ctx.beginPath();
   ctx.moveTo(0, 0);
