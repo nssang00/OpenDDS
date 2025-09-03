@@ -14,32 +14,32 @@ const COLORS = [
 ];
 
 function drawArcCenteredPNG(sectr1, sectr2, valnmrNm, colorIndex = 0) {
-  const MIN_NM = 0,  MAX_NM = 25;   // VALNMR 범위(예시)
-  const MIN_R  = 10, MAX_R  = 120;  // px 반경(예시)
-  const THICKNESS = 5;              // 도넛 두께
+  const minNM = 0,  maxNM = 25;        // VALNMR 범위(예시)
+  const minRadius = 10, maxRadius = 120;  // px 반경(예시)
+  const arcWidth  = 5;                 // 도넛(호) 두께
   const LINE_WIDTH = 1;
-  const spokeLen = 100;             // 점선 길이(px, 고정) 
+  const vectorLen  = 100;              // 벡터 길이(px, 고정) 
 
   // nm → 반경
-  const nm = Math.max(MIN_NM, Math.min(MAX_NM, valnmrNm ?? 0));
-  const t  = Math.sqrt((nm - MIN_NM) / Math.max(1e-6, (MAX_NM - MIN_NM)));
-  const outerRadius = MIN_R + t * (MAX_R - MIN_R);
-  const innerRadius = Math.max(1, outerRadius - THICKNESS);
+  const nm = Math.max(minNM, Math.min(maxNM, valnmrNm ?? 0));
+  const t  = Math.sqrt((nm - minNM) / Math.max(1e-6, (maxNM - minNM)));
+  const outerRadius = minRadius + t * (maxRadius - minRadius);
+  const innerRadius = Math.max(1, outerRadius - arcWidth);
 
   const toRad = deg => (deg - 270) * Math.PI / 180;
   const startAngle = toRad(sectr1);
   const endAngle   = toRad(sectr2);
 
-  // 스포크 끝점 좌표 (중심 기준)
-  const spoke1 = { x: Math.cos(startAngle) * spokeLen, y: Math.sin(startAngle) * spokeLen };
-  const spoke2 = { x: Math.cos(endAngle)   * spokeLen, y: Math.sin(endAngle)   * spokeLen };
+  // 벡터 끝점 좌표 (중심 기준)
+  const startVector = { x: Math.cos(startAngle) * vectorLen, y: Math.sin(startAngle) * vectorLen };
+  const endVector   = { x: Math.cos(endAngle)   * vectorLen, y: Math.sin(endAngle)   * vectorLen };
 
-  // 바운딩 박스: 외접원 + 스포크 끝점
+  // 바운딩 박스: 외접원 + 벡터 끝점
   const r = outerRadius;
-  let minX = Math.min(-r, spoke1.x, spoke2.x);
-  let maxX = Math.max( r, spoke1.x, spoke2.x);
-  let minY = Math.min(-r, spoke1.y, spoke2.y);
-  let maxY = Math.max( r, spoke1.y, spoke2.y);
+  let minX = Math.min(-r, startVector.x, endVector.x);
+  let maxX = Math.max( r, startVector.x, endVector.x);
+  let minY = Math.min(-r, startVector.y, endVector.y);
+  let maxY = Math.max( r, startVector.y, endVector.y);
 
   const pad = Math.ceil(LINE_WIDTH / 2) + 1;
   const width  = Math.ceil((maxX - minX) + pad * 2);
@@ -64,13 +64,13 @@ function drawArcCenteredPNG(sectr1, sectr2, valnmrNm, colorIndex = 0) {
   ctx.lineWidth = LINE_WIDTH;
   ctx.stroke();
 
-  // 스포크
+  // 벡터 (점선)
   ctx.setLineDash([5, 2]);
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(spoke1.x, spoke1.y);
+  ctx.lineTo(startVector.x, startVector.y);
   ctx.moveTo(0, 0);
-  ctx.lineTo(spoke2.x, spoke2.y);
+  ctx.lineTo(endVector.x, endVector.y);
   ctx.stroke();
 
   return canvas.toDataURL("image/png");
