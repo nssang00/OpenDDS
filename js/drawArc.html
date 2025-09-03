@@ -2,14 +2,11 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Donut Arc from VALNMR (optimized)</title>
-  <style>
-    html, body { margin:0; padding:0; background:#fff; }
-    canvas { display:block; margin:12px; border:1px solid #ddd; }
-  </style>
+  <title>Donut Arc (centered transparent PNG)</title>
+
 </head>
 <body>
-  <canvas id="canvas" width="640" height="480"></canvas>
+  <div id="result"></div>
 
   <script>
 const COLORS = [
@@ -17,54 +14,79 @@ const COLORS = [
   "#0000FF", "#FFA500", "#FF00FF", "#00FFFF"
 ];
 
-
-function drawArc(sectr1, sectr2, valnmrNm, colorIndex = 0) {
+function drawArcCenteredPNG(sectr1, sectr2, valnmrNm, colorIndex = 0) {
   const MIN_NM = 0,  MAX_NM = 25;   // VALNMR 범위(예시)
   const MIN_R  = 10, MAX_R  = 120;  // px 반경(예시)
-  const THICKNESS = 5;              // 도넛 두께(px, 고정)
-  const SPOKE_LEN = 100;            // 점선 길이(px, 고정)
+  const THICKNESS = 5;              // 도넛 두께
+  const LINE_WIDTH = 1;
+  const spokeLen = 100;            // 점선 길이(px, 고정) 
 
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  const cx = canvas.width / 2;
-  const cy = canvas.height / 2;
-
-  const nm = Math.max(MIN_NM, Math.min(MAX_NM, valnmrNm || 0));
-  const t  = Math.sqrt((nm - MIN_NM) / (MAX_NM - MIN_NM || 1));
+  // nm → 반경
+  const nm = Math.max(MIN_NM, Math.min(MAX_NM, valnmrNm ?? 0));
+  const t  = Math.sqrt((nm - MIN_NM) / Math.max(1e-6, (MAX_NM - MIN_NM)));
   const outerRadius = MIN_R + t * (MAX_R - MIN_R);
   const innerRadius = Math.max(1, outerRadius - THICKNESS);
 
   const toRad = deg => (deg - 270) * Math.PI / 180;
-  const start = toRad(sectr1);
-  const end   = toRad(sectr2);
-  
+  const s = toRad(sectr1);
+  const e = toRad(sectr2);
+
+  // 스포크 끝점 좌표 (중심 기준)
+  const spoke1 = { x: Math.cos(s) * spokeLen, y: Math.sin(s) * spokeLen };
+  const spoke2 = { x: Math.cos(e) * spokeLen, y: Math.sin(e) * spokeLen };
+
+  // 바운딩 박스: 외접원 + 스포크 끝점
+  const r = outerRadius;
+  let minX = Math.min(-r, spoke1.x, spoke2.x);
+  let maxX = Math.max( r, spoke1.x, spoke2.x);
+  let minY = Math.min(-r, spoke1.y, spoke2.y);
+  let maxY = Math.max( r, spoke1.y, spoke2.y);
+
+  const pad = Math.ceil(LINE_WIDTH / 2) + 1;
+  const width  = Math.ceil((maxX - minX) + pad * 2);
+  const height = Math.ceil((maxY - minY) + pad * 2);
+
+  // 고해상도 대응
+  const dpr = window.devicePixelRatio || 1;
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  canvas.style.width  = width + 'px';
+  canvas.style.height = height + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // 중심이 캔버스 정중앙이 되도록 이동
+  ctx.translate(width/2, height/2);
+
+  // 도넛 섹터
   ctx.beginPath();
-  ctx.arc(cx, cy, outerRadius, start, end);
-  ctx.arc(cx, cy, innerRadius, end, start, true);
+  ctx.arc(0, 0, outerRadius, s, e);
+  ctx.arc(0, 0, innerRadius, e, s, true);
   ctx.closePath();
 
   ctx.fillStyle = COLORS[(colorIndex|0) % COLORS.length];
   ctx.fill();
   ctx.strokeStyle = 'black';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = LINE_WIDTH;
   ctx.stroke();
-
-  const cs = Math.cos(start), sn = Math.sin(start);
-  const ce = Math.cos(end),   se = Math.sin(end);
 
   ctx.setLineDash([5, 2]);
   ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(cx + cs * SPOKE_LEN, cy + sn * SPOKE_LEN);
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(cx + ce * SPOKE_LEN, cy + se * SPOKE_LEN);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(spoke1.x, spoke1.y);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(spoke2.x, spoke2.y);
   ctx.stroke();
 
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL("image/png");
 }
 
-const url = drawArc(207, 176, 5, 2);
-console.log(url);
+const url = drawArcCenteredPNG(207, 176, 5, 2);
+const img = document.createElement("img");
+img.src = url;
+document.getElementById("result").appendChild(img);
   </script>
 </body>
 </html>
