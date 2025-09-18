@@ -59,11 +59,11 @@ class Program
     static void Main()
     {
         new RasterBuilder()
-    .WithSize(800, 600)
-    .WithBackground(Colors.LightGray)
-    .Draw(dc => {
-        dc.DrawRectangle(Brushes.SkyBlue, null, new Rect(50, 50, 200, 100));
-    })
-    .Save("out/test.png");
+            .WithSize(800, 600)
+            .WithBackground(Colors.LightGray)
+            .Draw(dc => {
+                dc.DrawRectangle(Brushes.SkyBlue, null, new Rect(50, 50, 200, 100));
+            })
+            .Save("out/test.png");
     }
 }
