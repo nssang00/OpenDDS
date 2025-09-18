@@ -104,22 +104,9 @@ class Program
         await FluentRaster
             .Draw(dc =>
             {
-                // 배경
                 dc.DrawRectangle(Brushes.LightGray, null, new Rect(0, 0, 800, 450));
-
-                // 도형
-                dc.DrawEllipse(Brushes.Orange, new Pen(Brushes.DarkOrange, 2), new Point(200, 150), 80, 50);
-
-                // 텍스트
-                var ft = new FormattedText(
-                    "Hello, DrawingContext!",
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    FlowDirection.LeftToRight,
-                    new Typeface("Segoe UI"), 24, Brushes.Black, 1.0);
-
                 dc.DrawText(ft, new Point(40, 40));
-            },
-            new RasterOpts(800, 450, bg: Colors.Transparent))
+            },new RasterOpts(800, 450, bg: Colors.Transparent))
             .ToPng()
             .Save("output.png");
 
