@@ -1,3 +1,13 @@
+public static class DcRaster
+{
+    public static SaveResult SavePng(string path, RasterOpts opts, Action<DrawingContext> draw)
+
+DcRaster.SavePng("file.png", new RasterOpts(800,600,96,96,Colors.White), dc => {
+    dc.DrawRectangle(Brushes.LightBlue, null, new Rect(10, 10, 200, 100));
+    dc.DrawText(...);
+});
+
+/////////////
 // Program.cs
 using System;
 using System.IO;
