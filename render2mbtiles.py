@@ -99,10 +99,11 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-#python3 render_to_mbtiles_min.py \
+```
+python3 render2mbtiles_min.py \
   --xml /path/to/mapnik.xml \
   --mbtiles seoul_z17.mbtiles \
   --z 17 \
   --xmin 111752 --xmax 111783 \
   --ymin 50755  --ymax 50784
+```
