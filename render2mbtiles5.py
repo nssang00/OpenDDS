@@ -3,7 +3,7 @@ import os, math, sqlite3, argparse, mapnik
 import multiprocessing as mp
 
 # Web Mercator 상수
-R = 6378137.0  # 지구 반지름
+R = 6378137.0
 TILE_SIZE = 256
 META_SIZE = 8
 FORMAT = "png256"
@@ -42,7 +42,7 @@ def xyz_to_tms_row(y, z):
     return (2**z - 1) - y
 
 def parse_zoom(spec):
-    """줌 레벨 파싱 (예: '16-18' → [16, 17, 18])"""
+    """줌 레벨 파싱"""
     zs = set()
     for part in str(spec).split(","):
         if "-" in part:
@@ -53,7 +53,7 @@ def parse_zoom(spec):
     return sorted(zs)
 
 def parse_bbox(bbox_str):
-    """바운딩 박스 파싱 (minx,miny,maxx,maxy)"""
+    """바운딩 박스 파싱"""
     try:
         return [float(v) for v in bbox_str.split(",")]
     except:
@@ -79,6 +79,10 @@ def init_mbtiles(path, name="OSM Raster", scheme="tms"):
         conn.commit()
     return conn
 
+def render_task(args, task):
+    """메타타일 렌더링 (람다 대체)"""
+    return render_meta_tile(args, task)
+
 def render_meta_tile(args, task):
     """메타타일(8x8) 렌더링"""
     mx, my, z = task
@@ -87,7 +91,7 @@ def render_meta_tile(args, task):
     if args.bg != "transparent":
         mapnik_map.background = mapnik.Color(args.bg)
 
-    # 메타타일의 바운딩 박스 계산
+    # 메타타일 바운딩 박스
     bbox_ll = tile_to_bbox(mx, my + META_SIZE - 1, z)
     bbox_ur = tile_to_bbox(mx + META_SIZE - 1, my, z)
     bbox = mapnik.Box2d(min(bbox_ll.minx, bbox_ur.minx), min(bbox_ll.miny, bbox_ur.miny),
@@ -98,7 +102,7 @@ def render_meta_tile(args, task):
     image = mapnik.Image(TILE_SIZE * META_SIZE, TILE_SIZE * META_SIZE)
     mapnik.render(mapnik_map, image)
 
-    # 타일 분할 및 저장
+    # 타일 분할
     tiles = []
     for dx in range(META_SIZE):
         for dy in range(META_SIZE):
@@ -143,9 +147,9 @@ def main():
             print(f"[z{z}] Skip (no tiles)")
             continue
 
-        # 멀티프로세싱으로 렌더링
+        # 멀티프로세싱
         with mp.Pool(processes=args.workers) as pool:
-            for tiles in pool.imap_unordered(lambda t: render_meta_tile(args, t), tasks):
+            for tiles in pool.imap_unordered(lambda t: render_task(args, t), tasks):
                 if tiles:
                     cur.executemany("INSERT OR REPLACE INTO tiles (zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)",
                                     [(z, x, y, sqlite3.Binary(b)) for z, x, y, b in tiles])
