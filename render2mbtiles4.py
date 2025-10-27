@@ -7,7 +7,7 @@ import multiprocessing as mp
 TILE_SIZE = 256
 R = 6378137.0
 META = 8
-FORMAT = "png256"   # mapnik encoder: png, png256, png8, jpeg80, webp90 ...
+FORMAT = "png256"   # png, png256, png8, jpeg80, webp90 ...
 
 # --------- 좌표/타일 유틸 ---------
 WEBMERC_MAX_LAT = 85.05112878
@@ -48,7 +48,7 @@ def bbox_3857_for_tile(x, y, z):
     return mapnik.Box2d(minx, miny, maxx, maxy)
 
 def xyz_to_tms_row(y, z):
-    return (2**z - 1) - y  # MBTiles uses TMS
+    return (2**z - 1) - y
 
 def coords_to_tile_range(minx, miny, maxx, maxy, z, crs):
     # 입력 좌표계를 4326으로 변환 후 타일 범위 계산
@@ -62,9 +62,12 @@ def coords_to_tile_range(minx, miny, maxx, maxy, z, crs):
     lon0, lon1 = sorted([lon_min, lon_max])
     lat0, lat1 = sorted([lat_min, lat_max])
 
-    x0, y0 = lonlat_to_tile_xy(lon0, lat1, z)
-    x1, y1 = lonlat_to_tile_xy(lon1, lat0, z)
+    x0, y0 = lonlat_to_tile_xy(lon0, lat1, z)  # 좌상
+    x1, y1 = lonlat_to_tile_xy(lon1, lat0, z)  # 우하
     return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
+
+def clamp(v, vmin, vmax):
+    return max(vmin, min(vmax, v))
 
 # --------- DB ---------
 def ensure_mbtiles(path, name="OSM Raster"):
@@ -97,7 +100,7 @@ def ensure_mbtiles(path, name="OSM Raster"):
 # --------- 워커 컨텍스트 ---------
 _worker_ctx = {}
 
-def worker_init(xml_path, tilesize, z, bg, xmin, xmax, ymin, ymax):
+def worker_init(xml_path, tilesize, z, bg, xmin, xmax, ymin, ymax, y_store_mode):
     meta_px = tilesize * META
     m = mapnik.Map(meta_px, meta_px)
     mapnik.load_map(m, xml_path)
@@ -110,6 +113,7 @@ def worker_init(xml_path, tilesize, z, bg, xmin, xmax, ymin, ymax):
     _worker_ctx["xmax"] = xmax
     _worker_ctx["ymin"] = ymin
     _worker_ctx["ymax"] = ymax
+    _worker_ctx["y_store_mode"] = y_store_mode  # "tms" or "xyz"
 
 def render_meta_tile(task):
     mx, my = task
@@ -120,7 +124,9 @@ def render_meta_tile(task):
     xmax = _worker_ctx["xmax"]
     ymin = _worker_ctx["ymin"]
     ymax = _worker_ctx["ymax"]
+    y_store_mode = _worker_ctx["y_store_mode"]
 
+    # 메타타일 bbox
     bbox_ll = bbox_3857_for_tile(mx, my + META - 1, z)
     bbox_ur = bbox_3857_for_tile(mx + META - 1, my, z)
     bbox = mapnik.Box2d(
@@ -142,10 +148,17 @@ def render_meta_tile(task):
                 continue
             view = meta_im.view(dx * ts, dy * ts, ts, ts)
             blob = view.tostring(FORMAT)
-            out_rows.append((z, tx, xyz_to_tms_row(ty, z), blob))
+
+            # 저장 스킴 결정
+            if y_store_mode == "tms":
+                y_save = xyz_to_tms_row(ty, z)  # 뒤집어서 저장
+            else:  # "xyz"
+                y_save = ty  # 그대로 저장
+
+            out_rows.append((z, tx, y_save, blob))
     return out_rows
 
-# --------- 유틸 ---------
+# --------- 기타 유틸 ---------
 def parse_zoom_spec(spec):
     zs = set()
     for part in str(spec).split(","):
@@ -166,14 +179,25 @@ def main():
     ap.add_argument("--mbtiles", required=True)
     ap.add_argument("-z", "--zoom", required=True, help="Zoom levels, e.g. 16-18 or 5,7,9")
     ap.add_argument("--coords", nargs=4, type=float, required=True, metavar=("MINX","MINY","MAXX","MAXY"),
-                    help="Bounding box in coordinate units.")
+                    help="Bounding box coordinates.")
     ap.add_argument("--crs", choices=["4326","3857"], default="4326",
-                    help="CRS of input coords (default: 4326)")
+                    help="CRS of --coords (default: 4326)")
+    ap.add_argument("-y", "--y-origin", choices=["top","bottom"], default="top",
+                    help="Storage/view scheme: top=OSM/XYZ (default), bottom=TMS")
     ap.add_argument("--tilesize", type=int, default=TILE_SIZE)
     ap.add_argument("--bg", default="transparent")
     ap.add_argument("--workers", type=int, default=max(1, mp.cpu_count()-1))
     ap.add_argument("--commit_batch", type=int, default=4000)
     args = ap.parse_args()
+
+    # -y 해석: 저장 시 어떤 스킴으로 tile_row를 넣을지
+    # top(OSM/XYZ) => MBTiles 관례(TMS)로 저장하려면 flip 필요 -> y_store_mode="tms"
+    # bottom(TMS)  => 그대로 저장 -> y_store_mode="xyz"로 두면 "뒤집지 않음"
+    # (이렇게 두면 사용자가 뷰어 기대치에 맞춰 선택 가능)
+    if args.y_origin == "top":
+        y_store_mode = "tms"   # XYZ 입력을 TMS로 뒤집어 저장
+    else:
+        y_store_mode = "xyz"   # TMS 기대면 뒤집지 않고 저장
 
     zooms = parse_zoom_spec(args.zoom)
     minx, miny, maxx, maxy = args.coords
@@ -184,6 +208,12 @@ def main():
 
     for z in zooms:
         xmin, ymin, xmax, ymax = coords_to_tile_range(minx, miny, maxx, maxy, z, args.crs)
+        # 줌 경계 클램프(안전)
+        n = 2**z
+        xmin = clamp(xmin, 0, n-1); xmax = clamp(xmax, 0, n-1)
+        ymin = clamp(ymin, 0, n-1); ymax = clamp(ymax, 0, n-1)
+
+        # 메타 그리드 정렬
         mx_start = (xmin // META) * META
         my_start = (ymin // META) * META
         mx_end   = (xmax // META) * META
@@ -200,7 +230,7 @@ def main():
         with mp.Pool(
             processes=args.workers,
             initializer=worker_init,
-            initargs=(args.xml, args.tilesize, z, args.bg, xmin, xmax, ymin, ymax),
+            initargs=(args.xml, args.tilesize, z, args.bg, xmin, xmax, ymin, ymax, y_store_mode),
             maxtasksperchild=50,
         ) as pool:
             pending = written = 0
@@ -230,13 +260,3 @@ def main():
 if __name__ == "__main__":
     mp.freeze_support()
     main()
-
-
-```
-python render_to_mbtiles_meta8_mp.py \
-  --xml style.xml \
-  --mbtiles out.mbtiles \
-  -z 14-16 \
-  --coords 126.8 37.4 127.2 37.7 \
-  --crs 4326
-```
