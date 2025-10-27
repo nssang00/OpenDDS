@@ -1,164 +1,135 @@
 #!/usr/bin/env python3
-import os, math, sqlite3, argparse, mapnik
+# -*- coding: utf-8 -*-
+import os, math, sqlite3, argparse, mapnik, time
 import multiprocessing as mp
 
-# Web Mercator 상수
-R = 6378137.0
-TILE_SIZE = 256
-META_SIZE = 8
-FORMAT = "png256"
+# ---- 상수 ----
+R=6378137.0; TILE=256; META=8; FORMAT="png256"; MAXLAT=85.05112878
 
+# ---- 좌표/타일 유틸 ----
+def clamp_lat(a): return max(-MAXLAT, min(MAXLAT, a))
 def lonlat_to_merc(lon, lat):
-    """경도/위도를 Web Mercator 좌표로 변환"""
-    x = R * math.radians(lon)
-    y = R * math.log(math.tan(math.pi/4 + math.radians(max(-85, min(85, lat)))/2))
+    x = R*math.radians(lon)
+    y = R*math.log(math.tan(math.pi/4 + math.radians(clamp_lat(lat))/2))
     return x, y
-
 def lonlat_to_tile(lon, lat, z):
-    """경도/위도를 타일 좌표로 변환"""
-    n = 2 ** z
-    x = int((lon + 180.0) / 360.0 * n)
-    y = int((1.0 - math.log(math.tan(math.radians(lat)) + 1/math.cos(math.radians(lat))) / math.pi) / 2.0 * n)
-    return max(0, min(n-1, x)), max(0, min(n-1, y))
-
-def tile_bounds(x, y, z):
-    """타일의 경도/위도 바운딩 박스 계산"""
-    n = 2.0 ** z
-    lon0 = x / n * 360.0 - 180.0
-    lon1 = (x + 1) / n * 360.0 - 180.0
-    lat0 = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
-    lat1 = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n))))
+    n=2**z; lat=clamp_lat(lat); r=math.radians(lat)
+    x=int((lon+180)/360*n)
+    y=int((1 - (math.log(math.tan(r)+1/math.cos(r))/math.pi))/2*n)
+    return max(0,min(n-1,x)), max(0,min(n-1,y))
+def tile_bounds(x,y,z):
+    n=2.0**z
+    lon0=x/n*360-180; lon1=(x+1)/n*360-180
+    lat1=math.degrees(math.atan(math.sinh(math.pi*(1-2*(y+1)/n))))
+    lat0=math.degrees(math.atan(math.sinh(math.pi*(1-2*y/n))))
     return lon0, lat1, lon1, lat0
-
-def tile_to_bbox(x, y, z):
-    """타일의 Web Mercator 바운딩 박스 계산"""
-    min_lon, min_lat, max_lon, max_lat = tile_bounds(x, y, z)
-    minx, miny = lonlat_to_merc(min_lon, min_lat)
-    maxx, maxy = lonlat_to_merc(max_lon, max_lat)
-    return mapnik.Box2d(minx, miny, maxx, maxy)
-
-def xyz_to_tms_row(y, z):
-    """XYZ 타일 Y를 TMS Y로 변환"""
-    return (2**z - 1) - y
-
+def tile_bbox_3857(x,y,z):
+    lon0,lat0,lon1,lat1=tile_bounds(x,y,z)
+    minx,miny=lonlat_to_merc(lon0,lat0); maxx,maxy=lonlat_to_merc(lon1,lat1)
+    return mapnik.Box2d(minx,miny,maxx,maxy)
+def xyz_to_tms(y,z): return (2**z-1) - y
 def parse_zoom(spec):
-    """줌 레벨 파싱"""
-    zs = set()
-    for part in str(spec).split(","):
-        if "-" in part:
-            a, b = map(int, part.split("-"))
-            zs.update(range(a, b + 1))
-        else:
-            zs.add(int(part))
+    zs=set()
+    for p in str(spec).split(","):
+        p=p.strip()
+        if not p: continue
+        if "-" in p:
+            a,b=map(int,p.split("-",1)); zs.update(range(a,b+1))
+        else: zs.add(int(p))
     return sorted(zs)
-
-def parse_bbox(bbox_str):
-    """바운딩 박스 파싱"""
+def parse_bbox(s):
     try:
-        return [float(v) for v in bbox_str.split(",")]
-    except:
-        raise argparse.ArgumentTypeError("Invalid --bbox: use minx,miny,maxx,maxy")
+        a=[float(v) for v in s.split(",")]
+        if len(a)!=4: raise ValueError
+        return a
+    except: raise argparse.ArgumentTypeError("Invalid --bbox: minx,miny,maxx,maxy")
 
-def init_mbtiles(path, name="OSM Raster", scheme="tms"):
-    """MBTiles 파일 초기화"""
-    new = not os.path.exists(path)
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA journal_mode=MEMORY;")
-    conn.execute("PRAGMA synchronous=OFF;")
+# ---- MBTiles ----
+def init_mbtiles(path, name, scheme):
+    new=not os.path.exists(path)
+    conn=sqlite3.connect(path); cur=conn.cursor()
+    cur.executescript("PRAGMA journal_mode=MEMORY;PRAGMA synchronous=OFF;PRAGMA temp_store=MEMORY;")
     if new:
-        conn.execute("CREATE TABLE metadata (name TEXT, value TEXT);")
-        conn.execute("CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, tile_data BLOB);")
-        conn.execute("CREATE UNIQUE INDEX tile_index ON tiles (zoom_level, tile_column, tile_row);")
-        meta = {
-            "name": name, "type": "baselayer", "version": "1",
-            "description": "Rendered tiles", "format": "png",
-            "minzoom": "0", "maxzoom": "22", "bounds": "-180,-85,180,85",
-            "center": "0,0,2", "scheme": scheme
-        }
-        conn.executemany("INSERT INTO metadata (name,value) VALUES (?,?)", meta.items())
-        conn.commit()
+        cur.executescript("""CREATE TABLE metadata(name TEXT,value TEXT);
+        CREATE TABLE tiles(zoom_level INTEGER,tile_column INTEGER,tile_row INTEGER,tile_data BLOB);
+        CREATE UNIQUE INDEX tile_index ON tiles(zoom_level,tile_column,tile_row);""")
+        meta={"name":name,"type":"baselayer","version":"1","description":"Rendered tiles","format":"png",
+              "minzoom":"0","maxzoom":"22","bounds":"-180,-85,180,85","center":"0,0,2","scheme":scheme}
+        cur.executemany("INSERT INTO metadata(name,value) VALUES (?,?)", meta.items()); conn.commit()
     return conn
 
-def render_task(args, task):
-    """메타타일 렌더링 (람다 대체)"""
-    return render_meta_tile(args, task)
+# ---- 워커 ----
+CTX={}
+def worker_init(xml, tilesize, z, xmin, xmax, ymin, ymax, scheme):
+    m=mapnik.Map(tilesize*META, tilesize*META)
+    mapnik.load_map(m, xml)  # transparent unless style overrides
+    CTX.update(dict(m=m, ts=tilesize, z=z, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax, scheme=scheme))
 
-def render_meta_tile(args, task):
-    """메타타일(8x8) 렌더링"""
-    mx, my, z = task
-    mapnik_map = mapnik.Map(TILE_SIZE * META_SIZE, TILE_SIZE * META_SIZE)
-    mapnik.load_map(mapnik_map, args.xml)
-    if args.bg != "transparent":
-        mapnik_map.background = mapnik.Color(args.bg)
+def render_meta(task):
+    mx,my=task
+    m,ts,z=CTX["m"],CTX["ts"],CTX["z"]
+    xmin,xmax,ymin,ymax,scheme = CTX["xmin"],CTX["xmax"],CTX["ymin"],CTX["ymax"],CTX["scheme"]
+    ll=tile_bbox_3857(mx, my+META-1, z); ur=tile_bbox_3857(mx+META-1, my, z)
+    bbox=mapnik.Box2d(min(ll.minx,ur.minx), min(ll.miny,ur.miny), max(ll.maxx,ur.maxx), max(ll.maxy,ur.maxy))
+    m.zoom_to_box(bbox)
+    im=mapnik.Image(ts*META, ts*META); mapnik.render(m, im)
+    rows=[]
+    for dx in range(META):
+        for dy in range(META):
+            tx,ty=mx+dx, my+dy
+            if not (xmin<=tx<=xmax and ymin<=ty<=ymax): continue
+            view=im.view(dx*ts, dy*ts, ts, ts)
+            ysave = xyz_to_tms(ty,z) if scheme=="tms" else ty
+            rows.append((z, tx, ysave, view.tostring(FORMAT)))
+    return rows
 
-    # 메타타일 바운딩 박스
-    bbox_ll = tile_to_bbox(mx, my + META_SIZE - 1, z)
-    bbox_ur = tile_to_bbox(mx + META_SIZE - 1, my, z)
-    bbox = mapnik.Box2d(min(bbox_ll.minx, bbox_ur.minx), min(bbox_ll.miny, bbox_ur.miny),
-                        max(bbox_ll.maxx, bbox_ur.maxx), max(bbox_ll.maxy, bbox_ur.maxy))
-    mapnik_map.zoom_to_box(bbox)
-
-    # 렌더링
-    image = mapnik.Image(TILE_SIZE * META_SIZE, TILE_SIZE * META_SIZE)
-    mapnik.render(mapnik_map, image)
-
-    # 타일 분할
-    tiles = []
-    for dx in range(META_SIZE):
-        for dy in range(META_SIZE):
-            tx, ty = mx + dx, my + dy
-            if not (args.xmin <= tx <= args.xmax and args.ymin <= ty <= args.ymax):
-                continue
-            view = image.view(dx * TILE_SIZE, dy * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            y_save = xyz_to_tms_row(ty, z) if args.scheme == "tms" else ty
-            tiles.append((z, tx, y_save, view.tostring(FORMAT)))
-    return tiles
-
+# ---- 실행 ----
 def main():
-    parser = argparse.ArgumentParser(description="Simple MBTiles renderer with Mapnik")
-    parser.add_argument("--xml", required=True, help="Mapnik XML file")
-    parser.add_argument("--mbtiles", required=True, help="Output MBTiles file")
-    parser.add_argument("-z", "--zoom", required=True, help="Zoom levels (e.g., 16-18 or 5,7)")
-    parser.add_argument("--bbox", required=True, type=parse_bbox, help="Bounding box (minx,miny,maxx,maxy)")
-    parser.add_argument("--scheme", choices=["tms", "xyz"], default="tms")
-    parser.add_argument("--bg", default="transparent", help="Background color")
-    parser.add_argument("--workers", type=int, default=max(4, mp.cpu_count()-1))
-    args = parser.parse_args()
+    ap=argparse.ArgumentParser(description="Meta 8x8 png256 → MBTiles (EPSG:4326 bbox)")
+    ap.add_argument("--xml", required=True); ap.add_argument("--mbtiles", required=True)
+    ap.add_argument("-z","--zoom", required=True); ap.add_argument("--bbox", required=True, type=parse_bbox)
+    ap.add_argument("--scheme", choices=["tms","xyz"], default="tms")
+    ap.add_argument("--tilesize", type=int, default=TILE)
+    ap.add_argument("--workers", type=int, default=max(4, mp.cpu_count()-1))
+    ap.add_argument("--commit_batch", type=int, default=5000)
+    args=ap.parse_args()
 
-    # 바운딩 박스 및 줌 레벨
-    minx, miny, maxx, maxy = args.bbox
-    zooms = parse_zoom(args.zoom)
-    conn = init_mbtiles(args.mbtiles, scheme=args.scheme)
-    cur = conn.cursor()
+    t0=time.time()
+    total_written=0
+    minx,miny,maxx,maxy=args.bbox; zooms=parse_zoom(args.zoom)
 
-    for z in zooms:
-        # 타일 범위 계산
-        x0, y0 = lonlat_to_tile(minx, maxy, z)
-        x1, y1 = lonlat_to_tile(maxx, miny, z)
-        args.xmin, args.ymin = min(x0, x1), min(y0, y1)
-        args.xmax, args.ymax = max(x0, x1), max(y0, y1)
+    with init_mbtiles(args.mbtiles, os.path.basename(args.mbtiles), args.scheme) as conn:
+        cur=conn.cursor()
+        insert_sql="INSERT OR REPLACE INTO tiles(zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)"
+        for z in zooms:
+            x0,y0=lonlat_to_tile(minx, maxy, z); x1,y1=lonlat_to_tile(maxx, miny, z)
+            xmin,xmax=min(x0,x1),max(x0,x1); ymin,ymax=min(y0,y1),max(y0,y1)
+            n=2**z
+            xmin=max(0,min(xmin,n-1)); xmax=max(0,min(xmax,n-1))
+            ymin=max(0,min(ymin,n-1)); ymax=max(0,min(ymax,n-1))
+            if xmin>xmax or ymin>ymax: print(f"[z{z}] Skip (no tiles)"); continue
 
-        # 메타타일 작업 목록
-        tasks = [(mx, my, z)
-                 for mx in range(args.xmin // META_SIZE * META_SIZE, args.xmax + 1, META_SIZE)
-                 for my in range(args.ymin // META_SIZE * META_SIZE, args.ymax + 1, META_SIZE)]
+            mx0=(xmin//META)*META; my0=(ymin//META)*META
+            mx1=(xmax//META)*META; my1=(ymax//META)*META
+            tasks=[(mx,my) for mx in range(mx0,mx1+1,META) for my in range(my0,my1+1,META)]
 
-        if not tasks:
-            print(f"[z{z}] Skip (no tiles)")
-            continue
+            pending=0; written=0; total=(xmax-xmin+1)*(ymax-ymin+1)
+            with mp.Pool(processes=args.workers, initializer=worker_init,
+                         initargs=(args.xml,args.tilesize,z,xmin,xmax,ymin,ymax,args.scheme),
+                         maxtasksperchild=50) as pool:
+                for rows in pool.imap_unordered(render_meta, tasks, chunksize=1):
+                    if not rows: continue
+                    cur.executemany(insert_sql, [(z,x,y,sqlite3.Binary(b)) for (z,x,y,b) in rows])
+                    pending+=len(rows); written+=len(rows)
+                    if pending>=args.commit_batch:
+                        conn.commit(); print(f"[z{z}] +{pending} commit ({written}/{total}, {written/total:.1%})"); pending=0
+                if pending: conn.commit(); print(f"[z{z}] +{pending} commit (final)")
+            total_written+=written
+            print(f"[z{z}] ✅ {written}/{total}")
 
-        # 멀티프로세싱
-        with mp.Pool(processes=args.workers) as pool:
-            for tiles in pool.imap_unordered(lambda t: render_task(args, t), tasks):
-                if tiles:
-                    cur.executemany("INSERT OR REPLACE INTO tiles (zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)",
-                                    [(z, x, y, sqlite3.Binary(b)) for z, x, y, b in tiles])
-                    conn.commit()
-                    print(f"[z{z}] Committed {len(tiles)} tiles")
+    dt=time.time()-t0
+    print(f"✅ Done: {total_written} tiles → {os.path.basename(args.mbtiles)} ({dt:.1f}s)")
 
-    conn.close()
-    print("Done!")
-
-if __name__ == "__main__":
-    mp.freeze_support()
+if __name__=="__main__":
+    mp.freeze_support(); 
     main()
