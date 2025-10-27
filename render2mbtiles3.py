@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os, math, sqlite3, argparse, mapnik, time
+import multiprocessing as mp
 
 TILE_SIZE = 256
 R = 6378137.0
+META = 8
+FORMAT = "png256"  # mapnik encoder (png, png256, png8, jpeg80, webp90 ...)
 
+# -------------------- tile math --------------------
 def lonlat_to_merc(lon, lat):
     x = R * math.radians(lon)
     y = R * math.log(math.tan(math.pi/4 + math.radians(lat)/2))
@@ -25,19 +29,10 @@ def bbox_3857_for_tile(x, y, z):
     return mapnik.Box2d(minx, miny, maxx, maxy)
 
 def xyz_to_tms_row(y, z):
-    return (2**z - 1) - y  # MBTiles는 TMS 스킴
+    return (2**z - 1) - y  # MBTiles uses TMS
 
-def normalize_mbtiles_format(fmt: str) -> str:
-    f = fmt.lower()
-    if f.startswith("jpeg") or f.startswith("jpg"):
-        return "jpg"
-    if f.startswith("png"):
-        return "png"
-    if f.startswith("webp"):
-        return "webp"
-    return f
-
-def ensure_mbtiles(path, name="OSM Raster", fmt="png"):
+# -------------------- db --------------------
+def ensure_mbtiles(path, name="OSM Raster"):
     new = not os.path.exists(path)
     conn = sqlite3.connect(path)
     cur = conn.cursor()
@@ -49,94 +44,120 @@ def ensure_mbtiles(path, name="OSM Raster", fmt="png"):
         cur.execute("CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, tile_data BLOB);")
         cur.execute("CREATE UNIQUE INDEX tile_index ON tiles (zoom_level, tile_column, tile_row);")
         for k, v in {
-            "name": name, "type": "baselayer", "version": "1",
-            "description": "Rendered by render_to_mbtiles_meta_mapnik.py",
-            "format": normalize_mbtiles_format(fmt),  # png, jpg, webp 등
-            "minzoom": "0", "maxzoom": "22",
-            "bounds": "-180,-85,180,85", "center": "0,0,2",
+            "name": name,
+            "type": "baselayer",
+            "version": "1",
+            "description": "Rendered by render_to_mbtiles_meta8_mp.py",
+            "format": "png",
+            "minzoom": "0",
+            "maxzoom": "22",
+            "bounds": "-180,-85,180,85",
+            "center": "0,0,2",
         }.items():
             cur.execute("INSERT INTO metadata (name,value) VALUES (?,?)", (k, v))
         conn.commit()
-    else:
-        # 기존 파일이면 format 메타데이터를 필요 시 업데이트
-        cur.execute("DELETE FROM metadata WHERE name='format';")
-        cur.execute("INSERT INTO metadata (name,value) VALUES (?,?)",
-                    ("format", normalize_mbtiles_format(fmt)))
-        conn.commit()
     return conn
 
+# -------------------- worker init & job --------------------
+_worker_ctx = {}
+
+def worker_init(xml_path, tilesize, z, bg):
+    # 프로세스별 Mapnik 객체를 로컬에 생성 (pickle 불가이므로 전역 dict에 저장)
+    meta_px = tilesize * META
+    m = mapnik.Map(meta_px, meta_px)
+    mapnik.load_map(m, xml_path)
+    if bg and bg != "transparent":
+        m.background = mapnik.Color(bg)
+    _worker_ctx["map"] = m
+    _worker_ctx["tilesize"] = tilesize
+    _worker_ctx["z"] = z
+
+def render_meta_tile(task):
+    # task = (mx, my)
+    mx, my = task
+    m = _worker_ctx["map"]
+    ts = _worker_ctx["tilesize"]
+    z  = _worker_ctx["z"]
+
+    # 메타타일 bbox
+    bbox_ll = bbox_3857_for_tile(mx, my + META - 1, z)
+    bbox_ur = bbox_3857_for_tile(mx + META - 1, my, z)
+    bbox = mapnik.Box2d(
+        min(bbox_ll.minx, bbox_ur.minx),
+        min(bbox_ll.miny, bbox_ur.miny),
+        max(bbox_ll.maxx, bbox_ur.maxx),
+        max(bbox_ll.maxy, bbox_ur.maxy),
+    )
+    m.zoom_to_box(bbox)
+
+    # 메타 렌더
+    meta_im = mapnik.Image(ts * META, ts * META)
+    mapnik.render(m, meta_im)
+
+    # 잘라서 인코딩 (Mapnik encoder 그대로)
+    rows = []
+    for dx in range(META):
+        for dy in range(META):
+            tx, ty = mx + dx, my + dy
+            view = meta_im.view(dx * ts, dy * ts, ts, ts)
+            blob = view.tostring(FORMAT)  # png256
+            rows.append((z, tx, xyz_to_tms_row(ty, z), sqlite3.Binary(blob)))
+    return rows
+
+# -------------------- main --------------------
 def main():
-    ap = argparse.ArgumentParser(description="Render Mapnik meta-tiles (8x8) directly into MBTiles using Mapnik Image.view().")
-    ap.add_argument("--xml", required=True, help="Mapnik XML path")
-    ap.add_argument("--mbtiles", required=True, help="Output MBTiles path")
-    ap.add_argument("--z", type=int, required=True, help="Zoom level")
+    ap = argparse.ArgumentParser(description="Meta-tiles (8x8, png256), multiprocess render, single-writer MBTiles.")
+    ap.add_argument("--xml", required=True)
+    ap.add_argument("--mbtiles", required=True)
+    ap.add_argument("--z", type=int, required=True)
     ap.add_argument("--xmin", type=int, required=True)
     ap.add_argument("--xmax", type=int, required=True)
     ap.add_argument("--ymin", type=int, required=True)
     ap.add_argument("--ymax", type=int, required=True)
     ap.add_argument("--tilesize", type=int, default=TILE_SIZE)
-    ap.add_argument("--meta", type=int, default=8, help="meta tile size (e.g., 8 means 8x8)")
-    ap.add_argument("--bg", default="transparent", help="Background (transparent|white|#eef...)")
-    ap.add_argument("--format", default="png", help="Mapnik output format: png|png256|png8|jpeg80|webp90 ...")
+    ap.add_argument("--bg", default="transparent")
+    ap.add_argument("--workers", type=int, default=max(1, mp.cpu_count()-1))
+    ap.add_argument("--commit_batch", type=int, default=4000, help="commit per N tiles")
     args = ap.parse_args()
 
-    # Meta-canvas 생성
-    meta_px = args.tilesize * args.meta
-    m = mapnik.Map(meta_px, meta_px)
-    mapnik.load_map(m, args.xml)
-    if args.bg and args.bg != "transparent":
-        m.background = mapnik.Color(args.bg)
+    # 메타 시작 좌표 나열
+    tasks = []
+    for mx in range(args.xmin, args.xmax + 1, META):
+        for my in range(args.ymin, args.ymax + 1, META):
+            tasks.append((mx, my))
 
-    # MBTiles
-    conn = ensure_mbtiles(args.mbtiles, name=os.path.basename(args.mbtiles), fmt=args.format)
-    cur = conn.cursor()
-
-    total = (args.xmax - args.xmin + 1) * (args.ymax - args.ymin + 1)
-    done = 0
+    total_tiles = (args.xmax - args.xmin + 1) * (args.ymax - args.ymin + 1)
     t0 = time.time()
 
-    for mx in range(args.xmin, args.xmax + 1, args.meta):
-        for my in range(args.ymin, args.ymax + 1, args.meta):
-            # 메타타일 bbox (좌하단~우상단을 포함)
-            bbox_ll = bbox_3857_for_tile(mx, my + args.meta - 1, args.z)      # 좌하
-            bbox_ur = bbox_3857_for_tile(mx + args.meta - 1, my, args.z)      # 우상
-            bbox = mapnik.Box2d(
-                min(bbox_ll.minx, bbox_ur.minx),
-                min(bbox_ll.miny, bbox_ur.miny),
-                max(bbox_ll.maxx, bbox_ur.maxx),
-                max(bbox_ll.maxy, bbox_ur.maxy),
+    # DB 오픈 (단일 writer)
+    conn = ensure_mbtiles(args.mbtiles, name=os.path.basename(args.mbtiles))
+    cur = conn.cursor()
+
+    # 워커 풀
+    with mp.Pool(
+        processes=args.workers,
+        initializer=worker_init,
+        initargs=(args.xml, args.tilesize, args.z, args.bg),
+        maxtasksperchild=50,  # 누수 방지용 (옵션)
+    ) as pool:
+        pending = 0
+        for rows in pool.imap_unordered(render_meta_tile, tasks, chunksize=1):
+            # rows: [(z,x,y_tms,blob), ... 64개]
+            cur.executemany(
+                "INSERT OR REPLACE INTO tiles (zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)",
+                rows
             )
-            m.zoom_to_box(bbox)
-
-            # 메타 이미지를 한 번 렌더
-            meta_im = mapnik.Image(meta_px, meta_px)
-            mapnik.render(m, meta_im)
-
-            # Mapnik의 Image.view()로 256×256 조각을 잘라 바로 인코딩
-            for dx in range(args.meta):
-                for dy in range(args.meta):
-                    tx, ty = mx + dx, my + dy
-                    if tx > args.xmax or ty > args.ymax:
-                        continue
-
-                    view = meta_im.view(
-                        dx * args.tilesize, dy * args.tilesize,
-                        args.tilesize, args.tilesize
-                    )
-                    blob = view.tostring(args.format)  # png/png256/png8/jpeg80/webp90 등
-
-                    y_tms = xyz_to_tms_row(ty, args.z)
-                    cur.execute(
-                        "INSERT OR REPLACE INTO tiles (zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)",
-                        (args.z, tx, y_tms, sqlite3.Binary(blob))
-                    )
-                    done += 1
-
+            pending += len(rows)
+            if pending >= args.commit_batch:
+                conn.commit()
+                print(f"[z{args.z}] +{pending} tiles committed ({pending/total_tiles:.1%})")
+                pending = 0
+        if pending:
             conn.commit()
-            print(f"[z{args.z}] meta({mx},{my}) → {done}/{total}")
+            print(f"[z{args.z}] +{pending} tiles committed (final)")
 
     conn.close()
-    print(f"✅ Done: {total} tiles → {args.mbtiles}  ({time.time()-t0:.1f}s)")
+    print(f"✅ Done: {total_tiles} tiles → {args.mbtiles}  ({time.time()-t0:.1f}s)")
 
 if __name__ == "__main__":
     main()
