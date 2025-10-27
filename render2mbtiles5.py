@@ -45,7 +45,7 @@ def parse_bbox(s):
     except: raise argparse.ArgumentTypeError("Invalid --bbox: minx,miny,maxx,maxy")
 
 # ---- MBTiles ----
-def init_mbtiles(path, name, scheme):
+def init_mbtiles(path, name, scheme, minzoom, maxzoom, bounds):
     new=not os.path.exists(path)
     conn=sqlite3.connect(path); cur=conn.cursor()
     cur.executescript("PRAGMA journal_mode=MEMORY;PRAGMA synchronous=OFF;PRAGMA temp_store=MEMORY;")
@@ -53,8 +53,8 @@ def init_mbtiles(path, name, scheme):
         cur.executescript("""CREATE TABLE metadata(name TEXT,value TEXT);
         CREATE TABLE tiles(zoom_level INTEGER,tile_column INTEGER,tile_row INTEGER,tile_data BLOB);
         CREATE UNIQUE INDEX tile_index ON tiles(zoom_level,tile_column,tile_row);""")
-        meta={"name":name,"type":"baselayer","version":"1","description":"Rendered tiles","format":"png",
-              "minzoom":"0","maxzoom":"22","bounds":"-180,-85,180,85","center":"0,0,2","scheme":scheme}
+        meta={"name":name,"type":"baselayer","version":"1","description":"OSM Rendered tiles","format":"png",
+              "minzoom":minzoom,"maxzoom":maxzoom,"bounds":bounds,"center":"0,0,2","scheme":scheme}
         cur.executemany("INSERT INTO metadata(name,value) VALUES (?,?)", meta.items()); conn.commit()
     return conn
 
@@ -99,7 +99,7 @@ def main():
     total_written=0
     minx,miny,maxx,maxy=args.bbox; zooms=parse_zoom(args.zoom)
 
-    with init_mbtiles(args.mbtiles, os.path.basename(args.mbtiles), args.scheme) as conn:
+    with init_mbtiles(args.mbtiles, os.path.basename(args.mbtiles), args.scheme, zooms[0], zooms[-1], args.bbox) as conn:
         cur=conn.cursor()
         insert_sql="INSERT OR REPLACE INTO tiles(zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)"
         for z in zooms:
