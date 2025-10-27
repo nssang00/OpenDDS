@@ -83,14 +83,15 @@ def render_meta(task):
             rows.append((z, tx, ysave, view.tostring(FORMAT)))
     return rows
 
-# ---- 실행 ----
 def main():
     ap=argparse.ArgumentParser(description="Meta 8x8 png256 → MBTiles (EPSG:4326 bbox)")
-    ap.add_argument("--xml", required=True); ap.add_argument("--mbtiles", required=True)
-    ap.add_argument("-z","--zoom", required=True); ap.add_argument("--bbox", required=True, type=parse_bbox)
+    ap.add_argument("--xml", required=True); 
+    ap.add_argument("--mbtiles", required=True)
+    ap.add_argument("-z","--zoom", required=True); 
+    ap.add_argument("--bbox", required=True, type=parse_bbox)
     ap.add_argument("--scheme", choices=["tms","xyz"], default="tms")
     ap.add_argument("--tilesize", type=int, default=TILE)
-    ap.add_argument("--workers", type=int, default=max(4, mp.cpu_count()-1))
+    ap.add_argument("--workers", type=int, default=max(8, mp.cpu_count()-1))
     ap.add_argument("--commit_batch", type=int, default=5000)
     args=ap.parse_args()
 
