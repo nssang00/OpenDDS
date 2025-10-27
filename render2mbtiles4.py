@@ -7,7 +7,7 @@ import multiprocessing as mp
 TILE_SIZE = 256
 R = 6378137.0
 META = 8
-FORMAT = "png256"   # png, png256, png8, jpeg80, webp90 ...
+FORMAT = "png256"
 
 # --------- 좌표/타일 유틸 ---------
 WEBMERC_MAX_LAT = 85.05112878
@@ -19,11 +19,6 @@ def lonlat_to_merc(lon, lat):
     x = R * math.radians(lon)
     y = R * math.log(math.tan(math.pi/4 + math.radians(lat)/2))
     return x, y
-
-def merc_to_lonlat(mx, my):
-    lon = (mx / R) * 180.0 / math.pi
-    lat = (2 * math.atan(math.exp(my / R)) - math.pi/2) * 180.0 / math.pi
-    return lon, lat
 
 def lonlat_to_tile_xy(lon, lat, z):
     lat = clamp_lat_mercator(lat)
@@ -50,27 +45,18 @@ def bbox_3857_for_tile(x, y, z):
 def xyz_to_tms_row(y, z):
     return (2**z - 1) - y
 
-def coords_to_tile_range(minx, miny, maxx, maxy, z, crs):
-    # 입력 좌표계를 4326으로 변환 후 타일 범위 계산
-    if crs == "3857":
-        lon_min, lat_min = merc_to_lonlat(minx, miny)
-        lon_max, lat_max = merc_to_lonlat(maxx, maxy)
-    else:  # "4326"
-        lon_min, lat_min = minx, miny
-        lon_max, lat_max = maxx, maxy
-
-    lon0, lon1 = sorted([lon_min, lon_max])
-    lat0, lat1 = sorted([lat_min, lat_max])
-
-    x0, y0 = lonlat_to_tile_xy(lon0, lat1, z)  # 좌상
-    x1, y1 = lonlat_to_tile_xy(lon1, lat0, z)  # 우하
+def bbox_to_tile_range_4326(minx, miny, maxx, maxy, z):
+    lon0, lon1 = sorted([minx, maxx])
+    lat0, lat1 = sorted([miny, maxy])
+    x0, y0 = lonlat_to_tile_xy(lon0, lat1, z)
+    x1, y1 = lonlat_to_tile_xy(lon1, lat0, z)
     return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
 
 def clamp(v, vmin, vmax):
     return max(vmin, min(vmax, v))
 
 # --------- DB ---------
-def ensure_mbtiles(path, name="OSM Raster"):
+def ensure_mbtiles(path, name="OSM Raster", scheme="tms"):
     new = not os.path.exists(path)
     conn = sqlite3.connect(path)
     cur = conn.cursor()
@@ -91,29 +77,27 @@ def ensure_mbtiles(path, name="OSM Raster"):
             "maxzoom": "22",
             "bounds": "-180,-85,180,85",
             "center": "0,0,2",
+            "scheme": scheme
         }
         for k, v in meta.items():
             cur.execute("INSERT INTO metadata (name,value) VALUES (?,?)", (k, v))
         conn.commit()
     return conn
 
-# --------- 워커 컨텍스트 ---------
+# --------- 워커 ---------
 _worker_ctx = {}
 
-def worker_init(xml_path, tilesize, z, bg, xmin, xmax, ymin, ymax, y_store_mode):
+def worker_init(xml_path, tilesize, z, bg, xmin, xmax, ymin, ymax, scheme):
     meta_px = tilesize * META
     m = mapnik.Map(meta_px, meta_px)
     mapnik.load_map(m, xml_path)
     if bg and bg != "transparent":
         m.background = mapnik.Color(bg)
-    _worker_ctx["map"] = m
-    _worker_ctx["tilesize"] = tilesize
-    _worker_ctx["z"] = z
-    _worker_ctx["xmin"] = xmin
-    _worker_ctx["xmax"] = xmax
-    _worker_ctx["ymin"] = ymin
-    _worker_ctx["ymax"] = ymax
-    _worker_ctx["y_store_mode"] = y_store_mode  # "tms" or "xyz"
+    _worker_ctx.update(dict(
+        map=m, tilesize=tilesize, z=z,
+        xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
+        scheme=scheme
+    ))
 
 def render_meta_tile(task):
     mx, my = task
@@ -124,9 +108,8 @@ def render_meta_tile(task):
     xmax = _worker_ctx["xmax"]
     ymin = _worker_ctx["ymin"]
     ymax = _worker_ctx["ymax"]
-    y_store_mode = _worker_ctx["y_store_mode"]
+    scheme = _worker_ctx["scheme"]
 
-    # 메타타일 bbox
     bbox_ll = bbox_3857_for_tile(mx, my + META - 1, z)
     bbox_ur = bbox_3857_for_tile(mx + META - 1, my, z)
     bbox = mapnik.Box2d(
@@ -148,17 +131,11 @@ def render_meta_tile(task):
                 continue
             view = meta_im.view(dx * ts, dy * ts, ts, ts)
             blob = view.tostring(FORMAT)
-
-            # 저장 스킴 결정
-            if y_store_mode == "tms":
-                y_save = xyz_to_tms_row(ty, z)  # 뒤집어서 저장
-            else:  # "xyz"
-                y_save = ty  # 그대로 저장
-
+            y_save = xyz_to_tms_row(ty, z) if scheme == "tms" else ty
             out_rows.append((z, tx, y_save, blob))
     return out_rows
 
-# --------- 기타 유틸 ---------
+# --------- 유틸 ---------
 def parse_zoom_spec(spec):
     zs = set()
     for part in str(spec).split(","):
@@ -172,48 +149,44 @@ def parse_zoom_spec(spec):
             zs.add(int(part))
     return sorted(zs)
 
+def parse_bbox_str(bbox_str):
+    try:
+        vals = [float(v) for v in bbox_str.split(",")]
+        if len(vals) != 4:
+            raise ValueError
+        return vals
+    except Exception:
+        raise argparse.ArgumentTypeError("Invalid --bbox format. Use: minx,miny,maxx,maxy")
+
 # --------- 메인 ---------
 def main():
-    ap = argparse.ArgumentParser(description="Meta-tile renderer (8x8, png256) with multiprocess and coordinate bbox input.")
+    ap = argparse.ArgumentParser(description="Meta-tile renderer (8x8, png256) with multiprocess and --bbox minx,miny,maxx,maxy (EPSG:4326).")
     ap.add_argument("--xml", required=True)
     ap.add_argument("--mbtiles", required=True)
     ap.add_argument("-z", "--zoom", required=True, help="Zoom levels, e.g. 16-18 or 5,7,9")
-    ap.add_argument("--coords", nargs=4, type=float, required=True, metavar=("MINX","MINY","MAXX","MAXY"),
-                    help="Bounding box coordinates.")
-    ap.add_argument("--crs", choices=["4326","3857"], default="4326",
-                    help="CRS of --coords (default: 4326)")
-    ap.add_argument("-y", "--y-origin", choices=["top","bottom"], default="top",
-                    help="Storage/view scheme: top=OSM/XYZ (default), bottom=TMS")
+    ap.add_argument("--bbox", required=True, type=parse_bbox_str,
+                    help="Bounding box in EPSG:4326 as minx,miny,maxx,maxy")
+    ap.add_argument("--scheme", choices=["tms","xyz"], default="tms",
+                    help="Tile row storage scheme in MBTiles (default: tms)")
     ap.add_argument("--tilesize", type=int, default=TILE_SIZE)
     ap.add_argument("--bg", default="transparent")
-    ap.add_argument("--workers", type=int, default=max(1, mp.cpu_count()-1))
-    ap.add_argument("--commit_batch", type=int, default=4000)
+    ap.add_argument("--workers", type=int, default=max(8, mp.cpu_count()-1))
+    ap.add_argument("--commit_batch", type=int, default=5000)
     args = ap.parse_args()
 
-    # -y 해석: 저장 시 어떤 스킴으로 tile_row를 넣을지
-    # top(OSM/XYZ) => MBTiles 관례(TMS)로 저장하려면 flip 필요 -> y_store_mode="tms"
-    # bottom(TMS)  => 그대로 저장 -> y_store_mode="xyz"로 두면 "뒤집지 않음"
-    # (이렇게 두면 사용자가 뷰어 기대치에 맞춰 선택 가능)
-    if args.y_origin == "top":
-        y_store_mode = "tms"   # XYZ 입력을 TMS로 뒤집어 저장
-    else:
-        y_store_mode = "xyz"   # TMS 기대면 뒤집지 않고 저장
-
     zooms = parse_zoom_spec(args.zoom)
-    minx, miny, maxx, maxy = args.coords
-    conn = ensure_mbtiles(args.mbtiles, name=os.path.basename(args.mbtiles))
+    minx, miny, maxx, maxy = args.bbox
+    conn = ensure_mbtiles(args.mbtiles, name=os.path.basename(args.mbtiles), scheme=args.scheme)
     cur = conn.cursor()
     t0 = time.time()
     total_written = 0
 
     for z in zooms:
-        xmin, ymin, xmax, ymax = coords_to_tile_range(minx, miny, maxx, maxy, z, args.crs)
-        # 줌 경계 클램프(안전)
+        xmin, ymin, xmax, ymax = bbox_to_tile_range_4326(minx, miny, maxx, maxy, z)
         n = 2**z
         xmin = clamp(xmin, 0, n-1); xmax = clamp(xmax, 0, n-1)
         ymin = clamp(ymin, 0, n-1); ymax = clamp(ymax, 0, n-1)
 
-        # 메타 그리드 정렬
         mx_start = (xmin // META) * META
         my_start = (ymin // META) * META
         mx_end   = (xmax // META) * META
@@ -230,7 +203,7 @@ def main():
         with mp.Pool(
             processes=args.workers,
             initializer=worker_init,
-            initargs=(args.xml, args.tilesize, z, args.bg, xmin, xmax, ymin, ymax, y_store_mode),
+            initargs=(args.xml, args.tilesize, z, args.bg, xmin, xmax, ymin, ymax, args.scheme),
             maxtasksperchild=50,
         ) as pool:
             pending = written = 0
