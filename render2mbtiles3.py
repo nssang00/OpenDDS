@@ -3,12 +3,13 @@
 import os, math, sqlite3, argparse, mapnik, time
 import multiprocessing as mp
 
+# --------- 상수 ---------
 TILE_SIZE = 256
 R = 6378137.0
 META = 8
-FORMAT = "png256"  # mapnik encoder (png, png256, png8, jpeg80, webp90 ...)
+FORMAT = "png256"   # mapnik encoder: png, png256, png8, jpeg80, webp90 ...
 
-# -------------------- tile math --------------------
+# --------- 타일/좌표 유틸 ---------
 def lonlat_to_merc(lon, lat):
     x = R * math.radians(lon)
     y = R * math.log(math.tan(math.pi/4 + math.radians(lat)/2))
@@ -31,7 +32,7 @@ def bbox_3857_for_tile(x, y, z):
 def xyz_to_tms_row(y, z):
     return (2**z - 1) - y  # MBTiles uses TMS
 
-# -------------------- db --------------------
+# --------- DB ---------
 def ensure_mbtiles(path, name="OSM Raster"):
     new = not os.path.exists(path)
     conn = sqlite3.connect(path)
@@ -43,26 +44,26 @@ def ensure_mbtiles(path, name="OSM Raster"):
         cur.execute("CREATE TABLE metadata (name TEXT, value TEXT);")
         cur.execute("CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, tile_data BLOB);")
         cur.execute("CREATE UNIQUE INDEX tile_index ON tiles (zoom_level, tile_column, tile_row);")
-        for k, v in {
+        meta = {
             "name": name,
             "type": "baselayer",
             "version": "1",
             "description": "Rendered by render_to_mbtiles_meta8_mp.py",
-            "format": "png",
+            "format": "png",  # MBTiles convention: png/jpeg/webp (png256도 png로 기록)
             "minzoom": "0",
             "maxzoom": "22",
             "bounds": "-180,-85,180,85",
             "center": "0,0,2",
-        }.items():
+        }
+        for k, v in meta.items():
             cur.execute("INSERT INTO metadata (name,value) VALUES (?,?)", (k, v))
         conn.commit()
     return conn
 
-# -------------------- worker init & job --------------------
+# --------- 워커 컨텍스트 ---------
 _worker_ctx = {}
 
-def worker_init(xml_path, tilesize, z, bg):
-    # 프로세스별 Mapnik 객체를 로컬에 생성 (pickle 불가이므로 전역 dict에 저장)
+def worker_init(xml_path, tilesize, z, bg, xmin, xmax, ymin, ymax):
     meta_px = tilesize * META
     m = mapnik.Map(meta_px, meta_px)
     mapnik.load_map(m, xml_path)
@@ -71,15 +72,26 @@ def worker_init(xml_path, tilesize, z, bg):
     _worker_ctx["map"] = m
     _worker_ctx["tilesize"] = tilesize
     _worker_ctx["z"] = z
+    _worker_ctx["xmin"] = xmin
+    _worker_ctx["xmax"] = xmax
+    _worker_ctx["ymin"] = ymin
+    _worker_ctx["ymax"] = ymax
 
 def render_meta_tile(task):
-    # task = (mx, my)
+    """
+    task = (mx, my) 메타타일 좌상단 XYZ
+    반환: [(z, x, y_tms, blob_bytes), ...]  // sqlite3.Binary는 메인에서 감쌈
+    """
     mx, my = task
-    m = _worker_ctx["map"]
-    ts = _worker_ctx["tilesize"]
-    z  = _worker_ctx["z"]
+    m   = _worker_ctx["map"]
+    ts  = _worker_ctx["tilesize"]
+    z   = _worker_ctx["z"]
+    xmin = _worker_ctx["xmin"]
+    xmax = _worker_ctx["xmax"]
+    ymin = _worker_ctx["ymin"]
+    ymax = _worker_ctx["ymax"]
 
-    # 메타타일 bbox
+    # 메타타일 bbox (좌하~우상 포함)
     bbox_ll = bbox_3857_for_tile(mx, my + META - 1, z)
     bbox_ur = bbox_3857_for_tile(mx + META - 1, my, z)
     bbox = mapnik.Box2d(
@@ -94,17 +106,19 @@ def render_meta_tile(task):
     meta_im = mapnik.Image(ts * META, ts * META)
     mapnik.render(m, meta_im)
 
-    # 잘라서 인코딩 (Mapnik encoder 그대로)
-    rows = []
+    # 잘라서 인코딩
+    out_rows = []
     for dx in range(META):
         for dy in range(META):
             tx, ty = mx + dx, my + dy
+            if tx < xmin or tx > xmax or ty < ymin or ty > ymax:
+                continue
             view = meta_im.view(dx * ts, dy * ts, ts, ts)
-            blob = view.tostring(FORMAT)  # png256
-            rows.append((z, tx, xyz_to_tms_row(ty, z), sqlite3.Binary(blob)))
-    return rows
+            blob = view.tostring(FORMAT)  # bytes
+            out_rows.append((z, tx, xyz_to_tms_row(ty, z), blob))
+    return out_rows
 
-# -------------------- main --------------------
+# --------- 메인 ---------
 def main():
     ap = argparse.ArgumentParser(description="Meta-tiles (8x8, png256), multiprocess render, single-writer MBTiles.")
     ap.add_argument("--xml", required=True)
@@ -120,7 +134,7 @@ def main():
     ap.add_argument("--commit_batch", type=int, default=4000, help="commit per N tiles")
     args = ap.parse_args()
 
-    # 메타 시작 좌표 나열
+    # 메타 시작 좌표 목록
     tasks = []
     for mx in range(args.xmin, args.xmax + 1, META):
         for my in range(args.ymin, args.ymax + 1, META):
@@ -129,7 +143,7 @@ def main():
     total_tiles = (args.xmax - args.xmin + 1) * (args.ymax - args.ymin + 1)
     t0 = time.time()
 
-    # DB 오픈 (단일 writer)
+    # 단일 writer DB 커넥션
     conn = ensure_mbtiles(args.mbtiles, name=os.path.basename(args.mbtiles))
     cur = conn.cursor()
 
@@ -137,21 +151,26 @@ def main():
     with mp.Pool(
         processes=args.workers,
         initializer=worker_init,
-        initargs=(args.xml, args.tilesize, args.z, args.bg),
-        maxtasksperchild=50,  # 누수 방지용 (옵션)
+        initargs=(args.xml, args.tilesize, args.z, args.bg, args.xmin, args.xmax, args.ymin, args.ymax),
+        maxtasksperchild=50,  # 메모리 누수 방지(옵션)
     ) as pool:
         pending = 0
+        written = 0
         for rows in pool.imap_unordered(render_meta_tile, tasks, chunksize=1):
-            # rows: [(z,x,y_tms,blob), ... 64개]
+            # rows: [(z, x, y_tms, blob_bytes), ...]
+            if not rows:
+                continue
             cur.executemany(
                 "INSERT OR REPLACE INTO tiles (zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)",
-                rows
+                [(z, x, y, sqlite3.Binary(b)) for (z, x, y, b) in rows]
             )
             pending += len(rows)
+            written += len(rows)
             if pending >= args.commit_batch:
                 conn.commit()
-                print(f"[z{args.z}] +{pending} tiles committed ({pending/total_tiles:.1%})")
+                print(f"[z{args.z}] +{pending} tiles committed ({written}/{total_tiles}, {written/total_tiles:.1%})")
                 pending = 0
+
         if pending:
             conn.commit()
             print(f"[z{args.z}] +{pending} tiles committed (final)")
@@ -160,4 +179,6 @@ def main():
     print(f"✅ Done: {total_tiles} tiles → {args.mbtiles}  ({time.time()-t0:.1f}s)")
 
 if __name__ == "__main__":
+    # Windows 호환을 위해 필수
+    mp.freeze_support()
     main()
