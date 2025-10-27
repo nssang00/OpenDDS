@@ -3,58 +3,64 @@
 import os, math, sqlite3, argparse, mapnik, time
 import multiprocessing as mp
 
-# --------- 상수 ----------
+# ===== 상수 =====
 TILE_SIZE = 256
 META = 8
-FORMAT = "png256"    # mapnik encoder: png, png256, png8, jpeg80, webp90 ...
+FORMAT = "png256"   # mapnik encoder (png, png256, png8, jpeg80, webp90 ...)
 
-# --------- 타일/좌표 유틸 ----------
-def tile_bounds_xyz(x, y, z):
+# ===== 유틸 =====
+def _y_to_lat(y, z):
+    n = 2.0 ** z
+    t = math.pi * (1.0 - 2.0 * y / n)
+    return math.degrees(math.atan(math.sinh(t)))
+
+def bbox_3857_for_meta(x, y, z, meta):
+    """
+    메타타일의 바깥 경계(edge)로 정확한 bbox 계산 (XYZ 스킴)
+    [x, x+meta] × [y, y+meta]
+    """
     n = 2.0 ** z
     lon_left  = x / n * 360.0 - 180.0
-    lon_right = (x + 1) / n * 360.0 - 180.0
-    lat_top   = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
-    lat_bot   = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n))))
-    return lon_left, lat_bot, lon_right, lat_top
+    lon_right = (x + meta) / n * 360.0 - 180.0
+    lat_top   = _y_to_lat(y, z)             # 상단 edge
+    lat_bot   = _y_to_lat(y + meta, z)      # 하단 edge
 
-def bbox_3857_for_tile(x, y, z):
-    # XYZ 타일 1장의 경계로부터 3857 박스
+    # lon/lat → EPSG:3857
     R = 6378137.0
-    def lonlat_to_merc(lon, lat):
-        x = R * math.radians(lon)
-        y = R * math.log(math.tan(math.pi/4 + math.radians(lat)/2))
-        return x, y
-    min_lon, min_lat, max_lon, max_lat = tile_bounds_xyz(x, y, z)
-    minx, miny = lonlat_to_merc(min_lon, min_lat)
-    maxx, maxy = lonlat_to_merc(max_lon, max_lat)
+    minx = R * math.radians(lon_left)
+    maxx = R * math.radians(lon_right)
+    miny = R * math.log(math.tan(math.pi/4 + math.radians(lat_bot)/2))
+    maxy = R * math.log(math.tan(math.pi/4 + math.radians(lat_top)/2))
+
+    if minx > maxx: minx, maxx = maxx, minx
+    if miny > maxy: miny, maxy = maxy, miny
     return mapnik.Box2d(minx, miny, maxx, maxy)
 
 def xyz_to_tms_row(y, z):
     return (2**z - 1) - y
 
-# --------- zref → z 범위 스케일링 (render_list 방식) ----------
 def scale_range_from_zref(xmin_ref, xmax_ref, ymin_ref, ymax_ref, zref, z):
     """
-    입력/출력 모두 XYZ 스킴.
-    - 입력: 기준 줌 zref 에서의 타일 범위 (xmin..xmax, ymin..ymax)
-    - 출력: 목표 줌 z 에서의 타일 범위
+    render_list와 동일한 범위 스케일링 (입출력: XYZ)
+    - 확대(dz>0): min<<dz,  max=((max+1)<<dz)-1
+    - 축소(dz<0): >>(-dz)
     """
     dz = z - zref
     if dz == 0:
         xmin_z, xmax_z, ymin_z, ymax_z = xmin_ref, xmax_ref, ymin_ref, ymax_ref
     elif dz > 0:
-        shift = dz
-        xmin_z = xmin_ref << shift
-        xmax_z = ((xmax_ref + 1) << shift) - 1
-        ymin_z = ymin_ref << shift
-        ymax_z = ((ymax_ref + 1) << shift) - 1
+        sh = dz
+        xmin_z = xmin_ref << sh
+        xmax_z = ((xmax_ref + 1) << sh) - 1
+        ymin_z = ymin_ref << sh
+        ymax_z = ((ymax_ref + 1) << sh) - 1
     else:
-        shift = -dz
-        xmin_z = xmin_ref >> shift
-        xmax_z = xmax_ref >> shift
-        ymin_z = ymin_ref >> shift
-        ymax_z = ymax_ref >> shift
-    # 안전 클램프
+        sh = -dz
+        xmin_z = xmin_ref >> sh
+        xmax_z = xmax_ref >> sh
+        ymin_z = ymin_ref >> sh
+        ymax_z = ymax_ref >> sh
+
     nmax = (1 << z) - 1
     xmin_z = max(0, min(xmin_z, nmax))
     xmax_z = max(0, min(xmax_z, nmax))
@@ -62,7 +68,7 @@ def scale_range_from_zref(xmin_ref, xmax_ref, ymin_ref, ymax_ref, zref, z):
     ymax_z = max(0, min(ymax_z, nmax))
     return xmin_z, xmax_z, ymin_z, ymax_z
 
-# --------- DB ----------
+# ===== DB =====
 def ensure_mbtiles(path, name="OSM Raster", zmin=None, zmax=None):
     new = not os.path.exists(path)
     conn = sqlite3.connect(path)
@@ -78,8 +84,8 @@ def ensure_mbtiles(path, name="OSM Raster", zmin=None, zmax=None):
             "name": name,
             "type": "baselayer",
             "version": "1",
-            "description": "Rendered by render_to_mbtiles_meta8_mp_zrange_refscale.py",
-            "format": "png",   # png256도 MBTiles 메타에는 png로 표기
+            "description": "Rendered by render_to_mbtiles_meta8_mp_zrange_edge.py",
+            "format": "png",  # png256도 MBTiles 메타에는 png로 표기
             "minzoom": str(zmin if zmin is not None else 0),
             "maxzoom": str(zmax if zmax is not None else 22),
             "bounds": "-180,-85,180,85",
@@ -89,7 +95,6 @@ def ensure_mbtiles(path, name="OSM Raster", zmin=None, zmax=None):
             cur.execute("INSERT INTO metadata (name,value) VALUES (?,?)", (k, v))
         conn.commit()
     else:
-        # 기존 파일이면 minzoom/maxzoom 갱신
         if zmin is not None:
             cur.execute("DELETE FROM metadata WHERE name='minzoom';")
             cur.execute("INSERT INTO metadata (name,value) VALUES (?,?)", ("minzoom", str(zmin)))
@@ -99,7 +104,7 @@ def ensure_mbtiles(path, name="OSM Raster", zmin=None, zmax=None):
         conn.commit()
     return conn
 
-# --------- 워커 ----------
+# ===== 워커 =====
 _worker_ctx = {}
 
 def worker_init(xml_path, tilesize, bg):
@@ -120,15 +125,9 @@ def render_meta_tile(task):
     m  = _worker_ctx["map"]
     ts = _worker_ctx["tilesize"]
 
-    # 메타타일 전체 bbox로 한 번 렌더
-    bbox_ll = bbox_3857_for_tile(mx, my + META - 1, z)   # 좌하
-    bbox_ur = bbox_3857_for_tile(mx + META - 1, my, z)   # 우상
-    bbox = mapnik.Box2d(
-        min(bbox_ll.minx, bbox_ur.minx),
-        min(bbox_ll.miny, bbox_ur.miny),
-        max(bbox_ll.maxx, bbox_ur.maxx),
-        max(bbox_ll.maxy, bbox_ur.maxy),
-    )
+    # ✅ 메타타일 경계 기반 정확 bbox
+    bbox = bbox_3857_for_meta(mx, my, z, META)
+    m.resize(ts * META, ts * META)   # 안전: 렌더 타겟 크기 보정
     m.zoom_to_box(bbox)
 
     meta_im = mapnik.Image(ts * META, ts * META)
@@ -145,14 +144,14 @@ def render_meta_tile(task):
             out_rows.append((z, tx, xyz_to_tms_row(ty, z), blob))
     return out_rows
 
-# --------- 메인 ----------
+# ===== 메인 =====
 def main():
-    ap = argparse.ArgumentParser(description="Render zmin..zmax using meta-tiles (8x8, png256, multiprocessing) with render_list-style zref scaling.")
+    ap = argparse.ArgumentParser(description="Render zmin..zmax using meta-tiles (8x8, png256, multiprocessing) with render_list-style scaling and edge-accurate bbox.")
     ap.add_argument("--xml", required=True)
     ap.add_argument("--mbtiles", required=True)
     ap.add_argument("--zmin", type=int, required=True)
     ap.add_argument("--zmax", type=int, required=True)
-    ap.add_argument("--zref", type=int, help="xmin/xmax/ymin/ymax 가 정의된 기준 줌 (기본: zmax)")
+    ap.add_argument("--zref", type=int, help="xmin/xmax/ymin/ymax 기준 줌 (기본: zmax)")
     ap.add_argument("--xmin", type=int, required=True, help="기준 줌(zref)의 xmin (XYZ)")
     ap.add_argument("--xmax", type=int, required=True, help="기준 줌(zref)의 xmax (XYZ)")
     ap.add_argument("--ymin", type=int, required=True, help="기준 줌(zref)의 ymin (XYZ)")
@@ -165,7 +164,6 @@ def main():
 
     zref = args.zref if args.zref is not None else args.zmax
 
-    # DB 오픈: minzoom/maxzoom 메타데이터를 실제 요청 범위로 기록
     conn = ensure_mbtiles(args.mbtiles, name=os.path.basename(args.mbtiles),
                           zmin=args.zmin, zmax=args.zmax)
     cur = conn.cursor()
@@ -179,7 +177,7 @@ def main():
             print(f"[z{z}] empty range; skip")
             continue
 
-        # 메타 타일 그리드에 맞춰 시작점 정렬
+        # 메타 시작 정렬
         mx0 = (xmin_z // META) * META
         my0 = (ymin_z // META) * META
 
@@ -189,15 +187,10 @@ def main():
                 tasks.append((z, mx, my, xmin_z, xmax_z, ymin_z, ymax_z))
 
         total_tiles = (xmax_z - xmin_z + 1) * (ymax_z - ymin_z + 1)
-
-        # 진단 로그 (중요!)
-        print(f"\n=== z={z} ===")
-        print(f"range x:[{xmin_z},{xmax_z}]  y:[{ymin_z},{ymax_z}]  tiles≈{total_tiles}")
-        print(f"tasks meta-start x:{mx0}->{xmax_z} step {META}, y:{my0}->{ymax_z} step {META}  count={len(tasks)}")
+        print(f"\n=== z={z} === x:[{xmin_z},{xmax_z}] y:[{ymin_z},{ymax_z}] tiles≈{total_tiles}  meta_tasks={len(tasks)}")
 
         written = 0
         pending = 0
-
         with mp.Pool(
             processes=args.workers,
             initializer=worker_init,
@@ -220,8 +213,6 @@ def main():
             if pending:
                 conn.commit()
                 print(f"[z{z}] +{pending} committed (final)")
-
-        # 줌별 완료 로그
         print(f"[z{z}] done: {written}/{total_tiles} tiles")
 
     conn.close()
