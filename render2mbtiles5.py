@@ -54,8 +54,10 @@ def init_mbtiles(path, name, scheme, minzoom, maxzoom, bounds):
         CREATE TABLE tiles(zoom_level INTEGER,tile_column INTEGER,tile_row INTEGER,tile_data BLOB);
         CREATE UNIQUE INDEX tile_index ON tiles(zoom_level,tile_column,tile_row);""")
         meta={"name":name,"type":"baselayer","version":"1","description":"OSM Rendered tiles","format":"png",
-              "minzoom":minzoom,"maxzoom":maxzoom,"bounds":bounds,"center":"0,0,2","scheme":scheme}
-        cur.executemany("INSERT INTO metadata(name,value) VALUES (?,?)", meta.items()); conn.commit()
+              "minzoom":minzoom,"maxzoom":maxzoom,"bounds":bounds,"scheme":scheme}
+        for k, v in meta.items():
+            cur.execute("INSERT INTO metadata (name, value) VALUES (?, ?)", (k, v))
+        conn.commit()
     return conn
 
 # ---- 워커 ----
@@ -88,7 +90,7 @@ def main():
     ap.add_argument("--xml", required=True); 
     ap.add_argument("--mbtiles", required=True)
     ap.add_argument("-z","--zoom", required=True); 
-    ap.add_argument("--bbox", required=True, type=parse_bbox)
+    ap.add_argument("--bbox", required=True)
     ap.add_argument("--scheme", choices=["tms","xyz"], default="tms")
     ap.add_argument("--tilesize", type=int, default=TILE)
     ap.add_argument("--workers", type=int, default=max(8, mp.cpu_count()-1))
@@ -97,7 +99,8 @@ def main():
 
     t0=time.time()
     total_written=0
-    minx,miny,maxx,maxy=args.bbox; zooms=parse_zoom(args.zoom)
+    minx,miny,maxx,maxy=parse_bbox(args.bbox.strip()); 
+    zooms=parse_zoom(args.zoom)
 
     with init_mbtiles(args.mbtiles, os.path.basename(args.mbtiles), args.scheme, zooms[0], zooms[-1], args.bbox) as conn:
         cur=conn.cursor()
