@@ -64,7 +64,7 @@ def parse_args():
 def setup_mbtiles(path,name,scheme,minzoom,maxzoom,bounds):
     new=not os.path.exists(path)
     conn=sqlite3.connect(path); cur=conn.cursor()
-    cur.executescript("PRAGMA journal_mode=WAL;PRAGMA synchronous=OFF;PRAGMA temp_store=MEMORY;")
+    cur.executescript("PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;PRAGMA temp_store=MEMORY;")
     if new:
         cur.executescript("""CREATE TABLE metadata(name TEXT,value TEXT);
         CREATE TABLE tiles(zoom_level INTEGER,tile_column INTEGER,tile_row INTEGER,tile_data BLOB);
@@ -136,7 +136,7 @@ def process_zoom(z,bbox,args,conn):
     xmin,xmax,ymin,ymax,total=w
     tasks=metatile_tasks(xmin,xmax,ymin,ymax)
     cur=conn.cursor(); pending=written=0
-    with mp.Pool(processes=min(mp.cpu_count() - 1, 8), initializer=init_worker,
+    with mp.Pool(processes=max(mp.cpu_count() - 1, 8), initializer=init_worker,
                  initargs=(args.xml,args.tilesize,z,xmin,xmax,ymin,ymax,args.scheme),
                  maxtasksperchild=50) as pool:
         for rows in pool.imap_unordered(render_metatile, tasks, chunksize=4):
