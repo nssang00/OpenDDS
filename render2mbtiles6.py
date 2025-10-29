@@ -43,14 +43,14 @@ def parse_args():
     ap.add_argument("--scheme",choices=["tms","xyz"],default="tms")
     ap.add_argument("--tilesize",type=int,default=TILE)
     ap.add_argument("--workers",type=int,default=max(8, mp.cpu_count()-1))
-    ap.add_argument("--commit_batch",type=int,default=5000)
+    ap.add_argument("--commit_batch",type=int,default=1000)
     return ap.parse_args()
 
 # mbtiles
 def setup_mbtiles(path,name,scheme,minzoom,maxzoom,bounds):
     new=not os.path.exists(path)
     conn=sqlite3.connect(path); cur=conn.cursor()
-    cur.executescript("PRAGMA journal_mode=MEMORY;PRAGMA synchronous=OFF;PRAGMA temp_store=MEMORY;")
+    cur.executescript("PRAGMA journal_mode=ㅉ미;PRAGMA synchronous=OFF;PRAGMA temp_store=MEMORY;")
     if new:
         cur.executescript("""CREATE TABLE metadata(name TEXT,value TEXT);
         CREATE TABLE tiles(zoom_level INTEGER,tile_column INTEGER,tile_row INTEGER,tile_data BLOB);
