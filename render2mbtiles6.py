@@ -64,16 +64,22 @@ def setup_mbtiles(path,name,scheme,minzoom,maxzoom,bounds):
 # tiling plan
 def compute_tile_window(bbox,z):
     minx,miny,maxx,maxy=bbox
-    x0,y0=lonlat_to_tile(minx,maxy,z); x1,y1=lonlat_to_tile(maxx,miny,z)
-    xmin,xmax=min(x0,x1),max(x0,x1); ymin,ymax=min(y0,y1),max(y0,y1)
+    x0,y0=lonlat_to_tile(minx,maxy,z); 
+    x1,y1=lonlat_to_tile(maxx,miny,z)
+    xmin,xmax=min(x0,x1),max(x0,x1); 
+    ymin,ymax=min(y0,y1),max(y0,y1)
     n=2**z
-    xmin=max(0,min(xmin,n-1)); xmax=max(0,min(xmax,n-1))
-    ymin=max(0,min(ymin,n-1)); ymax=max(0,min(ymax,n-1))
+    xmin=max(0,min(xmin,n-1)); 
+    xmax=max(0,min(xmax,n-1))
+    ymin=max(0,min(ymin,n-1)); 
+    ymax=max(0,min(ymax,n-1))
     if xmin>xmax or ymin>ymax: return None
     return xmin,xmax,ymin,ymax,(xmax-xmin+1)*(ymax-ymin+1)
 def meta_tasks(xmin,xmax,ymin,ymax):
-    mx0=(xmin//META)*META; my0=(ymin//META)*META
-    mx1=(xmax//META)*META; my1=(ymax//META)*META
+    mx0=(xmin//META)*META; 
+    my0=(ymin//META)*META
+    mx1=(xmax//META)*META;
+    my1=(ymax//META)*META
     return [(mx,my) for mx in range(mx0,mx1+1,META) for my in range(my0,my1+1,META)]
 
 # worker
@@ -88,7 +94,8 @@ def render_meta(task):
     ll=tile_bbox_3857(mx, my+META-1, z); ur=tile_bbox_3857(mx+META-1, my, z)
     bbox=mapnik.Box2d(min(ll.minx,ur.minx), min(ll.miny,ur.miny), max(ll.maxx,ur.maxx), max(ll.maxy,ur.maxy))
     m.zoom_to_box(bbox); 
-    im=mapnik.Image(ts*META, ts*META); mapnik.render(m, im)
+    im=mapnik.Image(ts*META, ts*META); 
+    mapnik.render(m, im)
     rows=[]
     for dx in range(META):
         for dy in range(META):
@@ -114,10 +121,10 @@ def process_zoom(z,bbox,args,conn):
     xmin,xmax,ymin,ymax,total=w
     tasks=meta_tasks(xmin,xmax,ymin,ymax)
     cur=conn.cursor(); pending=written=0
-    with mp.Pool(processes=args.workers, initializer=init_worker,
+    with mp.Pool(processes=min(mp.cpu_count() - 1, 8), initializer=init_worker,
                  initargs=(args.xml,args.tilesize,z,xmin,xmax,ymin,ymax,args.scheme),
                  maxtasksperchild=50) as pool:
-        for rows in pool.imap_unordered(render_meta, tasks, chunksize=1):
+        for rows in pool.imap_unordered(render_meta, tasks, chunksize=4):
             if not rows: continue
             cur.executemany("INSERT OR REPLACE INTO tiles(zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)", [(z,x,y,sqlite3.Binary(b)) for (z,x,y,b) in rows])
             pending+=len(rows); written+=len(rows)
