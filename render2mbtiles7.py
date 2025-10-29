@@ -29,18 +29,6 @@ def tile_bbox_3857(x, y, z):
     (maxx, maxy) = lonlat_to_merc(lon1, lat1)
     return mapnik.Box2d(minx, miny, maxx, maxy)
 
-def tile_to_bbox(z, x, y):
-    n = 2.0 ** z
-    lon_left = x / n * 360.0 - 180.0
-    lat_top_rad = math.atan(math.sinh(math.pi * (1 - 2 * y / n)))
-    lat_top = math.degrees(lat_top_rad)
-
-    lon_right = (x + 1) / n * 360.0 - 180.0
-    lat_bottom_rad = math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n)))
-    lat_bottom = math.degrees(lat_bottom_rad)
-
-    return mapnik.Box2d(lon_left, lat_bottom, lon_right, lat_top)
-
 def xyz_to_tms(y, z):
     return (2**z - 1) - y
 
