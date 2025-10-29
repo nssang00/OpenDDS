@@ -3,7 +3,7 @@
 import os, math, sqlite3, argparse, mapnik, time, multiprocessing as mp
 
 # constants
-R=6378137.0; TILE=256; META=8; MAXLAT=85.05112878
+R=6378137.0; TILESIZE=256; METATILE=8; MAXLAT=85.05112878
 EARTH_RADIUS = 6378137.0  # WGS84 radius (same as in Mapnik/Web Mercator)
 
 # geo/tile utils
@@ -50,13 +50,13 @@ def parse_bbox(s):
         return a
     except: raise argparse.ArgumentTypeError("Invalid --bbox: minx,miny,maxx,maxy")
 def parse_args():
-    ap=argparse.ArgumentParser(description="Render Mapnik tiles → MBTiles (Meta 8x8)")
+    ap=argparse.ArgumentParser(description="Render Mapnik tiles → MBTiles (Metatile 8x8)")
     ap.add_argument("--xml",required=True); 
     ap.add_argument("--mbtiles",required=True)
     ap.add_argument("-z","--zoom",required=True); 
     ap.add_argument("--bbox",required=True)
     ap.add_argument("--scheme",choices=["tms","xyz"],default="tms")
-    ap.add_argument("--tilesize",type=int,default=TILE)
+    ap.add_argument("--tilesize",type=int,default=TILESIZE)
     ap.add_argument("--commit_batch",type=int,default=1000)
     return ap.parse_args()
 
@@ -89,31 +89,31 @@ def compute_tile_window(bbox,z):
     ymax=max(0,min(ymax,n-1))
     if xmin>xmax or ymin>ymax: return None
     return xmin,xmax,ymin,ymax,(xmax-xmin+1)*(ymax-ymin+1)
-def meta_tasks(xmin,xmax,ymin,ymax):
-    mx0=(xmin//META)*META; 
-    my0=(ymin//META)*META
-    mx1=(xmax//META)*META;
-    my1=(ymax//META)*META
-    return [(mx,my) for mx in range(mx0,mx1+1,META) for my in range(my0,my1+1,META)]
+def metatile_tasks(xmin,xmax,ymin,ymax):
+    mx0=(xmin//METATILE)*METATILE; 
+    my0=(ymin//METATILE)*METATILE
+    mx1=(xmax//METATILE)*METATILE;
+    my1=(ymax//METATILE)*METATILE
+    return [(mx,my) for mx in range(mx0,mx1+1,METATILE) for my in range(my0,my1+1,METATILE)]
 
 # worker
 _CTX={}
 def init_worker(xml,ts,z,xmin,xmax,ymin,ymax,scheme):
-    m=mapnik.Map(ts*META, ts*META); 
+    m=mapnik.Map(ts*METATILE, ts*METATILE); 
     mapnik.load_map(m, xml)
     _CTX.update(dict(m=m,ts=ts,z=z,xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax,scheme=scheme))
-def render_meta(task):
+def render_metatile(task):
     mx,my=task; m,ts,z=_CTX["m"],_CTX["ts"],_CTX["z"]
     xmin,xmax,ymin,ymax,scheme = _CTX["xmin"],_CTX["xmax"],_CTX["ymin"],_CTX["ymax"],_CTX["scheme"]
-    ll=tile_bbox_3857(mx, my+META-1, z); 
-    ur=tile_bbox_3857(mx+META-1, my, z)
+    ll=tile_bbox_3857(mx, my+METATILE-1, z); 
+    ur=tile_bbox_3857(mx+METATILE-1, my, z)
     bbox=mapnik.Box2d(min(ll.minx,ur.minx), min(ll.miny,ur.miny), max(ll.maxx,ur.maxx), max(ll.maxy,ur.maxy))
     m.zoom_to_box(bbox); 
-    im=mapnik.Image(ts*META, ts*META); 
+    im=mapnik.Image(ts*METATILE, ts*METATILE); 
     mapnik.render(m, im)
     rows=[]
-    for dx in range(META):
-        for dy in range(META):
+    for dx in range(METATILE):
+        for dy in range(METATILE):
             tx,ty=mx+dx,my+dy
             if not (xmin<=tx<=xmax and ymin<=ty<=ymax): continue
             view=im.view(dx*ts, dy*ts, ts, ts)
@@ -134,12 +134,12 @@ def process_zoom(z,bbox,args,conn):
     w=compute_tile_window(bbox,z)
     if not w: print(f"[z{z}] Skip (no tiles)"); return 0
     xmin,xmax,ymin,ymax,total=w
-    tasks=meta_tasks(xmin,xmax,ymin,ymax)
+    tasks=metatile_tasks(xmin,xmax,ymin,ymax)
     cur=conn.cursor(); pending=written=0
     with mp.Pool(processes=min(mp.cpu_count() - 1, 8), initializer=init_worker,
                  initargs=(args.xml,args.tilesize,z,xmin,xmax,ymin,ymax,args.scheme),
                  maxtasksperchild=50) as pool:
-        for rows in pool.imap_unordered(render_meta, tasks, chunksize=4):
+        for rows in pool.imap_unordered(render_metatile, tasks, chunksize=4):
             if not rows: continue
             cur.executemany("INSERT OR REPLACE INTO tiles(zoom_level,tile_column,tile_row,tile_data) VALUES (?,?,?,?)", [(z,x,y,sqlite3.Binary(b)) for (z,x,y,b) in rows])
             pending+=len(rows); written+=len(rows)
