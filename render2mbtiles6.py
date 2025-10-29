@@ -3,7 +3,7 @@
 import os, math, sqlite3, argparse, mapnik, time, multiprocessing as mp
 
 # constants
-R=6378137.0; TILE=256; META=8; FORMAT="png256"; MAXLAT=85.05112878
+R=6378137.0; TILE=256; META=8; MAXLAT=85.05112878
 
 # geo/tile utils
 def clamp_lat(a): return max(-MAXLAT, min(MAXLAT, a))
@@ -38,11 +38,12 @@ def parse_bbox(s):
     except: raise argparse.ArgumentTypeError("Invalid --bbox: minx,miny,maxx,maxy")
 def parse_args():
     ap=argparse.ArgumentParser(description="Render Mapnik tiles → MBTiles (Meta 8x8)")
-    ap.add_argument("--xml",required=True); ap.add_argument("--mbtiles",required=True)
-    ap.add_argument("-z","--zoom",required=True); ap.add_argument("--bbox",required=True)
+    ap.add_argument("--xml",required=True); 
+    ap.add_argument("--mbtiles",required=True)
+    ap.add_argument("-z","--zoom",required=True); 
+    ap.add_argument("--bbox",required=True)
     ap.add_argument("--scheme",choices=["tms","xyz"],default="tms")
     ap.add_argument("--tilesize",type=int,default=TILE)
-    ap.add_argument("--workers",type=int,default=max(8, mp.cpu_count()-1))
     ap.add_argument("--commit_batch",type=int,default=1000)
     return ap.parse_args()
 
@@ -91,7 +92,8 @@ def init_worker(xml,ts,z,xmin,xmax,ymin,ymax,scheme):
 def render_meta(task):
     mx,my=task; m,ts,z=_CTX["m"],_CTX["ts"],_CTX["z"]
     xmin,xmax,ymin,ymax,scheme = _CTX["xmin"],_CTX["xmax"],_CTX["ymin"],_CTX["ymax"],_CTX["scheme"]
-    ll=tile_bbox_3857(mx, my+META-1, z); ur=tile_bbox_3857(mx+META-1, my, z)
+    ll=tile_bbox_3857(mx, my+META-1, z); 
+    ur=tile_bbox_3857(mx+META-1, my, z)
     bbox=mapnik.Box2d(min(ll.minx,ur.minx), min(ll.miny,ur.miny), max(ll.maxx,ur.maxx), max(ll.maxy,ur.maxy))
     m.zoom_to_box(bbox); 
     im=mapnik.Image(ts*META, ts*META); 
@@ -103,7 +105,7 @@ def render_meta(task):
             if not (xmin<=tx<=xmax and ymin<=ty<=ymax): continue
             view=im.view(dx*ts, dy*ts, ts, ts)
             ysave=xyz_to_tms(ty,z) if scheme=="tms" else ty
-            rows.append((z,tx,ysave,view.tostring(FORMAT)))
+            rows.append((z,tx,ysave,view.tostring("png256")))
     return rows
 
 # commit/log
@@ -134,8 +136,10 @@ def process_zoom(z,bbox,args,conn):
 
 if __name__=="__main__":
     mp.freeze_support(); 
-    args=parse_args(); t0=time.time()
-    bbox=parse_bbox(args.bbox.strip()); zooms=parse_zoom(args.zoom)
+    args=parse_args(); 
+    t0=time.time()
+    bbox=parse_bbox(args.bbox.strip()); 
+    zooms=parse_zoom(args.zoom)
     with setup_mbtiles(args.mbtiles, os.path.basename(args.mbtiles), args.scheme, zooms[0], zooms[-1], args.bbox) as conn:
         total=sum(process_zoom(z,bbox,args,conn) for z in zooms)
     print(f"✅ Done: {total} tiles → {os.path.basename(args.mbtiles)} ({time.time()-t0:.1f}s)")
