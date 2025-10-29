@@ -4,6 +4,7 @@ import os, math, sqlite3, argparse, mapnik, time, multiprocessing as mp
 
 # constants
 R=6378137.0; TILE=256; META=8; MAXLAT=85.05112878
+EARTH_RADIUS = 6378137.0  # WGS84 radius (same as in Mapnik/Web Mercator)
 
 # geo/tile utils
 def clamp_lat(a): return max(-MAXLAT, min(MAXLAT, a))
@@ -21,6 +22,18 @@ def tile_bbox_3857(x,y,z):
     (minx,miny)=lonlat_to_merc(lon0,lat0); (maxx,maxy)=lonlat_to_merc(lon1,lat1)
     return mapnik.Box2d(minx,miny,maxx,maxy)
 def xyz_to_tms(y,z): return (2**z-1)-y
+
+def tile_mercator_bbox(x: int, y: int, z: int) -> mapnik.Box2d:
+
+    half_of_equator = math.pi * EARTH_RADIUS
+    tile_size = 2.0 * half_of_equator / (1 << z)
+
+    minx = -half_of_equator + x * tile_size
+    miny =  half_of_equator - (y + 1.0) * tile_size
+    maxx = -half_of_equator + (x + 1.0) * tile_size
+    maxy =  half_of_equator - y * tile_size
+
+    return mapnik.Box2d(minx, miny, maxx, maxy)
 
 # parsing
 def parse_zoom(spec):
