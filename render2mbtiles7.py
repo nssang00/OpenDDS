@@ -29,9 +29,6 @@ def tile_bbox_3857(x, y, z):
     (maxx, maxy) = lonlat_to_merc(lon1, lat1)
     return mapnik.Box2d(minx, miny, maxx, maxy)
 
-import math
-import mapnik
-
 def tile_to_bbox(z, x, y):
     n = 2.0 ** z
     lon_left = x / n * 360.0 - 180.0
