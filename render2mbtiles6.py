@@ -125,14 +125,10 @@ def process_zoom(z,bbox,args,conn):
     commit_progress(conn,pending,args.commit_batch,z,written,total,final=True)
     print(f"[z{z}] ✅ {written}/{total}"); return written
 
-# main
-def main():
+if __name__=="__main__":
+    mp.freeze_support(); 
     args=parse_args(); t0=time.time()
     bbox=parse_bbox(args.bbox.strip()); zooms=parse_zoom(args.zoom)
     with setup_mbtiles(args.mbtiles, os.path.basename(args.mbtiles), args.scheme, zooms[0], zooms[-1], args.bbox) as conn:
         total=sum(process_zoom(z,bbox,args,conn) for z in zooms)
     print(f"✅ Done: {total} tiles → {os.path.basename(args.mbtiles)} ({time.time()-t0:.1f}s)")
-
-if __name__=="__main__":
-    mp.freeze_support(); 
-  main()
