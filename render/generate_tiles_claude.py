@@ -16,7 +16,7 @@ def init_worker(mapfile, tile_size, metatile_size):
     try:
         _mapnik_map = mapnik.Map(tile_size * metatile_size, tile_size * metatile_size)
         mapnik.load_map(_mapnik_map, mapfile)
-        print(f"Worker initialized with map: {mapfile}")
+        print(f"Worker initialized", end='\r')
     except Exception as e:
         print(f"Error initializing worker: {e}")
         _mapnik_map = None
@@ -118,10 +118,8 @@ def render_metatile(args):
             offset_x = (x - meta_x) * tile_size
             offset_y = (y - meta_y) * tile_size
             
-            # 타일 영역 추출
             tile_img = img.view(offset_x, offset_y, tile_size, tile_size)
             
-            # PNG로 인코딩
             tile_data = tile_img.tostring('png256')
             tiles_data.append((z, x, y, tile_data))
         
@@ -134,8 +132,7 @@ def render_metatile(args):
 
 def create_mbtiles(filename):
     """MBTiles 데이터베이스 생성 및 스키마 초기화 + 성능 PRAGMA 적용"""
-    # timeout을 넉넉히 (WAL에서도 체크포인트 타이밍 등으로 잠깐 대기할 수 있음)
-    conn = sqlite3.connect(filename, timeout=120)
+    conn = sqlite3.connect(filename)
 
     conn.execute('PRAGMA journal_mode=WAL;')
     conn.execute('PRAGMA synchronous=NORMAL;')
@@ -184,11 +181,7 @@ def insert_tiles_batch(conn, tiles_data):
         tms_y = (2 ** z - 1) - y
         rows.append((z, x, tms_y, sqlite3.Binary(tile_data)))
 
-    # executemany로 일괄 삽입 후 1회 커밋
-    conn.executemany(
-        'INSERT OR REPLACE INTO tiles VALUES (?, ?, ?, ?)',
-        rows
-    )
+    conn.executemany('INSERT OR REPLACE INTO tiles VALUES (?, ?, ?, ?)', rows)
     conn.commit()
 
 
@@ -213,7 +206,6 @@ def main():
     parser.add_argument('--bbox', required=True, help='EPSG:4326 bbox (minlon,minlat,maxlon,maxlat)')
     parser.add_argument('--output', required=True, help='출력 MBTiles 파일')
     parser.add_argument('--tile-size', type=int, default=256, help='타일 크기 (기본: 256)')
-    parser.add_argument('--metatile-size', type=int, default=8, help='메타타일 크기 (기본: 8x8)')
     parser.add_argument('--processes', type=int, default=cpu_count(), help='프로세스 수')
     
     args = parser.parse_args()
