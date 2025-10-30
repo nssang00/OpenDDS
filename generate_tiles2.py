@@ -115,16 +115,22 @@ def render_metatile(args):
 
 
 def create_mbtiles(filename):
-    """MBTiles 데이터베이스 생성 및 스키마 초기화"""
-    conn = sqlite3.connect(filename)
-    
+    """MBTiles 데이터베이스 생성 및 스키마 초기화 + 성능 PRAGMA 적용"""
+    # timeout을 넉넉히 (WAL에서도 체크포인트 타이밍 등으로 잠깐 대기할 수 있음)
+    conn = sqlite3.connect(filename, timeout=120)
+
+    conn.execute('PRAGMA journal_mode=WAL;')
+    conn.execute('PRAGMA synchronous=NORMAL;')
+    conn.execute('PRAGMA temp_store=MEMORY;')
+
+    # 스키마
     conn.execute('''
         CREATE TABLE IF NOT EXISTS metadata (
             name TEXT,
             value TEXT
         )
     ''')
-    
+
     conn.execute('''
         CREATE TABLE IF NOT EXISTS tiles (
             zoom_level INTEGER,
@@ -134,7 +140,7 @@ def create_mbtiles(filename):
             PRIMARY KEY (zoom_level, tile_column, tile_row)
         )
     ''')
-    
+
     conn.commit()
     return conn
 
@@ -160,6 +166,20 @@ def insert_tiles_batch(conn, tiles_data):
     """여러 타일을 배치로 삽입"""
     for z, x, y, tile_data in tiles_data:
         insert_tile(conn, z, x, y, tile_data)
+    conn.commit()
+
+def insert_tiles_batch(conn, tiles_data):
+    """여러 타일을 배치로 삽입 (한 트랜잭션)"""
+    rows = []
+    for z, x, y, tile_data in tiles_data:
+        tms_y = (2 ** z - 1) - y
+        rows.append((z, x, tms_y, sqlite3.Binary(tile_data)))
+
+    # executemany로 일괄 삽입 후 1회 커밋
+    conn.executemany(
+        'INSERT OR REPLACE INTO tiles VALUES (?, ?, ?, ?)',
+        rows
+    )
     conn.commit()
 
 
