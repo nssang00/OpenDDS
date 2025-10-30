@@ -15,18 +15,18 @@ def lonlat_to_tile(lon, lat, zoom):
     y = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
     return x, y
 
-
 def tile_to_bbox_3857(z, x, y):
     """타일 좌표를 EPSG:3857 bbox로 변환"""
     n = 2.0 ** z
     
     lon_min = x / n * 360.0 - 180.0
-    lat_min_rad = math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n)))
-    lat_min = math.degrees(lat_min_rad)
-    
     lon_max = (x + 1) / n * 360.0 - 180.0
+
     lat_max_rad = math.atan(math.sinh(math.pi * (1 - 2 * y / n)))
     lat_max = math.degrees(lat_max_rad)
+    
+    lat_min_rad = math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n)))
+    lat_min = math.degrees(lat_min_rad)
     
     minx = lon_min * 20037508.34 / 180.0
     maxx = lon_max * 20037508.34 / 180.0
@@ -81,21 +81,21 @@ def render_metatile(args):
         m = mapnik.Map(tile_size * metatile_size, tile_size * metatile_size)
         mapnik.load_map(m, mapfile)
         
-        # 메타타일의 bbox 계산
-        bbox = tile_to_bbox_3857(z, meta_x, meta_y)
-        minx, miny, maxx, maxy = bbox
+        # 메타타일의 bbox 계산 (시작 타일과 끝 타일의 bbox를 결합)
+        bbox_min = tile_to_bbox_3857(z, meta_x, meta_y)
+        bbox_max = tile_to_bbox_3857(z, meta_x + metatile_size - 1, meta_y + metatile_size - 1)
         
-        # 메타타일 크기만큼 확장
-        width = (maxx - minx) * metatile_size
-        height = (maxy - miny) * metatile_size
+        # 메타타일 전체 영역
+        minx = bbox_min[0]
+        miny = bbox_min[1]
+        maxx = bbox_max[2]
+        maxy = bbox_max[3]
         
-        m.zoom_to_box(mapnik.Box2d(minx, miny, minx + width, miny + height))
+        m.zoom_to_box(mapnik.Box2d(minx, miny, maxx, maxy))
         
-        # 렌더링
         img = mapnik.Image(tile_size * metatile_size, tile_size * metatile_size)
         mapnik.render(m, img)
         
-        # 개별 타일로 분할
         tiles_data = []
         for z, x, y in tile_list:
             offset_x = (x - meta_x) * tile_size
