@@ -5,6 +5,7 @@ import os
 from multiprocessing import Pool, cpu_count
 import mapnik
 
+METATILE=8
 
 def lonlat_to_tile(lon, lat, zoom):
     """경위도(EPSG:4326)를 타일 좌표로 변환"""
@@ -125,10 +126,7 @@ def create_mbtiles(filename):
 
     # 스키마
     conn.execute('''
-        CREATE TABLE IF NOT EXISTS metadata (
-            name TEXT,
-            value TEXT
-        )
+        CREATE TABLE IF NOT EXISTS metadata (name TEXT, value TEXT)
     ''')
 
     conn.execute('''
@@ -199,7 +197,7 @@ def parse_bbox(bbox_str):
 
 def main():
     parser = argparse.ArgumentParser(description='Mapnik 타일 렌더러 (MBTiles 출력)')
-    parser.add_argument('--mapfile', required=True, help='Mapnik XML 맵 파일')
+    parser.add_argument('--xml', required=True, help='Mapnik XML 맵 파일')
     parser.add_argument('--zoom', required=True, help='줌 레벨 범위 (예: 7-9)')
     parser.add_argument('--bbox', required=True, help='EPSG:4326 bbox (minlon,minlat,maxlon,maxlat)')
     parser.add_argument('--output', required=True, help='출력 MBTiles 파일')
@@ -213,16 +211,10 @@ def main():
     zoom_levels = parse_zoom_range(args.zoom)
     bbox_4326 = parse_bbox(args.bbox)
     
-    print(f"Mapfile: {args.mapfile}")
-    print(f"Zoom levels: {zoom_levels}")
-    print(f"Bbox (EPSG:4326): {bbox_4326}")
-    print(f"Output: {args.output}")
-    print(f"Metatile size: {args.metatile_size}x{args.metatile_size}")
-    print(f"Processes: {args.processes}")
-    
     # 모든 줌 레벨의 타일 수집
     all_metatiles = []
     total_tiles = 0
+    metatile_size = METATILE
     
     for zoom in zoom_levels:
         tiles = get_tiles_in_bbox(bbox_4326, zoom)
@@ -232,7 +224,7 @@ def main():
         total_tiles += len(tiles)
         
         for meta_key, tile_list in metatiles.items():
-            all_metatiles.append((meta_key, tile_list, args.mapfile, 
+            all_metatiles.append((meta_key, tile_list, args.xml, 
                                  args.tile_size, args.metatile_size))
     
     print(f"\nTotal: {total_tiles} tiles, {len(all_metatiles)} metatiles")
@@ -248,7 +240,6 @@ def main():
     set_metadata(conn, 'format', 'png')
     set_metadata(conn, 'bounds', f"{bbox_4326[0]},{bbox_4326[1]},{bbox_4326[2]},{bbox_4326[3]}")
     
-    # 멀티프로세스로 렌더링
     print("\nRendering tiles...")
     rendered = 0
     
