@@ -65,6 +65,13 @@ def get_tiles_in_bbox(bbox_4326, zoom):
             tiles.append((zoom, x, y))
     return tiles
 
+def bbox_to_tile_range(bbox_4326, zoom):
+    """EPSG:4326 bbox 내의 모든 타일 좌표 반환"""
+    minlon, minlat, maxlon, maxlat = bbox_4326
+    min_x, max_y = lonlat_to_tile(minlon, minlat, zoom)
+    max_x, min_y = lonlat_to_tile(maxlon, maxlat, zoom)
+    return (x_min, x_max, y_min, y_max)
+
 def get_metatiles(tiles, metatile_size=8):
     """타일 목록을 메타타일로 그룹화"""
     metatiles = {}
