@@ -54,11 +54,11 @@ def tile_to_bbox_3857(z, x, y):
     return (minx, miny, maxx, maxy)
 
 def bbox_to_tile_range(bbox_4326, zoom):
-    """EPSG:4326 bbox 내의 모든 타일 좌표 반환"""
+    """EPSG:4326 bbox 내의 타일 범위 반환"""
     minlon, minlat, maxlon, maxlat = bbox_4326
     min_x, max_y = lonlat_to_tile(minlon, minlat, zoom)
     max_x, min_y = lonlat_to_tile(maxlon, maxlat, zoom)
-    return (x_min, x_max, y_min, y_max)
+    return (min_x, max_x, min_y, max_y)
 
 def get_metatiles_from_bbox(bbox_4326, zoom, metatile_size=8):
     """EPSG:4326 bbox로부터 메타타일 생성"""
