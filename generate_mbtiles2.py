@@ -71,6 +71,8 @@ def get_metatiles_from_bbox(bbox_4326, zoom, metatile_size=8):
             meta_y = (y // metatile_size) * metatile_size
             meta_key = (zoom, meta_x, meta_y)
             metatiles.setdefault(meta_key, []).append((zoom, x, y))
+    
+    return metatiles, (max_x - min_x + 1) * (max_y - min_y + 1)
 
 def render_metatile(args):
     """메타타일을 렌더링하고 개별 타일로 분할"""
