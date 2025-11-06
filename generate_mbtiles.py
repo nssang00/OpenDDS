@@ -53,34 +53,26 @@ def tile_to_bbox_3857(z, x, y):
 
     return (minx, miny, maxx, maxy)
 
-def get_tiles_in_bbox(bbox_4326, zoom):
-    """EPSG:4326 bbox 내의 모든 타일 좌표 반환"""
+def bbox_to_tile_range(bbox_4326, zoom):
+    """EPSG:4326 bbox 내의 타일 범위 반환"""
     minlon, minlat, maxlon, maxlat = bbox_4326
     min_x, max_y = lonlat_to_tile(minlon, minlat, zoom)
     max_x, min_y = lonlat_to_tile(maxlon, maxlat, zoom)
+    return (min_x, max_x, min_y, max_y)
 
-    tiles = []
+def get_metatiles_from_bbox(bbox_4326, zoom, metatile_size=8):
+    """EPSG:4326 bbox로부터 메타타일 생성"""
+    min_x, max_x, min_y, max_y = bbox_to_tile_range(bbox_4326, zoom)
+    metatiles = {}
+    
     for x in range(min_x, max_x + 1):
         for y in range(min_y, max_y + 1):
-            tiles.append((zoom, x, y))
-    return tiles
-
-def bbox_to_tile_range(bbox_4326, zoom):
-    """EPSG:4326 bbox 내의 모든 타일 좌표 반환"""
-    minlon, minlat, maxlon, maxlat = bbox_4326
-    min_x, max_y = lonlat_to_tile(minlon, minlat, zoom)
-    max_x, min_y = lonlat_to_tile(maxlon, maxlat, zoom)
-    return (x_min, x_max, y_min, y_max)
-
-def get_metatiles(tiles, metatile_size=8):
-    """타일 목록을 메타타일로 그룹화"""
-    metatiles = {}
-    for z, x, y in tiles:
-        meta_x = (x // metatile_size) * metatile_size
-        meta_y = (y // metatile_size) * metatile_size
-        meta_key = (z, meta_x, meta_y)
-        metatiles.setdefault(meta_key, []).append((z, x, y))
-    return metatiles
+            meta_x = (x // metatile_size) * metatile_size
+            meta_y = (y // metatile_size) * metatile_size
+            meta_key = (zoom, meta_x, meta_y)
+            metatiles.setdefault(meta_key, []).append((zoom, x, y))
+    
+    return metatiles, (max_x - min_x + 1) * (max_y - min_y + 1)
 
 def render_metatile(args):
     """메타타일을 렌더링하고 개별 타일로 분할"""
@@ -183,10 +175,10 @@ def main():
     metatile_size = METATILE
 
     for zoom in zooms:
-        tiles = get_tiles_in_bbox(bbox_4326, zoom)
-        metatiles = get_metatiles(tiles, metatile_size)
-        print(f"Zoom {zoom}: {len(tiles)} tiles, {len(metatiles)} metatiles")
-        total_tiles += len(tiles)
+        metatiles, tiles_count = get_metatiles_from_bbox(bbox_4326, zoom, metatile_size)
+        print(f"Zoom {zoom}: {tiles_count} tiles, {len(metatiles)} metatiles")
+        total_tiles += tiles_count
+        
         for meta_key, tile_list in metatiles.items():
             all_metatiles.append((meta_key, tile_list, args.tile_size, metatile_size))
 
