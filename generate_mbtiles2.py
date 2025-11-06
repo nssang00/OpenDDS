@@ -4,8 +4,7 @@ import sqlite3
 import os
 import time
 import sys
-import multiprocessing as mp
-from multiprocessing import cpu_count
+from multiprocessing import Pool, cpu_count
 import mapnik
 
 METATILE = 8
@@ -14,11 +13,13 @@ METATILE = 8
 _mapnik_map = None
 
 def init_worker(mapfile, tile_size, metatile_size):
-    """(Windows/spawn 전용) 워커 프로세스 초기화 - 맵 객체를 한 번만 로드"""
+    """워커 프로세스 초기화 - 맵 객체를 한 번만 로드"""
     global _mapnik_map
     try:
+        t0 = time.time()
         _mapnik_map = mapnik.Map(tile_size * metatile_size, tile_size * metatile_size)
         mapnik.load_map(_mapnik_map, mapfile)
+        print(f"\nMapnik Map Loaded!! ({time.time()-t0:.1f}s)")
     except Exception as e:
         print(f"Error initializing worker: {e}")
         _mapnik_map = None
@@ -52,27 +53,24 @@ def tile_to_bbox_3857(z, x, y):
 
     return (minx, miny, maxx, maxy)
 
-def get_tiles_in_bbox(bbox_4326, zoom):
+def bbox_to_tile_range(bbox_4326, zoom):
     """EPSG:4326 bbox 내의 모든 타일 좌표 반환"""
     minlon, minlat, maxlon, maxlat = bbox_4326
     min_x, max_y = lonlat_to_tile(minlon, minlat, zoom)
     max_x, min_y = lonlat_to_tile(maxlon, maxlat, zoom)
+    return (x_min, x_max, y_min, y_max)
 
-    tiles = []
+def get_metatiles_from_bbox(bbox_4326, zoom, metatile_size=8):
+    """EPSG:4326 bbox로부터 메타타일 생성"""
+    min_x, max_x, min_y, max_y = bbox_to_tile_range(bbox_4326, zoom)
+    metatiles = {}
+    
     for x in range(min_x, max_x + 1):
         for y in range(min_y, max_y + 1):
-            tiles.append((zoom, x, y))
-    return tiles
-
-def get_metatiles(tiles, metatile_size=8):
-    """타일 목록을 메타타일로 그룹화"""
-    metatiles = {}
-    for z, x, y in tiles:
-        meta_x = (x // metatile_size) * metatile_size
-        meta_y = (y // metatile_size) * metatile_size
-        meta_key = (z, meta_x, meta_y)
-        metatiles.setdefault(meta_key, []).append((z, x, y))
-    return metatiles
+            meta_x = (x // metatile_size) * metatile_size
+            meta_y = (y // metatile_size) * metatile_size
+            meta_key = (zoom, meta_x, meta_y)
+            metatiles.setdefault(meta_key, []).append((zoom, x, y))
 
 def render_metatile(args):
     """메타타일을 렌더링하고 개별 타일로 분할"""
@@ -175,10 +173,10 @@ def main():
     metatile_size = METATILE
 
     for zoom in zooms:
-        tiles = get_tiles_in_bbox(bbox_4326, zoom)
-        metatiles = get_metatiles(tiles, metatile_size)
-        print(f"Zoom {zoom}: {len(tiles)} tiles, {len(metatiles)} metatiles")
-        total_tiles += len(tiles)
+        metatiles, tiles_count = get_metatiles_from_bbox(bbox_4326, zoom, metatile_size)
+        print(f"Zoom {zoom}: {tiles_count} tiles, {len(metatiles)} metatiles")
+        total_tiles += tiles_count
+        
         for meta_key, tile_list in metatiles.items():
             all_metatiles.append((meta_key, tile_list, args.tile_size, metatile_size))
 
@@ -186,36 +184,18 @@ def main():
 
     conn = setup_mbtiles(args.output, zooms[0], zooms[-1], args.bbox)
 
-    # --- 플랫폼별: Linux/Unix면 fork + 부모에서 단 1회 load_map ---
-    is_windows = (sys.platform == "win32")
-    if not is_windows:
-        # fork 사용 시: 부모에서 한 번만 로드 → 자식이 상속
-        try:
-            mp.set_start_method("fork")
-        except RuntimeError:
-            # 이미 설정된 경우 무시
-            pass
-
-        global _mapnik_map
-        _mapnik_map = mapnik.Map(args.tile_size * metatile_size, args.tile_size * metatile_size)
-        mapnik.load_map(_mapnik_map, args.xml)  # ★ 부모에서 1회 로드
-
-        pool_ctx = mp.Pool(processes=args.processes)  # initializer 불필요 (상속)
-    else:
-        # Windows: spawn → 워커별 1회 로드
-        try:
-            mp.set_start_method("spawn")
-        except RuntimeError:
-            pass
-        pool_ctx = mp.Pool(
-            processes=args.processes,
-            initializer=init_worker,
-            initargs=(args.xml, args.tile_size, metatile_size)
-        )
-
     rendered = 0
     pending = 0
-    with pool_ctx as pool:
+
+    is_windows = (sys.platform == "win32")
+    if is_windows:
+        mp.set_start_method("spawn")
+    else:
+        init_worker(args.xml, args.tile_size, metatile_size)
+
+    with Pool(processes=args.processes, 
+              initializer=init_worker if is_windows else None, 
+              initargs=(args.xml, args.tile_size, metatile_size) if is_windows else None) as pool:
         print(f"\nTotal: {args.processes} workers Initializing...")
         for tiles_data in pool.imap_unordered(render_metatile, all_metatiles):
             if tiles_data:
