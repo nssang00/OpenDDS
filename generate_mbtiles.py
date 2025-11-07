@@ -161,7 +161,7 @@ def main():
     parser.add_argument('--tile-size', type=int, default=256, help='타일 크기 (기본: 256)')
     parser.add_argument('--processes', type=int, default=mp.cpu_count(), help='프로세스 수')
     parser.add_argument('--xyz', action='store_true', help='Scheme (default: tms)')
-    parser.add_argument('--force-spawn', action="store_true', help='Force spawn method for multiprocessing')
+    parser.add_argument('--force-spawn', action='store_true', help='Force spawn method for multiprocessing')
     args = parser.parse_args()
 
     t0 = time.time()
