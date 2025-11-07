@@ -4,7 +4,7 @@ import sqlite3
 import os
 import time
 import sys
-from multiprocessing import Pool, cpu_count
+import multiprocessing as mp
 import mapnik
 
 METATILE = 8
@@ -159,8 +159,9 @@ def main():
     parser.add_argument('--bbox', required=True, help='EPSG:4326 bbox (minlon,minlat,maxlon,maxlat)')
     parser.add_argument('--output', required=True, help='출력 MBTiles 파일')
     parser.add_argument('--tile-size', type=int, default=256, help='타일 크기 (기본: 256)')
-    parser.add_argument('--processes', type=int, default=cpu_count(), help='프로세스 수')
-    parser.add_argument("--xyz", action="store_true", help='Scheme (default: tms)')
+    parser.add_argument('--processes', type=int, default=mp.cpu_count(), help='프로세스 수')
+    parser.add_argument('--xyz', action='store_true', help='Scheme (default: tms)')
+    parser.add_argument('--force-spawn', action="store_true', help='Force spawn method for multiprocessing')
     args = parser.parse_args()
 
     t0 = time.time()
@@ -189,15 +190,15 @@ def main():
     rendered = 0
     pending = 0
 
-    is_windows = (sys.platform == "win32")
-    if is_windows:
-        mp.set_start_method("spawn")
+    use_spawn = sys.platform == "win32" or args.force_spawn
+    if use_spawn:
+        mp.set_start_method("spawn", force=True)
     else:
         init_worker(args.xml, args.tile_size, metatile_size)
 
-    with Pool(processes=args.processes, 
-              initializer=init_worker if is_windows else None, 
-              initargs=(args.xml, args.tile_size, metatile_size) if is_windows else None) as pool:
+    with mp.Pool(processes=args.processes, 
+              initializer=init_worker if use_spawn else None, 
+              initargs=(args.xml, args.tile_size, metatile_size) if use_spawn else None) as pool:
         print(f"\nTotal: {args.processes} workers Initializing...")
         for tiles_data in pool.imap_unordered(render_metatile, all_metatiles):
             if tiles_data:
