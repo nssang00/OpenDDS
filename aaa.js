@@ -14,7 +14,7 @@ const optionalAttributesDesc = [
 // optionalAttributesDesc의 name들을 Set으로 변환
 const optionalNames = new Set(optionalAttributesDesc.map(attr => attr.name));
 
-// optionalNames에 포함되지 않은 항목만 필터링
-instancedAttributesDesc = instancedAttributesDesc.filter(
+// optionalNames에 포함되지 않은 항목만 필터링하여 새 배열 생성
+const filteredAttributesDesc = instancedAttributesDesc.filter(
   attr => !optionalNames.has(attr.name)
 );
