@@ -1,28 +1,20 @@
-v_distancePx = a_distanceLow / u_resolution - (lineOffsetPx * a_angleTangentSum);
-float distanceHighPx = a_distanceHigh / u_resolution;
+const optionalAttributesDesc = [
+  {
+    name: Attributes.MEASURE_START,
+    size: 2,
+    type: AttributeType.Float,
+  },
+  {
+    name: Attributes.MEASURE_END,
+    size: 2,
+    type: AttributeType.Float,
+  },
+];
 
-v_distancePx += distanceHighPx;
+// optionalAttributesDesc의 name들을 Set으로 변환
+const optionalNames = new Set(optionalAttributesDesc.map(attr => attr.name));
 
-${
-this.strokePatternLengthExpression_ !== null
-? `v_distancePx = mod(v_distancePx, ${this.strokePatternLengthExpression_});`
-: ''
-}
-///////
-- v_distancePx = a_distanceLow / u_resolution - (lineOffsetPx * a_angleTangentSum);
-- float distanceHighPx = a_distanceHigh / u_resolution;
-- ${
--   this.strokePatternLengthExpression_ !== null
--     ? `v_distancePx = mod(v_distancePx, ${this.strokePatternLengthExpression_});
-- distanceHighPx = mod(distanceHighPx, ${this.strokePatternLengthExpression_});
-- `
--     : ''
-- }v_distancePx += distanceHighPx;
-+ float distancePx = (a_distanceLow + a_distanceHigh) / u_resolution;
-+ distancePx -= (lineOffsetPx * a_angleTangentSum);
-+ ${
-+   this.strokePatternLengthExpression_ !== null
-+     ? `distancePx = mod(distancePx, ${this.strokePatternLengthExpression_});`
-+     : ''
-+ }
-+ v_distancePx = distancePx;
+// optionalNames에 포함되지 않은 항목만 필터링
+instancedAttributesDesc = instancedAttributesDesc.filter(
+  attr => !optionalNames.has(attr.name)
+);
