@@ -1,3 +1,18 @@
+
+if (!gl.getPostProcessPass) {
+  gl.getPostProcessPasses = (() => {
+    let pass = null;
+    return () => {
+      if (!pass) {
+        pass = new WebGLPostProcessingPass({webGlContext: gl});
+      }
+      return pass;
+    };
+  })();
+}
+
+this.postProcessPasss_ = [gl.getPostProcessPasses()];
+///////////////
 const gl = this.helper_.getGL();
 
 if (!gl.getTileMaskTarget) {
