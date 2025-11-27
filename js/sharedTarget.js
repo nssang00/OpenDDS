@@ -1,3 +1,19 @@
+const gl = this.helper_.getGL();
+
+if (!gl.getTileMaskTarget) {
+  gl.getTileMaskTarget = (() => {
+    let target = null;
+    return (helper) => {
+      if (!target) {
+        target = new WebGLRenderTarget(helper);
+      }
+      return target;
+    };
+  })();
+}
+this.tileMaskTarget_ = gl.getTileMaskTarget(this.helper_);
+
+/////////
 if (!owner.getSharedRenderTarget) {
   owner.getSharedRenderTarget = (() => {
     let texture = null, framebuffer = null, depthbuffer = null;
