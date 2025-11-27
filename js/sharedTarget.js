@@ -1,4 +1,15 @@
+// 1. 처리할 대상들을 결정합니다.
+// enabled가 true면 [this.buffers] 하나만, 아니면 filteredBuffers의 값들을 대상으로 합니다.
+const targets = enabled 
+  ? [this.buffers] 
+  : this.buffers.filteredBuffers.values();
 
+// 2. 루프 하나로 로직을 수행합니다.
+for (const target of targets) {
+  target.pointBuffers && dispose(target.pointBuffers);
+  target.lineStringBuffers && dispose(target.lineStringBuffers);
+}
+//////
 if (!gl.getPostProcessPass) {
   gl.getPostProcessPasses = (() => {
     let pass = null;
