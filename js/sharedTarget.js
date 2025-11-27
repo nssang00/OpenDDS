@@ -1,18 +1,14 @@
-/**
- * A wrapper class to simplify rendering to a texture instead of the final canvas
- * @module ol/webgl/RenderTarget
- */
-import {equals} from '../array.js';
+if (!owner.getSharedRenderTarget) {
+  owner.getSharedRenderTarget = (() => {
+    let texture = null, framebuffer = null, depthbuffer = null;
+    return () => {
+      if (!texture) { /* create */ }
+      return {texture, framebuffer, depthbuffer};
+    };
+  })();
+}
+const shared = owner.getSharedRenderTarget();
 
-// for pixel color reading
-const tmpArray4 = new Uint8Array(4);
-
-/**
- * @classdesc
- * This class is a wrapper around the association of both a `WebGLTexture` and a `WebGLFramebuffer` instances,
- * simplifying initialization and binding for rendering.
- * Resources (texture, framebuffer, depthbuffer) are shared per helper instance.
- */
 class WebGLRenderTarget {
   /**
    * @param {import("./Helper.js").default} helper WebGL helper; mandatory.
