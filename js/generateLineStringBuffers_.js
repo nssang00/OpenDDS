@@ -139,9 +139,7 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
       const p1world = getWorldCoordFromFeature(idx1);
       const pAworld = getWorldCoordFromFeature(afterIdx);
 
-      // 3-4. 각도 계산 및 tangent sum 누적
-      let angle0 = -1;
-      let angle1 = -1;
+      let angle0 = -1, angle1 = -1;
       let newAngleTangentSum = currentAngleTangentSum;
 
       if (pBworld && p0world && p1world) {
