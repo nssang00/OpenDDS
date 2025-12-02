@@ -1,3 +1,10 @@
+  bindTexture(texture, slot, uniformName) {
+    const gl = this.gl_;
+    gl.activeTexture(gl.TEXTURE0 + slot);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.uniform1i(this.getUniformLocation(uniformName), slot);
+  }
+
 applyUniforms(frameState) {
   const gl = this.gl_;
 
