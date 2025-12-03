@@ -1,4 +1,3 @@
-
 function generateLineStringRenderInstructionsFromFeatures(
   features,
   renderInstructions,
@@ -32,10 +31,11 @@ function generateLineStringRenderInstructionsFromFeatures(
     geometryRenderEntries[i] = { feature, pixelCoordinates, ends };
   }
 
+  // here we anticipate the amount of render instructions for lines:
   // 3 instructions per vertex for position (x, y and m)
   // + 1 instruction per line per custom attributes
-  // + 1 instruction per line (for vertices count)
   // + 2 instructions per line (for featureIndex and vertexOffset)
+  // + 1 instruction per line (for vertices count)
   const totalInstructionsCount =
     3 * verticesCount +
     (1 + getCustomAttributesSize(customAttributes) + 2) * geometriesCount;
@@ -144,40 +144,17 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
     let currentLength = 0;
     let currentAngleTangentSum = 0;
 
-    const worldCoordCache = [];
-
-    function getWorldCoord(index, offset) {
-      if (offset === null || offset < 0 || offset >= verticesCount) return null;
-
-      if (worldCoordCache[index]?.offset === offset) 
-        return worldCoordCache[index].world;
-
-      // 원본 좌표에서 직접 읽기 (역변환 불필요!)
-      const coordIndex = (vertexStartOffset + offset) * stride;
-      const world = [
+    // 월드 좌표를 직접 가져오는 헬퍼 함수
+    function getWorldCoord(vertexIndex) {
+      if (vertexIndex < 0 || vertexIndex >= verticesCount) return null;
+      const coordIndex = (vertexStartOffset + vertexIndex) * stride;
+      return [
         flatCoordinates[coordIndex],
         flatCoordinates[coordIndex + 1]
       ];
-      worldCoordCache[index] = { offset, world };
-      return world;
     }
 
     for (let i = 0; i < verticesCount - 1; ++i) {
-      let beforeIndex = null;
-      if (i > 0) {
-        beforeIndex =
-          currentInstructionsIndex + (i - 1) * instructionsPerVertex;
-      } else if (isLoop) {
-        beforeIndex = lastInstructionsIndex - instructionsPerVertex;
-      }
-      let afterIndex = null;
-      if (i < verticesCount - 2) {
-        afterIndex =
-          currentInstructionsIndex + (i + 2) * instructionsPerVertex;
-      } else if (isLoop) {
-        afterIndex = firstInstructionsIndex + instructionsPerVertex;
-      }
-
       const segmentStartIndex = currentInstructionsIndex + i * instructionsPerVertex;
       const segmentEndIndex   = currentInstructionsIndex + (i + 1) * instructionsPerVertex;
       const p0 = [renderInstructions[segmentStartIndex], renderInstructions[segmentStartIndex + 1]];
@@ -185,19 +162,22 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
       const m0 = renderInstructions[segmentStartIndex + 2];
       const m1 = renderInstructions[segmentEndIndex + 2];
 
-      const idx0 = (segmentStartIndex - currentInstructionsIndex) / instructionsPerVertex;
-      const idx1 = (segmentEndIndex   - currentInstructionsIndex) / instructionsPerVertex;
-      let idxB = null, idxA = null;
-      if (beforeIndex !== null)
-        idxB = (beforeIndex - currentInstructionsIndex) / instructionsPerVertex;
-      if (afterIndex !== null)
-        idxA = (afterIndex - currentInstructionsIndex) / instructionsPerVertex;
-
-      const pBworld = getWorldCoord(0, idxB);
-      const p0world = getWorldCoord(1, idx0);
-      const p1world = getWorldCoord(2, idx1);
-      const pAworld = getWorldCoord(3, idxA);
-      worldCoordCache.shift();
+      // 월드 좌표 직접 계산
+      let pBworld = null, pAworld = null;
+      if (i > 0) {
+        pBworld = getWorldCoord(i - 1);
+      } else if (isLoop) {
+        pBworld = getWorldCoord(verticesCount - 2);
+      }
+      
+      const p0world = getWorldCoord(i);
+      const p1world = getWorldCoord(i + 1);
+      
+      if (i < verticesCount - 2) {
+        pAworld = getWorldCoord(i + 2);
+      } else if (isLoop) {
+        pAworld = getWorldCoord(1);
+      }
 
       function angleBetween(p0, pA, pB) {
         const ax = pA[0] - p0[0], ay = pA[1] - p0[1];
@@ -209,12 +189,12 @@ function generateLineStringBuffers_(renderInstructions, customAttributesSize, tr
 
       let angle0 = -1, angle1 = -1;
       let newAngleTangentSum = currentAngleTangentSum;
-      if (beforeIndex !== null) {
+      if (pBworld !== null) {
         angle0 = angleBetween(p0world, p1world, pBworld);
         if (Math.cos(angle0) <= 0.985) // LINESTRING_ANGLE_COSINE_CUTOFF
           newAngleTangentSum += Math.tan((angle0 - Math.PI) / 2);
       }
-      if (afterIndex !== null) {
+      if (pAworld !== null) {
         angle1 = angleBetween(p1world, p0world, pAworld);
         if (Math.cos(angle1) <= 0.985) // LINESTRING_ANGLE_COSINE_CUTOFF
           newAngleTangentSum += Math.tan((Math.PI - angle1) / 2);
