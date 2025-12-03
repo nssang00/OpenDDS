@@ -1,6 +1,4 @@
-방법 2의 전체 코드입니다:
 
-```javascript
 function generateLineStringRenderInstructionsFromFeatures(
   features,
   renderInstructions,
