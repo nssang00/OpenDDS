@@ -1,4 +1,23 @@
+useProgram(program) {
+    if (this.currentProgram !== program) {
+        // 1. WebGL 상태 변경
+        gl.useProgram(program);
+        this.currentProgram = program;
 
+        // 2. 해당 프로그램의 캐시를 로드 또는 초기화
+        if (this._programCaches.has(program)) {
+            // 기존 캐시가 있으면 로드
+            this._currentCache = this._programCaches.get(program);
+        } else {
+            // 새 프로그램이면 새 캐시를 생성하고 저장
+            this._currentCache = {};
+            this._programCaches.set(program, this._currentCache);
+        }
+        return true;
+    }
+    return false;
+}
+///////////
 function fnv1a(str) {
   // FNV-1a 32bit
   let hash = 0x811c9dc5; // offset basis
