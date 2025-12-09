@@ -94,18 +94,17 @@ vec4 colorEncodeId(float id) {
 }
 
 float angleBetween(vec2 p0, vec2 pA, vec2 pB) {
-  float lenA = length(pA - p0);
-  vec2 tangentA = (lenA > 0.0) ? (pA - p0) / lenA : vec2(0.0);
-  vec2 orthoA = vec2(-tangentA.y, tangentA.x);
+  vec2 dirA = pA - p0;
+  vec2 dirB = pB - p0;
   
-  float lenB = length(pB - p0);
-  vec2 tangentB = (lenB > 0.0) ? (pB - p0) / lenB : vec2(0.0);
+  // Cross product and dot product for atan2
+  float cross = dirA.x * dirB.y - dirA.y * dirB.x;
+  float dotProduct = dot(dirA, dirB);
   
-  float angle = (lenA == 0.0 || lenB == 0.0) ? 0.0 : 
-                acos(clamp(dot(tangentB, tangentA), -1.0, 1.0));
+  float angle = atan(cross, dotProduct); // -PI ~ PI
   
-  bool isClockwise = dot(tangentB, orthoA) > 0.0;
-  return !isClockwise ? TWO_PI - angle : angle;
+  // Convert to 0 ~ 2PI range if needed
+  return angle < 0.0 ? angle + TWO_PI : angle;
 }
 
 void main() {
