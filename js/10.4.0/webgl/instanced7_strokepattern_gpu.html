@@ -92,7 +92,26 @@ vec4 colorEncodeId(float id) {
   float a = floor(mod(id, 256.0));
   return vec4(r, g, b, a) / 255.0;
 }
+///////
+float angleBetween(vec2 p0, vec2 pA, vec2 pB) {
+  vec2 dirA = pA - p0;
+  vec2 dirB = pB - p0;
 
+  float lenA2 = dot(dirA, dirA);
+  float lenB2 = dot(dirB, dirB);
+  if (lenA2 < 1e-12 || lenB2 < 1e-12) return -1.0;
+
+  float cross = dirA.x * dirB.y - dirA.y * dirB.x;
+  float dotProduct = dot(dirA, dirB);
+  
+  float cosAngle = dotProduct / sqrt(lenA2 * lenB2);
+  if (cosAngle > 0.985) return -1.0;
+  
+  float angle = atan(cross, dotProduct);
+  
+  return angle + (step(angle, 0.0) * TWO_PI);
+}
+/*
 float angleBetween(vec2 p0, vec2 pA, vec2 pB) {
   vec2 dirA = pA - p0;
   vec2 dirB = pB - p0;
@@ -107,7 +126,7 @@ float angleBetween(vec2 p0, vec2 pA, vec2 pB) {
   
   return angle + (step(angle, 0.0) * TWO_PI);
 }
-
+*/
 void main() {
   // GPU에서 각도 계산
   float angleStart = -1.0;  // 기본값 (cap)
