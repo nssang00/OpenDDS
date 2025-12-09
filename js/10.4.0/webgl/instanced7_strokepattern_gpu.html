@@ -96,15 +96,16 @@ vec4 colorEncodeId(float id) {
 float angleBetween(vec2 p0, vec2 pA, vec2 pB) {
   vec2 dirA = pA - p0;
   vec2 dirB = pB - p0;
-  
-  // Cross product and dot product for atan2
+
+  float lenA2 = dot(dirA, dirA);
+  float lenB2 = dot(dirB, dirB);
+  if (lenA2 < 1e-6 || lenB2 < 1e-6) return -1.0;
+
   float cross = dirA.x * dirB.y - dirA.y * dirB.x;
   float dotProduct = dot(dirA, dirB);
+  float angle = atan(cross, dotProduct);
   
-  float angle = atan(cross, dotProduct); // -PI ~ PI
-  
-  // Convert to 0 ~ 2PI range if needed
-  return angle < 0.0 ? angle + TWO_PI : angle;
+  return angle + (step(angle, 0.0) * TWO_PI);
 }
 
 void main() {
