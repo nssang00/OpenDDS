@@ -1,3 +1,5 @@
+
+renderFrame
 for (let j = 0, jj = zs.length; j < jj; ++j) {  
       const tileZ = zs[j];  
       for (const tileRepresentation of representationsByZ[tileZ]) {  
@@ -204,8 +206,10 @@ for (let j = 0, jj = zs.length; j < jj; ++j) {
         this.helper_.drawElements(0, renderCount);  
       }  
     }  
-  
-기존 openlayers 코드는 타일마다 polygon, linestring, symbol을 렌더링하기때문에  
-useprogram을 여러번 호출하는 구조야. 한번에 여러개의 타일을 polygon, linestring, symbol을 배치 처리해서   
-useprogram은 3번만 사용하는 구조로 변경하려고해. 그러려면 구조가 많이 변경해야해서  
-클로저 같은거로 실행해야 할 함수들을 나중에 배치로 몰아서 처리하고 싶은데
+
+renderFrame에서 모든 타일들의 drawTile_을 호출하면 renderTile->render->renderInternal_을 호출하는 구조야.
+render함수에서 fill, stroke, symbol renderPass를 모두 호출하는 구조야.
+renderPass마다 호출하기 때문에 useprogram을 계속 호출하고 있어.
+난 현재 구조를 모든 타일의 fill -> 모든 타일의 stroke->모든 타일의 symbol renderPass를 호출하는 구조로 변경하고 싶어.
+최대한 기존 함수들을 살려야 해서 클로저나 bind로 고차원 함수로 처리해서 렌더링 순서를 변경해서 호출하려는게 목표야.
+변경을 최소화 하면서 렌더링 순서를 변경하려면 어떻게 하면 될까?
