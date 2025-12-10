@@ -207,6 +207,145 @@ for (let j = 0, jj = zs.length; j < jj; ++j) {
       }  
     }  
 
+
+///////////////////////////
+renderFrame() {
+  // ... 기존 코드 ...
+  
+  // 기존: 타일별로 모든 renderPass 실행
+  // for (let j = 0, jj = zs.length; j < jj; ++j) {
+  //   for (const tileRepresentation of representationsByZ[tileZ]) {
+  //     this.drawTile_(...);
+  //   }
+  // }
+  
+  // 변경: renderPass 타입별로 모든 타일 실행
+  const renderPassTypes = ['fill', 'stroke', 'symbol'];
+  
+  for (const passType of renderPassTypes) {
+    for (let j = 0, jj = zs.length; j < jj; ++j) {
+      const tileZ = zs[j];
+      for (const tileRepresentation of representationsByZ[tileZ]) {
+        const tileCoord = tileRepresentation.tile.tileCoord;
+        const tileCoordKey = getTileCoordKey(tileCoord);
+        if (tileCoordKey in alphaLookup) {
+          continue;
+        }
+        
+        this.drawTile_(
+          frameState,
+          tileRepresentation,
+          tileZ,
+          gutter,
+          extent,
+          alphaLookup,
+          tileGrid,
+          passType,  // 추가 파라미터
+        );
+      }
+    }
+  }
+}
+
+drawTile_(
+  frameState,
+  tileRepresentation,
+  tileZ,
+  gutter,
+  extent,
+  alphaLookup,
+  tileGrid,
+  passType,  // 추가 파라미터
+) {
+  // ... 기존 코드 동일 ...
+  
+  this.renderTile(
+    tileRepresentation,
+    this.tileTransform_,
+    frameState,
+    extent,
+    tileResolution,
+    tileSize,
+    tileOrigin,
+    tileExtent,
+    depth,
+    gutter,
+    alpha,
+    passType,  // 추가 파라미터
+  );
+}
+
+renderTile(
+  tileRepresentation,
+  tileTransform,
+  frameState,
+  renderExtent,
+  tileResolution,
+  tileSize,
+  tileOrigin,
+  tileExtent,
+  depth,
+  gutter,
+  alpha,
+  passType,  // 추가 파라미터
+) {
+  const gutterExtent = getIntersection(tileExtent, renderExtent, tileExtent);
+  const tileZ = tileRepresentation.tile.getTileCoord()[0];
+  const buffers = tileRepresentation.buffers;
+  if (!buffers) {
+    return;
+  }
+  this.styleRenderer_.render(buffers, frameState, () => {
+    this.applyUniforms_(
+      alpha,
+      gutterExtent,
+      buffers.invertVerticesTransform,
+      tileZ,
+      depth,
+    );
+  }, passType);  // 추가 파라미터
+}
+
+render(buffers, frameState, preRenderCallback, passType) {  // 추가 파라미터
+  for (const renderPass of this.renderPasses_) {
+    if (renderPass.contextFilter) {
+      if(!renderPass.contextFilter(frameState.viewState.resolution)) {
+        continue;
+      }
+    }
+    
+    // passType에 따라 선택적으로 렌더링
+    if (passType === 'fill' && renderPass.fillRenderPass) {
+      this.renderInternal_(
+        buffers.polygonBuffers[0],
+        buffers.polygonBuffers[1],
+        buffers.polygonBuffers[2],
+        renderPass.fillRenderPass,
+        frameState,
+        preRenderCallback,
+      );
+    } else if (passType === 'stroke' && renderPass.strokeRenderPass) {
+      this.renderInternal_(
+        buffers.lineStringBuffers[0],
+        buffers.lineStringBuffers[1],
+        buffers.lineStringBuffers[2],
+        renderPass.strokeRenderPass,
+        frameState,
+        preRenderCallback,
+      );
+    } else if (passType === 'symbol' && renderPass.symbolRenderPass) {
+      this.renderInternal_(
+        buffers.pointBuffers[0],
+        buffers.pointBuffers[1],
+        buffers.pointBuffers[2],
+        renderPass.symbolRenderPass,
+        frameState,
+        preRenderCallback,
+      );
+    }
+  }
+}
+
 renderFrame에서 모든 타일들의 drawTile_을 호출하면 renderTile->render->renderInternal_을 호출하는 구조야.
 render함수에서 fill, stroke, symbol renderPass를 모두 호출하는 구조야.
 renderPass마다 호출하기 때문에 useprogram을 계속 호출하고 있어.
