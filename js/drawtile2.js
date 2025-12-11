@@ -1,3 +1,34 @@
+render(buffers, frameState, preRenderCallback) {
+    const renderPassTypes = [
+      { passType: 'fillRenderPass', buffers: buffers.polygonBuffers },
+      { passType: 'strokeRenderPass', buffers: buffers.lineStringBuffers },
+      { passType: 'symbolRenderPass', buffers: buffers.pointBuffers }
+    ];
+
+    for (const renderPass of this.renderPasses_) {
+      if (renderPass.contextFilter) {
+        if (!renderPass.contextFilter(frameState.viewState.resolution)) {
+          continue;
+        }
+      }
+
+      for (const { passType, buffers } of renderPassTypes) {
+        if (renderPass[passType]) {
+          this.renderInternal_(
+            buffers[0],
+            buffers[1],
+            buffers[2],
+            renderPass[passType],
+            frameState,
+            preRenderCallback,
+          );
+        }
+      }
+    }
+  }
+
+
+
 // renderFrame 수정
 renderFrame() {
   // ... 기존 코드 ...
