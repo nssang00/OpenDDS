@@ -1,4 +1,53 @@
-  bindTexture(texture, slot, uniformName) {
+// 프레임 시작
+prepareFrame() {
+  // 기본 projection만 설정 (한 번)
+  this.helper.setUniformMatrixValue(
+    Uniforms.PROJECTION_MATRIX,
+    mat4FromTransform(this.tmpMat4_, this.currentFrameStateTransform_)
+  );
+  
+  // screen to world도 한 번만
+  makeInverseTransform(this.tmpTransform_, this.currentFrameStateTransform_);
+  this.helper.setUniformMatrixValue(
+    Uniforms.SCREEN_TO_WORLD_MATRIX,
+    mat4FromTransform(this.tmpMat4_, this.tmpTransform_),
+  );
+}
+
+// 타일마다
+applyUniforms_(alpha, renderExtent, batchInvertTransform, tileZ, depth) {
+  // 타일 offset 추출 (가벼움)
+  this.helper.setUniformFloatVec2(
+    Uniforms.TILE_OFFSET,
+    [batchInvertTransform[4], batchInvertTransform[5]]
+  );
+  
+  // 기존 코드 제거
+  // setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
+  // multiplyTransform(this.tmpTransform_, batchInvertTransform);
+  // this.helper.setUniformMatrixValue(...);  // ← 이거 삭제
+  
+  // 나머지는 그대로
+  this.helper.setUniformFloatValue(Uniforms.GLOBAL_ALPHA, alpha);
+  this.helper.setUniformFloatValue(Uniforms.DEPTH, depth);
+  this.helper.setUniformFloatValue(Uniforms.TILE_ZOOM_LEVEL, tileZ);
+  this.helper.setUniformFloatVec4(Uniforms.RENDER_EXTENT, renderExtent);
+}
+Shader 수정
+// Vertex Shader에 추가
+uniform vec2 u_tileOffset;  // 새로 추가
+
+vec2 worldToPx(vec2 worldPos) {
+  // 로컬 좌표 → 월드 좌표 변환 추가
+  vec2 adjustedWorldPos = worldPos + u_tileOffset;
+  vec4 screenPos = u_projectionMatrix * vec4(adjustedWorldPos, 0.0, 1.0);
+  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
+}
+
+
+
+//////////////////
+bindTexture(texture, slot, uniformName) {
     const gl = this.gl_;
     gl.activeTexture(gl.TEXTURE0 + slot);
     gl.bindTexture(gl.TEXTURE_2D, texture);
