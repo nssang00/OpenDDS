@@ -1,4 +1,3 @@
-// 프레임 시작
 prepareFrame() {
   // 기본 projection만 설정 (한 번)
   this.helper.setUniformMatrixValue(
@@ -14,36 +13,37 @@ prepareFrame() {
   );
 }
 
-// 타일마다
 applyUniforms_(alpha, renderExtent, batchInvertTransform, tileZ, depth) {
-  // 타일 offset 추출 (가벼움)
+  // 타일 origin(월드 좌표의 타일 원점) 추출
   this.helper.setUniformFloatVec2(
-    Uniforms.TILE_OFFSET,
+    Uniforms.TILE_ORIGIN,
     [batchInvertTransform[4], batchInvertTransform[5]]
   );
   
-  // 기존 코드 제거
-  // setFromTransform(this.tmpTransform_, this.currentFrameStateTransform_);
-  // multiplyTransform(this.tmpTransform_, batchInvertTransform);
-  // this.helper.setUniformMatrixValue(...);  // ← 이거 삭제
+  // 기존에 프레임마다 합쳤던 전체 매트릭스 업데이트 제거(이미 제거됨)
   
-  // 나머지는 그대로
+  // 나머지 uniform들
   this.helper.setUniformFloatValue(Uniforms.GLOBAL_ALPHA, alpha);
   this.helper.setUniformFloatValue(Uniforms.DEPTH, depth);
   this.helper.setUniformFloatValue(Uniforms.TILE_ZOOM_LEVEL, tileZ);
   this.helper.setUniformFloatVec4(Uniforms.RENDER_EXTENT, renderExtent);
 }
-Shader 수정
-// Vertex Shader에 추가
-uniform vec2 u_tileOffset;  // 새로 추가
+/////
+// Vertex Shader
+uniform highp vec2 u_tileOrigin;  // 이름 변경
 
 vec2 worldToPx(vec2 worldPos) {
-  // 로컬 좌표 → 월드 좌표 변환 추가
-  vec2 adjustedWorldPos = worldPos + u_tileOffset;
+  // 원래 로컬 좌표(local) + tile origin -> 월드 좌표
+  vec2 adjustedWorldPos = worldPos + u_tileOrigin;
   vec4 screenPos = u_projectionMatrix * vec4(adjustedWorldPos, 0.0, 1.0);
   return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
 }
 
+vec2 localToPx(vec2 localPos) {
+  vec2 worldPos = localPos + u_tileOrigin; // local -> world
+  vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
+  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
+}
 
 
 //////////////////
