@@ -30,24 +30,11 @@ applyUniforms_(alpha, renderExtent, batchInvertTransform, tileZ, depth) {
 }
 /////
 // Vertex Shader
-uniform highp vec2 u_tileOrigin;  // 이름 변경
+uniform vec2 u_tileOrigin;  // 이름 변경
 
 
 vec2 worldToPx(vec2 localPos) {
   vec2 worldPos = localPos + u_tileOrigin;
-  vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
-  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
-}
-
-vec2 worldToPx(vec2 worldPos) {
-  // 원래 로컬 좌표(local) + tile origin -> 월드 좌표
-  vec2 adjustedWorldPos = worldPos + u_tileOrigin;
-  vec4 screenPos = u_projectionMatrix * vec4(adjustedWorldPos, 0.0, 1.0);
-  return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
-}
-
-vec2 localToPx(vec2 localPos) {
-  vec2 worldPos = localPos + u_tileOrigin; // local -> world
   vec4 screenPos = u_projectionMatrix * vec4(worldPos, 0.0, 1.0);
   return (0.5 * screenPos.xy + 0.5) * u_viewportSizePx;
 }
