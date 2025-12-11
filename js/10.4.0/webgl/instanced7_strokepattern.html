@@ -190,7 +190,7 @@ vec4 sampleStrokePattern(sampler2D texture, vec2 textureSize, vec2 textureOffset
   float scaleFactor = sampleSize.y / lineWidth;
   float currentLengthScaled = currentLengthPx * scaleFactor;
   float spacingScaled = max(spacingPx * scaleFactor, sampleSize.x);
-  float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor + sampleSize.x, spacingScaled);
+  float uCoordPx = mod(currentLengthScaled - startOffsetPx * scaleFactor + sampleSize.x * 0.5, spacingScaled);
   // make sure that we're not sampling too close to the borders to avoid interpolation with outside pixels
   uCoordPx = clamp(uCoordPx, 0.5, sampleSize.x - 0.5);
   if (uCoordPx > sampleSize.x - 1.0) return vec4(0.0);
