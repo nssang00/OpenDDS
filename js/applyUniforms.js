@@ -1,3 +1,9 @@
+this.applyUniforms.call(
+  { ...this, uniforms_: customUniforms },
+  frameState
+);
+
+
 prepareFrame() {
   // 기본 projection만 설정 (한 번)
   this.helper.setUniformMatrixValue(
