@@ -136,3 +136,135 @@ applyUniforms(frameState) {
     }
   });
 }
+
+
+/////////////
+// 1. WebGL 컨텍스트
+const canvas = document.querySelector('#glcanvas');
+const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
+if (!gl) throw new Error('WebGL not supported');
+
+// 2. 간단한 쉐이더 프로그램 2개 생성 (헬퍼 함수 생략, 직접 작성)
+function createProgram(vsSource, fsSource) {
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, vsSource);
+  gl.compileShader(vs);
+
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, fsSource);
+  gl.compileShader(fs);
+
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs);
+  gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  return prog;
+}
+
+const commonVS = `
+  attribute vec2 a_position;
+  uniform vec2 u_resolution;
+  varying vec2 v_texcoord;
+  void main() {
+    vec2 clip = (a_position / u_resolution) * 2.0 - 1.0;
+    gl_Position = vec4(clip * vec2(1, -1), 0, 1);
+    v_texcoord = a_position / u_resolution;
+  }
+`;
+
+const programA = createProgram(commonVS, `
+  precision mediump float;
+  uniform sampler2D u_tex;
+  varying vec2 v_texcoord;
+  void main() {
+    gl_FragColor = texture2D(u_tex, v_texcoord);          // 원본 이미지
+  }
+`);
+
+const programB = createProgram(commonVS, `
+  precision mediump float;
+  uniform sampler2D u_tex;
+  varying vec2 v_texcoord;
+  void main() {
+    vec4 c = texture2D(u_tex, v_texcoord);
+    gl_FragColor = vec4(1.0 - c.rgb, c.a);                // 반전 효과
+  }
+`);
+
+// 3. 풀스크린 쿼드 버퍼 (한 번만 설정)
+const quadBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  0, 0,
+  canvas.width, 0,
+  0, canvas.height,
+  canvas.width, canvas.height
+]), gl.STATIC_DRAW);
+
+// 4. 텍스처 캐시
+const textureCache = new Map(); // url → WebGLTexture
+
+async function loadTexture(url) {
+  if (textureCache.has(url)) return textureCache.get(url);
+
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = url;
+  await new Promise((res, rej) => {
+    img.onload = res;
+    img.onerror = () => rej(new Error('Image load failed'));
+  });
+
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);               // 업로드용 임시 바인딩
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+
+  textureCache.set(url, tex);
+  return tex;
+}
+
+// 5. 간단한 재활용 렌더 함수 (requestAnimationFrame 없이 직접 호출)
+async function drawWithProgram(program, textureUrl) {
+  // 텍스처 가져오기 (캐시 사용)
+  const texture = await loadTexture(textureUrl);
+
+  // 항상 TEXTURE0에 바인딩 (가장 안전하고 간단)
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  gl.useProgram(program);
+
+  // attribute
+  const posLoc = gl.getAttribLocation(program, 'a_position');
+  gl.enableVertexAttribArray(posLoc);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+  // uniforms
+  gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), canvas.width, canvas.height);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_tex'), 0);  // 항상 0번 슬롯
+
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// 6. 사용 예시: 버튼 클릭이나 콘솔에서 직접 호출하며 재활용
+// 예: 아래처럼 순서대로 호출하면 programA → B → A 로 번갈아 보입니다.
+
+async function demo() {
+  await drawWithProgram(programA, 'https://example.com/image1.jpg');  // A (원본)
+  await new Promise(r => setTimeout(r, 1000)); // 1초 대기 (애니메이션 대신)
+
+  await drawWithProgram(programB, 'https://example.com/image2.jpg');  // B (반전)
+  await new Promise(r => setTimeout(r, 1000));
+
+  await drawWithProgram(programA, 'https://example.com/image1.jpg');  // 다시 A (원본)
+  // 필요하면 계속 반복 호출 가능
+}
+
+demo();  // 실행
