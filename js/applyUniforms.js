@@ -268,3 +268,40 @@ async function demo() {
 }
 
 demo();  // 실행
+///////////**
+
+function setUniform(gl, program, uniformName, value) {
+  const location = gl.getUniformLocation(program, uniformName);
+  
+  if (!location) {
+    console.warn(`Uniform "${uniformName}"을 찾을 수 없습니다.`);
+    return;
+  }
+
+  const arr = Array.isArray(value) ? value : [value];
+  const size = arr.length;
+
+  switch (size) {
+    case 1:
+      gl.uniform1f(location, arr[0]);
+      break;
+    case 2:
+      gl.uniform2f(location, arr[0], arr[1]);
+      break;
+    case 3:
+      gl.uniform3f(location, arr[0], arr[1], arr[2]);
+      break;
+    case 4:
+      gl.uniform4f(location, arr[0], arr[1], arr[2], arr[3]);
+      break;
+    case 16:
+      gl.uniformMatrix4fv(location, false, arr);
+      break;
+    default:
+      console.error(`지원하지 않는 배열 크기입니다: ${size}`);
+  }
+}
+
+
+/////////////
+
