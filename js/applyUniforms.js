@@ -310,4 +310,33 @@ function setUniform(gl, program, uniformName, value) {
 
 
 /////////////
+prepareFrame() {
+  // base projection만 설정 (타일 변환 제외)
+  this.helper.setUniformMatrixValue(
+    Uniforms.PROJECTION_MATRIX,
+    mat4FromTransform(this.tmpMat4_, this.currentFrameStateTransform_)
+  );
+  
+  // screen to world
+  makeInverseTransform(this.tmpTransform_, this.currentFrameStateTransform_);
+  this.helper.setUniformMatrixValue(
+    Uniforms.SCREEN_TO_WORLD_MATRIX,
+    mat4FromTransform(this.tmpMat4_, this.tmpTransform_),
+  );
+}
+
+applyUniforms_(alpha, renderExtent, batchInvertTransform, tileZ, depth) {
+  // batchInvertTransform의 역변환으로 타일 원점 추출
+  makeInverseTransform(this.tmpTransform_, batchInvertTransform);
+  
+  this.helper.setUniformFloatVec2(
+    Uniforms.TILE_ORIGIN,
+    [this.tmpTransform_[4], this.tmpTransform_[5]]
+  );
+  
+  this.helper.setUniformFloatValue(Uniforms.GLOBAL_ALPHA, alpha);
+  this.helper.setUniformFloatValue(Uniforms.DEPTH, depth);
+  this.helper.setUniformFloatValue(Uniforms.TILE_ZOOM_LEVEL, tileZ);
+  this.helper.setUniformFloatVec4(Uniforms.RENDER_EXTENT, renderExtent);
+}
 
