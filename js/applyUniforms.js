@@ -3,6 +3,12 @@ this.applyUniforms.call(
   frameState
 );
 
+applyUniforms(
+  frameState,
+  Object.entries(uniforms).map(([name, value]) => ({ name, value }))
+);
+
+
 
 prepareFrame() {
   // 기본 projection만 설정 (한 번)
