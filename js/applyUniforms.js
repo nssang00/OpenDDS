@@ -1,3 +1,56 @@
+export function mat4FromTransform2D(mat4, transform) {
+  // 4x4 행렬 초기화
+  mat4[0] = transform[0];   // scaleX
+  mat4[1] = transform[1];   // skewY
+  mat4[2] = 0;
+  mat4[3] = 0;
+  
+  mat4[4] = transform[2];   // skewX
+  mat4[5] = transform[3];   // scaleY
+  mat4[6] = 0;
+  mat4[7] = 0;
+  
+  mat4[8] = 0;
+  mat4[9] = 0;
+  mat4[10] = 1;
+  mat4[11] = 0;
+  
+  mat4[12] = transform[4];  // translateX
+  mat4[13] = transform[5];  // translateY
+  mat4[14] = 0;
+  mat4[15] = 1;
+  
+  return mat4;
+}
+prepareFrame() {
+  // 새 함수 사용
+  this.helper.setUniformMatrixValue(
+    Uniforms.PROJECTION_MATRIX,
+    mat4FromTransform2D(this.tmpMat4_, this.currentFrameStateTransform_)
+  );
+  
+  // screen to world
+  makeInverseTransform(this.tmpTransform_, this.currentFrameStateTransform_);
+  this.helper.setUniformMatrixValue(
+    Uniforms.SCREEN_TO_WORLD_MATRIX,
+    mat4FromTransform2D(this.tmpMat4_, this.tmpTransform_)
+  );
+}
+
+applyUniforms_(alpha, renderExtent, batchInvertTransform, tileZ, depth) {
+  // batchInvertTransform 그대로 사용
+  this.helper.setUniformFloatVec2(
+    Uniforms.TILE_ORIGIN,
+    [batchInvertTransform[4], batchInvertTransform[5]]
+  );
+  
+  this.helper.setUniformFloatValue(Uniforms.GLOBAL_ALPHA, alpha);
+  this.helper.setUniformFloatValue(Uniforms.DEPTH, depth);
+  this.helper.setUniformFloatValue(Uniforms.TILE_ZOOM_LEVEL, tileZ);
+  this.helper.setUniformFloatVec4(Uniforms.RENDER_EXTENT, renderExtent);
+}
+
+/////////////
 this.applyUniforms.call(
   { ...this, uniforms_: customUniforms },
   frameState
