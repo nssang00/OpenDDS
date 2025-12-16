@@ -1,27 +1,9 @@
-export function mat4FromTransform2D(mat4, transform) {
-  // 4x4 행렬 초기화
-  mat4[0] = transform[0];   // scaleX
-  mat4[1] = transform[1];   // skewY
-  mat4[2] = 0;
-  mat4[3] = 0;
-  
-  mat4[4] = transform[2];   // skewX
-  mat4[5] = transform[3];   // scaleY
-  mat4[6] = 0;
-  mat4[7] = 0;
-  
-  mat4[8] = 0;
-  mat4[9] = 0;
-  mat4[10] = 1;
-  mat4[11] = 0;
-  
-  mat4[12] = transform[4];  // translateX
-  mat4[13] = transform[5];  // translateY
-  mat4[14] = 0;
-  mat4[15] = 1;
-  
-  return mat4;
-}
+const isSameStructure = (arr1, arr2) => 
+  arr1.every((obj, i) => 
+    JSON.stringify(Object.keys(obj).sort()) === 
+    JSON.stringify(Object.keys(arr2[i]).sort())
+  );
+
 prepareFrame() {
   // 새 함수 사용
   this.helper.setUniformMatrixValue(
