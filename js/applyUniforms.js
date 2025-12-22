@@ -1,3 +1,18 @@
+for (const geometryType in this.renderBatches_) {
+  const batches = this.renderBatches_[geometryType];
+  
+  for (const programHash in batches) {
+    const items = batches[programHash];
+    
+    if (items.length === 0) continue;
+        
+    items.forEach(item => {
+      this.renderItem(item, geometryType);
+    });
+  }
+}
+
+
 const isSameStructure = (arr1, arr2) => 
   arr1.every((obj, i) => 
     JSON.stringify(Object.keys(obj).sort()) === 
