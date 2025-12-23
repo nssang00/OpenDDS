@@ -1,10 +1,9 @@
 function resetDrawState(gl, disableAlphaBlend, enableDepth) {
-  // color 채널 복구 (🔥 red 문제 핵심)
   gl.colorMask(true, true, true, true);
 
   gl.enable(gl.BLEND);
   gl.blendFunc(
-    gl.ONE,
+    gl.SRC_ALPHA,  // 일반적인 알파 블렌딩으로 변경
     disableAlphaBlend ? gl.ZERO : gl.ONE_MINUS_SRC_ALPHA
   );
 
@@ -14,9 +13,9 @@ function resetDrawState(gl, disableAlphaBlend, enableDepth) {
     gl.depthMask(true);
   } else {
     gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
   }
 }
-
 
 
 const isSameStructure = (arr1, arr2) => 
