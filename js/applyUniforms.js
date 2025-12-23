@@ -1,3 +1,5 @@
+
+ resetDrawState(gl, false, true)
 function resetDrawState(gl, disableAlphaBlend, enableDepth) {
   gl.colorMask(true, true, true, true);
 
