@@ -19,6 +19,32 @@ function resetDrawState(gl, disableAlphaBlend, enableDepth) {
   }
 }
 
+////////
+// 1단계: 불투명 피처 렌더링 (먼저 그리기)
+function renderOpaque(gl) {
+  gl.disable(gl.BLEND);                  // 블렌딩 완전히 끄기
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthMask(true);
+  gl.depthFunc(gl.LEQUAL);
+  gl.colorMask(true, true, true, true);
+
+  // 불투명 피처들 그리기 (alpha === 1인 면, 선, 점)
+}
+
+// 2단계: 투명 피처 렌더링 (나중에 그리기)
+function renderTransparent(gl) {
+  gl.enable(gl.BLEND);
+  // OpenLayers는 premultiplied alpha를 주로 사용하므로 권장
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);  // premultiplied용 표준
+  // 또는 일반 alpha라면: gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.depthMask(false);  // 투명은 depth 쓰지 않음 (깜빡임 방지)
+
+  // 투명 피처들을 back-to-front 순으로 정렬해서 그리기!!
+}
+
 
 const isSameStructure = (arr1, arr2) => 
   arr1.every((obj, i) => 
