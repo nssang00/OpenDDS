@@ -1,16 +1,22 @@
-for (const geometryType in this.renderBatches_) {
-  const batches = this.renderBatches_[geometryType];
-  
-  for (const programHash in batches) {
-    const items = batches[programHash];
-    
-    if (items.length === 0) continue;
-        
-    items.forEach(item => {
-      this.renderItem(item, geometryType);
-    });
+function resetDrawState(gl, disableAlphaBlend, enableDepth) {
+  // color 채널 복구 (🔥 red 문제 핵심)
+  gl.colorMask(true, true, true, true);
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(
+    gl.ONE,
+    disableAlphaBlend ? gl.ZERO : gl.ONE_MINUS_SRC_ALPHA
+  );
+
+  if (enableDepth) {
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(true);
+  } else {
+    gl.disable(gl.DEPTH_TEST);
   }
 }
+
 
 
 const isSameStructure = (arr1, arr2) => 
