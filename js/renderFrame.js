@@ -1,6 +1,32 @@
 class Map {
   constructor() {
     this.animationDelayKey_ = undefined;
+    this.isInPostRender_ = false; 
+  }
+
+
+  handlePostRender() {
+    this.isInPostRender_ = true;  // 🔥 시작
+    
+    queueMicrotask(() => {
+      console.log('loadMoreTiles end')
+      this.isInPostRender_ = false;
+    });
+  }
+
+  handleTileChange_() {
+    // 🔥 postRender 순환만 차단
+    if (this.isInPostRender_) {
+      return;
+    }
+    
+    this.render();
+  }
+}
+//////////
+class Map {
+  constructor() {
+    this.animationDelayKey_ = undefined;
 
     // 🔑 렌더링 상태 플래그
     this.isRenderingFrame_ = false; // renderFrame 실행 중
