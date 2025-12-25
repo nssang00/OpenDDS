@@ -49,8 +49,61 @@ class Map {
       this.renderFrame_();
     });
   }
+}
+///////////////
+class Map {
+  constructor(options) {
+    
+    this.renderScheduled_ = false;
+    this.isRendering_ = false;
+    this.needsNextFrame_ = false;
+
+  }
+
+  render() {
+    // 🔴 render 중이면 → 다음 프레임으로 이월
+    if (this.isRendering_) {
+      this.needsNextFrame_ = true;
+      return;
+    }
+
+    // 🔴 이미 rAF 예약돼 있으면 중복 무시
+    if (this.renderScheduled_) {
+      return;
+    }
+
+    this.renderScheduled_ = true;
+
+    if (this.renderer_ && this.animationDelayKey_ === undefined) {
+      this.animationDelayKey_ = requestAnimationFrame(this.animationDelay_);
+    }
+  }
+
+
+  /**
+   * @private
+   */
+  animationDelay_() {
+    this.animationDelayKey_ = undefined;
+    this.renderScheduled_ = false;
+
+    // 🔵 render 시작
+    this.isRendering_ = true;
+
+    try {
+      this.renderFrame_(Date.now());
+    } finally {
+      this.isRendering_ = false;
+    }
+
+    // 🔵 render 중 발생한 비동기 요청이 있으면 다음 프레임 예약
+    if (this.needsNextFrame_) {
+      this.needsNextFrame_ = false;
+      this.render();
+    }
+  }
 
   
-}
 
+}
 
