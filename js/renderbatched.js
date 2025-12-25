@@ -50,36 +50,7 @@ class Map {
     });
   }
 
-  handleTileChange_(tile, layer) {
-    if (this.isInPostRender_) return;
-    
-    this.dirtyLayers_.add(layer);  // Dirty 추적
-    this.render();  // RAF 스케줄 (중복 안 됨)
-  }
-
-  renderFrame_() {
-    // Dirty 레이어만 업데이트
-    for (const layer of this.dirtyLayers_) {
-      layer.updateBuffer();
-    }
-    this.dirtyLayers_.clear();
-    
-    // 전체 렌더링
-    this.drawAllLayers();
-  }
+  
 }
 
 
-/////
-// 1. RAF 중복 방지
-render() {
-  if (this.renderScheduled_) return;
-  this.renderScheduled_ = true;
-  requestAnimationFrame(this.renderFrame_);
-}
-
-// 2. PostRender 순환 차단
-handleTileChange_() {
-  if (this.isInPostRender_) return;
-  this.render();
-}
