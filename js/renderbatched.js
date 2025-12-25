@@ -32,3 +32,18 @@ class Map {
     this.drawAllLayers();
   }
 }
+
+
+/////
+// 1. RAF 중복 방지
+render() {
+  if (this.renderScheduled_) return;
+  this.renderScheduled_ = true;
+  requestAnimationFrame(this.renderFrame_);
+}
+
+// 2. PostRender 순환 차단
+handleTileChange_() {
+  if (this.isInPostRender_) return;
+  this.render();
+}
