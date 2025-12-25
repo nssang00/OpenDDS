@@ -37,7 +37,6 @@ class Map {
 class Map {
   constructor() {
     this.renderScheduled_ = false;
-    this.dirtyLayers_ = new Set();
   }
 
   render() {
