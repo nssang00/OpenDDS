@@ -1,207 +1,124 @@
-class Map {
-  constructor() {
-    this.animationDelayKey_ = undefined;
-    this.isInPostRender_ = false; 
+
+class Map2 extends BaseObject {
+  constructor(options) {
+    super(options);
+
+    this.isRendering_ = false;      // renderFrame_ 실행 중
+    this.needsNextFrame_ = false;   // 렌더링 중 들어온 요청 예약
+    this.isInPostRender_ = false;   // postRender 실행 중 (순환 방지)
+
   }
 
-
-  handlePostRender() {
-    this.isInPostRender_ = true;  // 🔥 시작
-    
-    queueMicrotask(() => {
-      console.log('loadMoreTiles end')
-      this.isInPostRender_ = false;
-    });
-  }
-
-  handleTileChange_() {
-    // 🔥 postRender 순환만 차단
-    if (this.isInPostRender_) {
-      return;
-    }
-    
-    this.render();
-  }
-}
-//////////
-class Map {
-  constructor() {
-    this.animationDelayKey_ = undefined;
-
-    // 🔑 렌더링 상태 플래그
-    this.isRenderingFrame_ = false; // renderFrame 실행 중
-    this.needsRender_ = false;      // 실행 중 추가 render 요청 발생
-  }
-
-  /* =========================
-   * render 요청 (의사 표시)
-   * ========================= */
   render() {
-    // 🔥 renderFrame 실행 중이면 요청만 기록
-    if (this.isRenderingFrame_) {
-      this.needsRender_ = true;
+    if (this.isRendering_ || this.isInPostRender_) {
+      this.needsNextFrame_ = true;
+      return;  
+    }
+
+    if (this.animationDelayKey_ !== undefined) {
       return;
     }
 
-    // RAF 중복 방지
-    if (this.renderer_ && this.animationDelayKey_ === undefined) {
+    if (this.renderer_) {
       this.animationDelayKey_ = requestAnimationFrame(this.animationDelay_);
     }
   }
 
-  /* =========================
-   * RAF 콜백
-   * ========================= */
-  animationDelay_ = () => {
+  animationDelay_(timestamp) {
     this.animationDelayKey_ = undefined;
-    this.renderFrame_(Date.now());
-  };
-
-  /* =========================
-   * 실제 렌더링
-   * ========================= */
-  renderFrame_(time) {
-    let frameState = null;
-    this.isRenderingFrame_ = true;
+    this.isRendering_ = true;
 
     try {
-      const size = this.getSize();
-      const view = this.getView();
-      const previousFrameState = this.frameState_;
+      this.renderFrame_(timestamp || Date.now());
+    } finally {
+      this.isRendering_ = false;
+    }
 
-      if (size && hasArea(size) && view && view.isDef()) {
-        const viewHints = view.getHints(
-          this.frameState_ ? this.frameState_.viewHints : undefined,
-        );
-        const viewState = view.getState();
+    if (this.needsNextFrame_) {
+      this.needsNextFrame_ = false;
+      this.render();
+    }
+  }
 
-        frameState = {
-          animate: false,
-          coordinateToPixelTransform: this.coordinateToPixelTransform_,
-          declutter: null,
-          extent: getForViewAndSize(
-            viewState.center,
-            viewState.resolution,
-            viewState.rotation,
-            size,
-          ),
-          index: this.frameIndex_++,
-          layerIndex: 0,
-          layerStatesArray: this.getLayerGroup().getLayerStatesArray(),
-          pixelRatio: this.pixelRatio_,
-          pixelToCoordinateTransform: this.pixelToCoordinateTransform_,
-          postRenderFunctions: [],
-          size,
-          tileQueue: this.tileQueue_,
-          time,
-          usedTiles: {},
-          viewState,
-          viewHints,
-          wantedTiles: {},
-          mapId: getUid(this),
-          renderTargets: {},
-        };
+  handleTileChange_() {
+    this.render();  // render()가 알아서 체크
+  }
 
-        if (viewState.nextCenter && viewState.nextResolution) {
-          const rotation = isNaN(viewState.nextRotation)
-            ? viewState.rotation
-            : viewState.nextRotation;
+  handleSizeChanged_() {
+    if (this.getView() && !this.getView().getAnimating()) {
+      this.getView().resolveConstraints(0);
+    }
+    this.render();
+  }
 
-          frameState.nextExtent = getForViewAndSize(
-            viewState.nextCenter,
-            viewState.nextResolution,
-            rotation,
-            size,
-          );
-        }
-      }
+  handleViewPropertyChanged_() {
+    this.render();
+  }
 
-      this.frameState_ = frameState;
+  handlePostRender() {
+    this.isInPostRender_ = true;
 
-      // 🔥 실제 렌더러 호출
-      this.renderer_.renderFrame(frameState);
+    try {
+      const frameState = this.frameState_;
+      const tileQueue = this.tileQueue_;
 
-      if (frameState) {
-        // 🔥 애니메이션 요청은 "의사 표시"만
-        if (frameState.animate) {
-          this.needsRender_ = true;
-        }
+      // 타일 로딩
+      if (!tileQueue.isEmpty()) {
+        let maxTotalLoading = this.maxTilesLoading_;
+        let maxNewLoads = maxTotalLoading;
 
-        // postRenderFunctions 병합
-        Array.prototype.push.apply(
-          this.postRenderFunctions_,
-          frameState.postRenderFunctions,
-        );
-
-        // ===== moveStart / moveEnd 처리 =====
-        if (previousFrameState) {
-          const moveStart =
-            !this.previousExtent_ ||
-            (!isEmpty(this.previousExtent_) &&
-              !equalsExtent(frameState.extent, this.previousExtent_));
-
-          if (moveStart) {
-            this.dispatchEvent(
-              new MapEvent(MapEventType.MOVESTART, this, previousFrameState),
-            );
-            this.previousExtent_ = createOrUpdateEmpty(this.previousExtent_);
+        if (frameState) {
+          const hints = frameState.viewHints;
+          if (hints[ViewHint.ANIMATING] || hints[ViewHint.INTERACTING]) {
+            const lowOnFrameBudget = Date.now() - frameState.time > 8;
+            maxTotalLoading = lowOnFrameBudget ? 0 : 8;
+            maxNewLoads = lowOnFrameBudget ? 0 : 2;
           }
         }
 
-        const idle =
-          this.previousExtent_ &&
-          !frameState.viewHints[ViewHint.ANIMATING] &&
-          !frameState.viewHints[ViewHint.INTERACTING] &&
-          !equalsExtent(frameState.extent, this.previousExtent_);
-
-        if (idle) {
-          this.dispatchEvent(
-            new MapEvent(MapEventType.MOVEEND, this, frameState),
-          );
-          clone(frameState.extent, this.previousExtent_);
+        if (tileQueue.getTilesLoading() < maxTotalLoading) {
+          tileQueue.reprioritize();
+          tileQueue.loadMoreTiles(maxTotalLoading, maxNewLoads);
         }
       }
+
+      // RENDERCOMPLETE / LOAD 이벤트
+      if (frameState && this.renderer_ && !frameState.animate) {
+        if (this.renderComplete_) {
+          if (this.hasListener(RenderEventType.RENDERCOMPLETE)) {
+            this.renderer_.dispatchRenderEvent(
+              RenderEventType.RENDERCOMPLETE,
+              frameState
+            );
+          }
+          if (this.loaded_ === false) {
+            this.loaded_ = true;
+            this.dispatchEvent(
+              new MapEvent(MapEventType.LOADEND, this, frameState)
+            );
+          }
+        } else if (this.loaded_ === true) {
+          this.loaded_ = false;
+          this.dispatchEvent(
+            new MapEvent(MapEventType.LOADSTART, this, frameState)
+          );
+        }
+      }
+
+      // postRenderFunctions 실행
+      if (frameState) {
+        const funcs = this.postRenderFunctions_;
+        for (let i = 0, ii = funcs.length; i < ii; ++i) {
+          funcs[i](this, frameState);
+        }
+        funcs.length = 0;
+      }
+
     } finally {
-      // 🔚 renderFrame 종료
-      this.isRenderingFrame_ = false;
-    }
-
-    /* =========================
-     * 🔁 renderFrame 중 발생한 요청 처리
-     * ========================= */
-    if (this.needsRender_) {
-      this.needsRender_ = false;
-      this.render(); // 다음 RAF로 1회만 이어짐
-    }
-
-    // ===== POSTRENDER 이벤트 =====
-    this.dispatchEvent(
-      new MapEvent(MapEventType.POSTRENDER, this, frameState),
-    );
-
-    // ===== renderComplete 체크 (진짜 idle일 때만) =====
-    if (!this.needsRender_) {
-      this.renderComplete_ =
-        (this.hasListener(MapEventType.LOADSTART) ||
-          this.hasListener(MapEventType.LOADEND) ||
-          this.hasListener(RenderEventType.RENDERCOMPLETE)) &&
-        !this.tileQueue_.getTilesLoading() &&
-        !this.tileQueue_.getCount() &&
-        !this.getLoadingOrNotReady();
-    }
-
-    if (!this.postRenderTimeoutHandle_) {
-      this.postRenderTimeoutHandle_ = setTimeout(() => {
-        this.postRenderTimeoutHandle_ = undefined;
-        this.handlePostRender();
-      }, 0);
+      this.isInPostRender_ = false;
     }
   }
 
-  /* =========================
-   * 타일 변경 트리거
-   * ========================= */
-  handleTileChange_() {
-    this.render();
-  }
 }
+
+
