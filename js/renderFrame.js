@@ -29,7 +29,7 @@ class Map2 extends BaseObject {
     this.isRendering_ = true;
 
     try {
-      this.renderFrame_(timestamp || Date.now());
+      this.renderFrame_(Date.now());
     } finally {
       this.isRendering_ = false;
     }
