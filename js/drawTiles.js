@@ -1,27 +1,47 @@
-class WebGLVectorTileLayerRenderer extends WebGLBaseTileLayerRenderer {
-  constructor(...) {
-    super(...);
-    this.renderedTiles_ = {};  // renderer 단위
-    this.renderStateKey_ = null;
+class WebGLTileLayerRenderer extends LayerRenderer {
+  constructor(tileLayer, options) {
+    super(tileLayer, options);
+    
+    // ... 기존 초기화 ...
+    
+    /**
+     * @type {Object<string, boolean>}
+     * @private
+     */
+    this.renderedTiles_ = Object.create(null);
+    
+    /**
+     * @type {string|null}
+     * @private
+     */
+    this.lastViewStateKey_ = null;
   }
 
   renderFrame(frameState) {
-    const frameKey = ...; // viewState + canvas size + pixelRatio 등
-    if (this.renderStateKey_ !== frameKey) {
-      this.renderStateKey_ = frameKey;
-      this.renderedTiles_ = {}; // frame 단위 초기화
+    this.frameState = frameState;
+    
+    // 🔹 뷰 상태가 변경되면 캐시 초기화
+    const vs = frameState.viewState;
+    const currentViewStateKey = 
+      vs.resolution.toFixed(10) + '|' +
+      vs.center[0].toFixed(6) + ',' + vs.center[1].toFixed(6) + '|' +
+      (vs.rotation || 0).toFixed(10) + '|' +
+      frameState.size[0] + ',' + frameState.size[1] + '|' +
+      frameState.pixelRatio;
+    
+    if (currentViewStateKey !== this.lastViewStateKey_) {
+      this.renderedTiles_ = Object.create(null);
+      this.lastViewStateKey_ = currentViewStateKey;
     }
-    return super.renderFrame(frameState);
-  }
+    
+    this.renderComplete = true;
+    const gl = this.helper.getGL();
+    this.preRender(gl, frameState);
 
-  drawTile_(...) {
-    const renderKey = ...; // tileCoordKey + tile 단위 속성
-    if (this.renderedTiles_[renderKey]) return;
-
-    this.renderTile(...);
-    this.renderedTiles_[renderKey] = true;
+    // ... 기존 renderFrame 로직 전체 그대로 ...
+    
+    return canvas;
   }
-}
 
 
 
