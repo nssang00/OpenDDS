@@ -1,3 +1,31 @@
+class WebGLVectorTileLayerRenderer extends WebGLBaseTileLayerRenderer {
+  constructor(...) {
+    super(...);
+    this.renderedTiles_ = {};  // renderer 단위
+    this.renderStateKey_ = null;
+  }
+
+  renderFrame(frameState) {
+    const frameKey = ...; // viewState + canvas size + pixelRatio 등
+    if (this.renderStateKey_ !== frameKey) {
+      this.renderStateKey_ = frameKey;
+      this.renderedTiles_ = {}; // frame 단위 초기화
+    }
+    return super.renderFrame(frameState);
+  }
+
+  drawTile_(...) {
+    const renderKey = ...; // tileCoordKey + tile 단위 속성
+    if (this.renderedTiles_[renderKey]) return;
+
+    this.renderTile(...);
+    this.renderedTiles_[renderKey] = true;
+  }
+}
+
+
+
+////////////////////////////////
 // renderer 인스턴스 속성
 this.renderedTiles_ = null;
 // renderer.renderFrame_ 시작 시 (매 프레임 초기화)
