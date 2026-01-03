@@ -11,3 +11,11 @@
         return "SGISGraphicBase2D";
     }
 }
+
+%inline %{
+const char* GetGraphicTypeName(SGISGraphicBase2D* obj) {
+    if (dynamic_cast<SGiSPolygon*>(obj)) return "SGiSPolygon";
+    if (dynamic_cast<SGISLineString*>(obj)) return "SGISLineString";
+    return "SGISGraphicBase2D";
+}
+%}
