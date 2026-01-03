@@ -111,3 +111,14 @@ public static class GraphicObjectFactory
         return mangledName;
     }
 }
+
+// C++ 기본 클래스
+class SGISGraphicBase2D {
+public:
+    virtual const char* GetTypeName() const { return "SGISGraphicBase2D"; }
+};
+
+class SGISGraphicCircle : public SGISGraphicBase2D {
+public:
+    const char* GetTypeName() const override { return "SGISGraphicCircle"; }
+};
