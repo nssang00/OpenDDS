@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Worker Pool + Transferable Test</title>
+  <style>
+    body { font-family: monospace; padding: 16px; }
+    button { padding: 8px 12px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h2>Worker Pool + Transferable 테스트</h2>
+  <button id="run">작업 실행</button>
+  <pre id="log"></pre>
+
+  <script>
+    const log = (msg) => {
+      document.getElementById('log').textContent += msg + '\n';
+    };
+
+    /* ==============================
+       1️⃣ Worker 코드 (Blob)
+    ============================== */
+    const workerCode = `
+      self.onmessage = (e) => {
+        const { taskId, buffer } = e.data;
+        const view = new Float64Array(buffer);
+
+        // CPU-heavy 작업 시뮬레이션
+        let sum = 0;
+        for (let i = 0; i < view.length; i++) {
+          sum += Math.sqrt(view[i]);
+        }
+
+        // 결과를 buffer[0]에 저장
+        view[0] = sum;
+
+        // buffer 소유권을 다시 메인으로 반환
+        self.postMessage({ taskId, buffer }, [buffer]);
+      };
+    `;
+
+    const workerURL = URL.createObjectURL(
+      new Blob([workerCode], { type: 'application/javascript' })
+    );
+
+    /* ==============================
+       2️⃣ Worker Pool 구현
+    ============================== */
+    const WORKER_COUNT = Math.max(2, navigator.hardwareConcurrency - 1);
+    const workers = [];
+    const idleWorkers = [];
+    const taskQueue = [];
+    const pending = new Map();
+    let taskIdSeq = 0;
+
+    for (let i = 0; i < WORKER_COUNT; i++) {
+      const w = new Worker(workerURL);
+      w.onmessage = onWorkerMessage;
+      workers.push(w);
+      idleWorkers.push(w);
+    }
+
+    function onWorkerMessage(e) {
+      const { taskId, buffer } = e.data;
+      const { resolve } = pending.get(taskId);
+
+      pending.delete(taskId);
+      idleWorkers.push(e.target);
+
+      resolve(buffer);
+      dispatch();
+    }
+
+    function dispatch() {
+      if (idleWorkers.length === 0 || taskQueue.length === 0) return;
+
+      const worker = idleWorkers.pop();
+      const task = taskQueue.shift();
+
+      worker.postMessage(task, [task.buffer]);
+    }
+
+    function runTask(buffer) {
+      return new Promise((resolve) => {
+        const taskId = ++taskIdSeq;
+        pending.set(taskId, { resolve });
+        taskQueue.push({ taskId, buffer });
+        dispatch();
+      });
+    }
+
+    /* ==============================
+       3️⃣ 테스트 실행
+    ============================== */
+    document.getElementById('run').onclick = async () => {
+      log('작업 시작...');
+      const start = performance.now();
+
+      const tasks = [];
+      for (let i = 0; i < 8; i++) {
+        const buffer = new ArrayBuffer(8 * 1_000_000);
+        const view = new Float64Array(buffer);
+
+        for (let j = 0; j < view.length; j++) {
+          view[j] = Math.random() * 1000;
+        }
+
+        tasks.push(runTask(buffer));
+      }
+
+      const results = await Promise.all(tasks);
+
+      results.forEach((buffer, i) => {
+        const view = new Float64Array(buffer);
+        log(\`Task \${i} 결과: \${view[0].toFixed(2)}\`);
+      });
+
+      const end = performance.now();
+      log(\`총 소요 시간: \${(end - start).toFixed(1)} ms\`);
+      log('완료!');
+    };
+  </script>
+</body>
+</html>
