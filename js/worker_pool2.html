@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pull-based Worker + Transferable</title>
+  <style>
+    body { font-family: monospace; padding: 16px; }
+    button { padding: 8px 12px; }
+    pre { background: #111; color: #0f0; padding: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Pull 기반 Worker + Transferable (MapLibre 스타일)</h2>
+  <button id="run">작업 실행</button>
+  <pre id="log"></pre>
+
+<script>
+/* =========================
+   공통 로그
+========================= */
+const log = (msg) => {
+  document.getElementById('log').textContent += msg + '\n';
+};
+
+/* =========================
+   Worker 코드 (Blob)
+========================= */
+const workerCode = `
+  function requestTask() {
+    self.postMessage({ type: 'request' });
+  }
+
+  self.onmessage = (e) => {
+    if (e.data.type === 'task') {
+      const { taskId, buffer } = e.data;
+      const view = new Float32Array(buffer);
+
+      // CPU-heavy 작업 시뮬레이션
+      let sum = 0;
+      for (let i = 0; i < view.length; i++) {
+        sum += Math.sqrt(view[i]);
+      }
+
+      view[0] = sum;
+
+      // 결과 반환 (Transferable)
+      self.postMessage(
+        { type: 'result', taskId, buffer },
+        [buffer]
+      );
+
+      // 다음 작업 요청
+      requestTask();
+    }
+  };
+
+  // 최초 ready
+  requestTask();
+`;
+
+const workerURL = URL.createObjectURL(
+  new Blob([workerCode], { type: 'application/javascript' })
+);
+
+/* =========================
+   Main Thread
+========================= */
+const WORKER_COUNT = Math.max(2, navigator.hardwareConcurrency - 1);
+const workers = [];
+const taskQueue = [];
+const pending = new Map();
+let taskIdSeq = 0;
+
+for (let i = 0; i < WORKER_COUNT; i++) {
+  const w = new Worker(workerURL);
+  w.onmessage = onWorkerMessage;
+  workers.push(w);
+}
+
+function onWorkerMessage(e) {
+  const msg = e.data;
+
+  // worker가 일 요청
+  if (msg.type === 'request') {
+    const task = taskQueue.shift();
+    if (task) {
+      e.target.postMessage(
+        { type: 'task', ...task },
+        [task.buffer]
+      );
+    }
+    return;
+  }
+
+  // 결과 수신
+  if (msg.type === 'result') {
+    const { taskId, buffer } = msg;
+    pending.get(taskId)(buffer);
+    pending.delete(taskId);
+  }
+}
+
+function enqueueTask(buffer) {
+  return new Promise((resolve) => {
+    const taskId = ++taskIdSeq;
+    pending.set(taskId, resolve);
+    taskQueue.push({ taskId, buffer });
+  });
+}
+
+/* =========================
+   테스트 실행
+========================= */
+document.getElementById('run').onclick = async () => {
+  log('작업 시작');
+
+  const start = performance.now();
+  const tasks = [];
+
+  for (let i = 0; i < 8; i++) {
+    const buffer = new ArrayBuffer(4 * 1_000_000);
+    const view = new Float32Array(buffer);
+
+    for (let j = 0; j < view.length; j++) {
+      view[j] = Math.random() * 1000;
+    }
+
+    tasks.push(enqueueTask(buffer));
+  }
+
+  const results = await Promise.all(tasks);
+
+  results.forEach((buffer, i) => {
+    const view = new Float32Array(buffer);
+    log(`Task ${i} 결과: \${view[0].toFixed(2)}`);
+  });
+
+  log(`총 소요 시간:${(performance.now() - start).toFixed(1)} ms`);
+};
+</script>
+</body>
+</html>
