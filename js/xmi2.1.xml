@@ -1,0 +1,283 @@
+<?xml  version='1.0' encoding='windows-1252' ?>
+<xmi:XMI xmlns:xmi="http://schema.omg.org/spec/XMI/2.1" xmi:version="2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1" xmlns:thecustomprofile="http://www.sparxsystems.com/profiles/thecustomprofile/1.0">
+	<xmi:Documentation exporter="Enterprise Architect" exporterVersion="6.5" exporterID="1716"/>
+	<uml:Model xmi:type="uml:Model" name="EA_Model" visibility="public">
+		<packagedElement xmi:type="uml:Package" xmi:id="EAPK_8A928EC0_FA27_41b8_B777_3AD0566D730C" name="Model" visibility="public">
+			<packagedElement xmi:type="uml:Package" xmi:id="EAPK_E916A60A_CE89_4890_BC94_774A20010D63" name="UMAA_Standard" visibility="public">
+				<packagedElement xmi:type="uml:Package" xmi:id="EAPK_EF77C4AB_9B09_4e7a_830F_E9A319FC757E" name="SA" visibility="public">
+					<packagedElement xmi:type="uml:Package" xmi:id="EAPK_B1AAC945_1F55_42fc_9839_88E169307909" name="VelocityStatus" visibility="public">
+						<packagedElement xmi:type="uml:Class" xmi:id="EAID_3EB86C99_A146_4cf4_8876_DEFC38F717FD" name="VelocityReportType" visibility="public">
+							<ownedAttribute xmi:type="uml:Property" xmi:id="EAID_DB0A4A7E_8202_4069_99C4_DB54AB5D4EED" name="attitudeRate" visibility="private" isStatic="false" isReadOnly="false" isDerived="false" isOrdered="false" isUnique="true" isDerivedUnion="false">
+								<lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000001_8202_4069_99C4_DB54AB5D4EED" value="1"/>
+								<upperValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000002_8202_4069_99C4_DB54AB5D4EED" value="1"/>
+								<type xmi:idref="EAJava_OrientationVel3D"/>
+							</ownedAttribute>
+							<ownedAttribute xmi:type="uml:Property" xmi:id="EAID_E054E33D_6122_4e26_8A1B_D1584E69D90F" name="attitudeRateCovariance" visibility="private" isStatic="false" isReadOnly="false" isDerived="false" isOrdered="false" isUnique="true" isDerivedUnion="false">
+								<lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000003_6122_4e26_8A1B_D1584E69D90F" value="1"/>
+								<upperValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000004_6122_4e26_8A1B_D1584E69D90F" value="1"/>
+								<type xmi:idref="EAJava_CovarianceOrientationVelocityNEDType"/>
+							</ownedAttribute>
+							<ownedAttribute xmi:type="uml:Property" xmi:id="EAID_8AB97351_225A_41db_95CA_98E3E1C062A9" name="source" visibility="private" isStatic="false" isReadOnly="false" isDerived="false" isOrdered="false" isUnique="true" isDerivedUnion="false">
+								<lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000005_225A_41db_95CA_98E3E1C062A9" value="1"/>
+								<upperValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000006_225A_41db_95CA_98E3E1C062A9" value="1"/>
+								<type xmi:idref="EAJava_IdentifierType"/>
+							</ownedAttribute>
+							<ownedAttribute xmi:type="uml:Property" xmi:id="EAID_F31DA7FB_2B57_4339_AFE8_7E6BFFF395CD" name="timeStamp" visibility="private" isStatic="false" isReadOnly="false" isDerived="false" isOrdered="false" isUnique="true" isDerivedUnion="false">
+								<lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000007_2B57_4339_AFE8_7E6BFFF395CD" value="1"/>
+								<upperValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000008_2B57_4339_AFE8_7E6BFFF395CD" value="1"/>
+								<type xmi:idref="EAJava_DateTime"/>
+							</ownedAttribute>
+							<ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A909C670_C760_4f6e_B5D0_890A64023054" name="velocity" visibility="private" isStatic="false" isReadOnly="false" isDerived="false" isOrdered="false" isUnique="true" isDerivedUnion="false">
+								<lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000009_C760_4f6e_B5D0_890A64023054" value="1"/>
+								<upperValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000010_C760_4f6e_B5D0_890A64023054" value="1"/>
+								<type xmi:idref="EAJava_Velocity3DPlatformNEDType"/>
+							</ownedAttribute>
+							<ownedAttribute xmi:type="uml:Property" xmi:id="EAID_E456F2D8_A6F2_41d3_882E_58EDB13F3B44" name="velocityCovariance" visibility="private" isStatic="false" isReadOnly="false" isDerived="false" isOrdered="false" isUnique="true" isDerivedUnion="false">
+								<lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000011_A6F2_41d3_882E_58EDB13F3B44" value="1"/>
+								<upperValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000012_A6F2_41d3_882E_58EDB13F3B44" value="1"/>
+								<type xmi:idref="EAJava_CovarianceVelocityNEDType"/>
+							</ownedAttribute>
+						</packagedElement>
+					</packagedElement>
+				</packagedElement>
+			</packagedElement>
+		</packagedElement>
+		<thecustomprofile:IDL_Struct base_Class="EAID_3EB86C99_A146_4cf4_8876_DEFC38F717FD"/>
+		<thecustomprofile:UMAAOptional base_Property="EAID_E054E33D_6122_4e26_8A1B_D1584E69D90F"/>
+		<thecustomprofile:key base_Property="EAID_8AB97351_225A_41db_95CA_98E3E1C062A9"/>
+		<thecustomprofile:UMAAOptional base_Property="EAID_E456F2D8_A6F2_41d3_882E_58EDB13F3B44"/>
+	</uml:Model>
+	<xmi:Extension extender="Enterprise Architect" extenderID="6.5">
+		<elements>
+			<element xmi:idref="EAPK_8A928EC0_FA27_41b8_B777_3AD0566D730C">
+				<packageproperties version="1.0"/>
+				<paths/>
+				<times created="2012-04-17 00:01:01" modified="2012-04-17 00:01:01" lastloaddate="2012-04-17 00:01:01" lastsavedate="2012-04-17 00:01:01"/>
+				<flags iscontrolled="0" isprotected="0" usedtd="0" logxml="0" packageFlags="isModel=1;"/>
+			</element>
+			<element xmi:idref="EAPK_E916A60A_CE89_4890_BC94_774A20010D63" xmi:type="uml:Package" name="UMAA_Standard" scope="public">
+				<model package2="EAID_E916A60A_CE89_4890_BC94_774A20010D63" package="EAPK_8A928EC0_FA27_41b8_B777_3AD0566D730C" tpos="0" ea_localid="5" ea_eleType="package"/>
+				<properties isSpecification="false" sType="Package" nType="0" scope="public"/>
+				<project author="juwan.ryu" version="1.0" phase="1.0" created="2026-02-10 10:14:23" modified="2026-02-10 10:14:23" complexity="1" status="Proposed"/>
+				<code gentype="Java"/>
+				<style appearance="BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"/>
+				<tags/>
+				<xrefs/>
+				<extendedProperties tagged="0" package_name="Model"/>
+				<packageproperties version="1.0"/>
+				<paths/>
+				<times created="2026-02-10 10:14:23" modified="2026-02-10 10:14:23"/>
+				<flags iscontrolled="0" isprotected="0" usedtd="0" logxml="0" packageFlags="isModel=1;VICON=3;"/>
+			</element>
+			<element xmi:idref="EAPK_EF77C4AB_9B09_4e7a_830F_E9A319FC757E" xmi:type="uml:Package" name="SA" scope="public">
+				<model package2="EAID_EF77C4AB_9B09_4e7a_830F_E9A319FC757E" package="EAPK_E916A60A_CE89_4890_BC94_774A20010D63" tpos="0" ea_localid="7" ea_eleType="package"/>
+				<properties isSpecification="false" sType="Package" nType="0" scope="public"/>
+				<project author="juwan.ryu" version="1.0" phase="1.0" created="2026-02-10 10:20:42" modified="2026-02-10 10:20:42" complexity="1" status="Proposed"/>
+				<code gentype="Java"/>
+				<style appearance="BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"/>
+				<tags/>
+				<xrefs/>
+				<extendedProperties tagged="0" package_name="UMAA_Standard"/>
+				<packageproperties version="1.0"/>
+				<paths/>
+				<times created="2026-02-10 10:20:42" modified="2026-02-10 10:20:42"/>
+				<flags iscontrolled="0" isprotected="0" usedtd="0" logxml="0"/>
+			</element>
+			<element xmi:idref="EAPK_B1AAC945_1F55_42fc_9839_88E169307909" xmi:type="uml:Package" name="VelocityStatus" scope="public">
+				<model package2="EAID_B1AAC945_1F55_42fc_9839_88E169307909" package="EAPK_EF77C4AB_9B09_4e7a_830F_E9A319FC757E" tpos="0" ea_localid="8" ea_eleType="package"/>
+				<properties isSpecification="false" sType="Package" nType="0" scope="public"/>
+				<project author="juwan.ryu" version="1.0" phase="1.0" created="2026-02-10 10:25:43" modified="2026-02-10 10:25:43" complexity="1" status="Proposed"/>
+				<code gentype="Java"/>
+				<style appearance="BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"/>
+				<tags/>
+				<xrefs/>
+				<extendedProperties tagged="0" package_name="SA"/>
+				<packageproperties version="1.0"/>
+				<paths/>
+				<times created="2026-02-10 10:25:43" modified="2026-02-10 10:25:43"/>
+				<flags iscontrolled="0" isprotected="0" usedtd="0" logxml="0"/>
+			</element>
+			<element xmi:idref="EAID_3EB86C99_A146_4cf4_8876_DEFC38F717FD" xmi:type="uml:Class" name="VelocityReportType" scope="public">
+				<model package="EAPK_B1AAC945_1F55_42fc_9839_88E169307909" tpos="0" ea_localid="10" ea_eleType="element"/>
+				<properties isSpecification="false" sType="Class" nType="0" scope="public" stereotype="IDL_Struct" isRoot="false" isLeaf="false" isAbstract="false" isActive="false"/>
+				<project author="juwan.ryu" version="1.0" phase="1.0" created="2026-02-10 10:40:14" modified="2026-02-10 10:41:18" complexity="1" status="Proposed"/>
+				<code gentype="Java"/>
+				<style appearance="BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"/>
+				<tags/>
+				<xrefs value="$XREFPROP=$XID={0B0144B5-9504-452b-9B92-006DE7E54973}$XID;$NAM=Stereotypes$NAM;$TYP=element property$TYP;$VIS=Public$VIS;$PAR=0$PAR;$DES=@STEREO;Name=IDL_Struct;GUID={1916F4E8-9312-4e3e-9A08-2F74B279D85C};@ENDSTEREO;$DES;$CLT={3EB86C99-A146-4cf4-8876-DEFC38F717FD}$CLT;$SUP=&lt;none&gt;$SUP;$ENDXREF;"/>
+				<extendedProperties tagged="0" package_name="VelocityStatus"/>
+				<attributes>
+					<attribute xmi:idref="EAID_DB0A4A7E_8202_4069_99C4_DB54AB5D4EED" name="attitudeRate" scope="Private">
+						<initial/>
+						<documentation/>
+						<model ea_localid="1" ea_guid="{DB0A4A7E-8202-4069-99C4-DB54AB5D4EED}"/>
+						<properties type="OrientationVel3D" collection="false" static="0" duplicates="0" changeability="changeable"/>
+						<coords ordered="0"/>
+						<containment containment="Not Specified" position="0"/>
+						<stereotype/>
+						<bounds lower="1" upper="1"/>
+						<options/>
+						<style/>
+						<styleex value="volatile=0;"/>
+						<tags/>
+						<xrefs/>
+					</attribute>
+					<attribute xmi:idref="EAID_E054E33D_6122_4e26_8A1B_D1584E69D90F" name="attitudeRateCovariance" scope="Private">
+						<initial/>
+						<documentation/>
+						<model ea_localid="2" ea_guid="{E054E33D-6122-4e26-8A1B-D1584E69D90F}"/>
+						<properties type="CovarianceOrientationVelocityNEDType" collection="false" static="0" duplicates="0" changeability="changeable"/>
+						<coords ordered="0"/>
+						<containment containment="Not Specified" position="1"/>
+						<stereotype stereotype="UMAAOptional"/>
+						<bounds lower="1" upper="1"/>
+						<options/>
+						<style/>
+						<styleex value="volatile=0;"/>
+						<tags/>
+						<xrefs/>
+					</attribute>
+					<attribute xmi:idref="EAID_8AB97351_225A_41db_95CA_98E3E1C062A9" name="source" scope="Private">
+						<initial/>
+						<documentation/>
+						<model ea_localid="6" ea_guid="{8AB97351-225A-41db-95CA-98E3E1C062A9}"/>
+						<properties type="IdentifierType" collection="false" static="0" duplicates="0" changeability="changeable"/>
+						<coords ordered="0"/>
+						<containment containment="Not Specified" position="5"/>
+						<stereotype stereotype="key"/>
+						<bounds lower="1" upper="1"/>
+						<options/>
+						<style/>
+						<styleex value="volatile=0;"/>
+						<tags/>
+						<xrefs value="$XREFPROP=$XID={636847DF-4AEC-4ccc-84AB-2A6B3B669DAE}$XID;$NAM=Stereotypes$NAM;$TYP=attribute property$TYP;$VIS=Public$VIS;$PAR=0$PAR;$DES=@STEREO;Name=key;GUID={E1DBE852-C9D7-49ed-BBB0-746EEA7CD82A};@ENDSTEREO;$DES;$CLT={8AB97351-225A-41db-95CA-98E3E1C062A9}$CLT;$SUP=&lt;none&gt;$SUP;$ENDXREF;"/>
+					</attribute>
+					<attribute xmi:idref="EAID_F31DA7FB_2B57_4339_AFE8_7E6BFFF395CD" name="timeStamp" scope="Private">
+						<initial/>
+						<documentation/>
+						<model ea_localid="5" ea_guid="{F31DA7FB-2B57-4339-AFE8-7E6BFFF395CD}"/>
+						<properties type="DateTime" collection="false" static="0" duplicates="0" changeability="changeable"/>
+						<coords ordered="0"/>
+						<containment containment="Not Specified" position="4"/>
+						<stereotype/>
+						<bounds lower="1" upper="1"/>
+						<options/>
+						<style/>
+						<styleex value="volatile=0;"/>
+						<tags/>
+						<xrefs/>
+					</attribute>
+					<attribute xmi:idref="EAID_A909C670_C760_4f6e_B5D0_890A64023054" name="velocity" scope="Private">
+						<initial/>
+						<documentation/>
+						<model ea_localid="3" ea_guid="{A909C670-C760-4f6e-B5D0-890A64023054}"/>
+						<properties type="Velocity3DPlatformNEDType" collection="false" static="0" duplicates="0" changeability="changeable"/>
+						<coords ordered="0"/>
+						<containment containment="Not Specified" position="2"/>
+						<stereotype/>
+						<bounds lower="1" upper="1"/>
+						<options/>
+						<style/>
+						<styleex value="volatile=0;"/>
+						<tags/>
+						<xrefs/>
+					</attribute>
+					<attribute xmi:idref="EAID_E456F2D8_A6F2_41d3_882E_58EDB13F3B44" name="velocityCovariance" scope="Private">
+						<initial/>
+						<documentation/>
+						<model ea_localid="4" ea_guid="{E456F2D8-A6F2-41d3-882E-58EDB13F3B44}"/>
+						<properties type="CovarianceVelocityNEDType" collection="false" static="0" duplicates="0" changeability="changeable"/>
+						<coords ordered="0"/>
+						<containment containment="Not Specified" position="3"/>
+						<stereotype stereotype="UMAAOptional"/>
+						<bounds lower="1" upper="1"/>
+						<options/>
+						<style/>
+						<styleex value="volatile=0;"/>
+						<tags/>
+						<xrefs value="$XREFPROP=$XID={0E0D4957-288D-4971-961C-325BD8DD972B}$XID;$NAM=Stereotypes$NAM;$TYP=attribute property$TYP;$VIS=Public$VIS;$PAR=0$PAR;$DES=@STEREO;Name=UMAAOptional;@ENDSTEREO;$DES;$CLT={E456F2D8-A6F2-41d3-882E-58EDB13F3B44}$CLT;$SUP=&lt;none&gt;$SUP;$ENDXREF;"/>
+					</attribute>
+				</attributes>
+			</element>
+		</elements>
+		<connectors/>
+		<primitivetypes>
+			<packagedElement xmi:type="uml:Package" xmi:id="EAPrimitiveTypesPackage" name="EA_PrimitiveTypes_Package" visibility="public">
+				<packagedElement xmi:type="uml:Package" xmi:id="EAJavaTypesPackage" name="EA_Java_Types_Package" visibility="public">
+					<packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_OrientationVel3D" name="OrientationVel3D" visibility="public"/>
+					<packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_CovarianceOrientationVelocityNEDType" name="CovarianceOrientationVelocityNEDType" visibility="public"/>
+					<packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_IdentifierType" name="IdentifierType" visibility="public"/>
+					<packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_DateTime" name="DateTime" visibility="public"/>
+					<packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_Velocity3DPlatformNEDType" name="Velocity3DPlatformNEDType" visibility="public"/>
+					<packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_CovarianceVelocityNEDType" name="CovarianceVelocityNEDType" visibility="public"/>
+				</packagedElement>
+			</packagedElement>
+		</primitivetypes>
+		<profiles>
+			<uml:Profile xmlns:uml="http://schema.omg.org/spec/UML/2.1/" xmlns:xmi="http://schema.omg.org/spec/XMI/2.1" xmi:version="2.1" xmi:id="thecustomprofile" nsPrefix="thecustomprofile" name="thecustomprofile" metamodelReference="mmref01">
+				<ownedComment xmi:type="uml:Comment" xmi:id="comment01" annotatedElement="thecustomprofile">
+					<body> Version:1.0</body>
+				</ownedComment>
+				<packageImport xmi:id="mmref01">
+					<importedPackage href="http://schema.omg.org/spec/UML/2.1/"/>
+				</packageImport>
+				<packagedElement xmi:type="uml:Stereotype" xmi:id="UMAAOptional" name="UMAAOptional">
+					<ownedAttribute xmi:type="uml:Property" xmi:id="UMAAOptional-base_Property" name="base_Property" association="Property_UMAAOptional">
+						<type href="http://schema.omg.org/spec/UML/2.1/Property"/>
+					</ownedAttribute>
+				</packagedElement>
+				<packagedElement xmi:type="uml:Extension" xmi:id="Property_UMAAOptional" name="A_Property_UMAAOptional" memberEnd="extension_UMAAOptional UMAAOptional-base_Property">
+					<ownedEnd xmi:type="uml:ExtensionEnd" xmi:id="extension_UMAAOptional" name="extension_UMAAOptional" type="UMAAOptional" isComposite="true" lower="0" upper="1" memberEnd="extension_UMAAOptional UMAAOptional-base_Property"/>
+				</packagedElement>
+				<packagedElement xmi:type="uml:Stereotype" xmi:id="IDL_Struct" name="IDL_Struct">
+					<ownedAttribute xmi:type="uml:Property" xmi:id="IDL_Struct-base_Class" name="base_Class" association="Class_IDL_Struct">
+						<type href="http://schema.omg.org/spec/UML/2.1/Class"/>
+					</ownedAttribute>
+				</packagedElement>
+				<packagedElement xmi:type="uml:Extension" xmi:id="Class_IDL_Struct" name="A_Class_IDL_Struct" memberEnd="extension_IDL_Struct IDL_Struct-base_Class">
+					<ownedEnd xmi:type="uml:ExtensionEnd" xmi:id="extension_IDL_Struct" name="extension_IDL_Struct" type="IDL_Struct" isComposite="true" lower="0" upper="1" memberEnd="extension_IDL_Struct IDL_Struct-base_Class"/>
+				</packagedElement>
+				<packagedElement xmi:type="uml:Stereotype" xmi:id="key" name="key">
+					<ownedAttribute xmi:type="uml:Property" xmi:id="key-base_Property" name="base_Property" association="Property_key">
+						<type href="http://schema.omg.org/spec/UML/2.1/Property"/>
+					</ownedAttribute>
+				</packagedElement>
+				<packagedElement xmi:type="uml:Extension" xmi:id="Property_key" name="A_Property_key" memberEnd="extension_key key-base_Property">
+					<ownedEnd xmi:type="uml:ExtensionEnd" xmi:id="extension_key" name="extension_key" type="key" isComposite="true" lower="0" upper="1" memberEnd="extension_key key-base_Property"/>
+				</packagedElement>
+			</uml:Profile>
+		</profiles>
+		<diagrams>
+			<diagram xmi:id="EAID_8A2FFEFA_F534_42f4_AB4D_2CF69E811C7D">
+				<model package="EAPK_E916A60A_CE89_4890_BC94_774A20010D63" localID="2" owner="EAPK_E916A60A_CE89_4890_BC94_774A20010D63"/>
+				<properties name="UMAA_Standard" type="Package"/>
+				<project author="juwan.ryu" version="1.0" created="2026-02-10 10:16:20" modified="2026-02-10 10:20:43"/>
+				<style1 value="ShowPrivate=1;ShowProtected=1;ShowPublic=1;HideRelationships=0;Locked=0;Border=1;HighlightForeign=1;PackageContents=1;SequenceNotes=0;ScalePrintImage=0;PPgs.cx=0;PPgs.cy=0;DocSize.cx=791;DocSize.cy=1134;ShowDetails=0;Orientation=P;Zoom=100;ShowTags=0;OpParams=1;VisibleAttributeDetail=0;ShowOpRetType=1;ShowIcons=1;CollabNums=0;HideProps=0;ShowReqs=0;ShowCons=0;PaperSize=9;HideParents=0;UseAlias=0;HideAtts=0;HideOps=0;HideStereo=0;HideElemStereo=0;ShowTests=0;ShowMaint=0;ConnectorNotation=UML 2.1;ExplicitNavigability=0;ShowShape=1;AllDockable=0;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;ShowNotes=0;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;"/>
+				<style2 value="ExcludeRTF=0;DocAll=0;HideQuals=0;AttPkg=1;ShowTests=0;ShowMaint=0;SuppressFOC=1;MatrixActive=0;SwimlanesActive=1;KanbanActive=0;MatrixLineWidth=1;MatrixLineClr=0;MatrixLocked=0;TConnectorNotation=UML 2.1;TExplicitNavigability=0;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;MDGDgm=;STBLDgm=;ShowNotes=0;VisibleAttributeDetail=0;ShowOpRetType=1;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;SuppressedCompartments=;Theme=:119;SaveTag=581AF4AB;"/>
+				<swimlanes value="locked=false;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-10,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;"/>
+				<matrixitems value="locked=false;matrixactive=false;swimlanesactive=true;kanbanactive=false;width=1;clrLine=0;"/>
+				<extendedProperties/>
+				<persistentstyle value="DGS=On=0:CNT=8:W=120:H=40:SG=0:SGH=0:AEB=0:;AR=0;DCL=0;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-10,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;;Swimlanes=locked=false;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-10,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;;"/>
+				<xrefs/>
+				<elements>
+					<element geometry="Left=111;Top=113;Right=241;Bottom=193;" subject="EAID_EF77C4AB_9B09_4e7a_830F_E9A319FC757E" seqno="1" style="DUID=7F8140C7;"/>
+				</elements>
+			</diagram>
+			<diagram xmi:id="EAID_B9C13A31_D90F_4a77_9720_9CBB3CC50D8B">
+				<model package="EAPK_B1AAC945_1F55_42fc_9839_88E169307909" localID="3" owner="EAPK_B1AAC945_1F55_42fc_9839_88E169307909"/>
+				<properties name="VelocityStatus" type="Logical"/>
+				<project author="juwan.ryu" version="1.0" created="2026-02-10 10:25:53" modified="2026-02-10 10:40:14"/>
+				<style1 value="ShowPrivate=1;ShowProtected=1;ShowPublic=1;HideRelationships=0;Locked=0;Border=1;HighlightForeign=1;PackageContents=1;SequenceNotes=0;ScalePrintImage=0;PPgs.cx=0;PPgs.cy=0;DocSize.cx=791;DocSize.cy=1134;ShowDetails=0;Orientation=P;Zoom=100;ShowTags=0;OpParams=1;VisibleAttributeDetail=0;ShowOpRetType=1;ShowIcons=1;CollabNums=0;HideProps=0;ShowReqs=0;ShowCons=0;PaperSize=9;HideParents=0;UseAlias=0;HideAtts=0;HideOps=0;HideStereo=0;HideElemStereo=0;ShowTests=0;ShowMaint=0;ConnectorNotation=UML 2.1;ExplicitNavigability=0;ShowShape=1;AllDockable=0;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;ShowNotes=0;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;"/>
+				<style2 value="ExcludeRTF=0;DocAll=0;HideQuals=0;AttPkg=1;ShowTests=0;ShowMaint=0;SuppressFOC=1;MatrixActive=0;SwimlanesActive=1;KanbanActive=0;MatrixLineWidth=1;MatrixLineClr=0;MatrixLocked=0;TConnectorNotation=UML 2.1;TExplicitNavigability=0;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;MDGDgm=;STBLDgm=;ShowNotes=0;VisibleAttributeDetail=0;ShowOpRetType=1;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;SuppressedCompartments=;Theme=:119;SaveTag=99AB3D85;"/>
+				<swimlanes value="locked=false;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-10,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;"/>
+				<matrixitems value="locked=false;matrixactive=false;swimlanesactive=true;kanbanactive=false;width=1;clrLine=0;"/>
+				<extendedProperties/>
+				<persistentstyle value="DGS=On=0:CNT=8:W=120:H=40:SG=0:SGH=0:AEB=0:;AR=0;DCL=0;Swimlanes=locked=false;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-10,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;;"/>
+				<xrefs/>
+				<elements>
+					<element geometry="Left=112;Top=74;Right=202;Bottom=144;" subject="EAID_3EB86C99_A146_4cf4_8876_DEFC38F717FD" seqno="1" style="DUID=CC27CFA3;"/>
+				</elements>
+			</diagram>
+		</diagrams>
+	</xmi:Extension>
+</xmi:XMI>
