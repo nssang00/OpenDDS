@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <stdexcept>
+#include <algorithm>
 #include <windows.h>
 
 #include "gdal_priv.h"
@@ -101,15 +102,22 @@ void convertToMBTiles(const std::string& inputFolder,
     );
     GDALTranslateOptionsFree(transOpts);
     GDALClose(vrtDS);
+    GDALClose(mbDS);
     VSIUnlink("/vsimem/merged.vrt");
 
     if (!mbDS)
         throw std::runtime_error("[GDALTranslate] 실패: " + std::string(CPLGetLastErrorMsg()));
 
     // ── STEP 3. BuildOverviews ────────────────────────
+    GDALDataset* ovDS = (GDALDataset*)GDALOpen(outputPath.c_str(), GA_Update);
+    if (!ovDS)
+        throw std::runtime_error("[BuildOverviews] 파일 열기 실패: "
+                                 + std::string(CPLGetLastErrorMsg()));
+
     int levels[] = {2, 4, 8, 16, 32, 64, 128};
 
-    CPLErr err = mbDS->BuildOverviews(
+    CPLErr err = GDALBuildOverviews(
+        (GDALDatasetH)ovDS,
         "BILINEAR",
         sizeof(levels) / sizeof(int),
         levels,
@@ -118,10 +126,11 @@ void convertToMBTiles(const std::string& inputFolder,
         GDALDummyProgress,
         nullptr
     );
-    GDALClose(mbDS);
+    GDALClose(ovDS);
 
     if (err != CE_None)
-        throw std::runtime_error("[BuildOverviews] 실패: " + std::string(CPLGetLastErrorMsg()));
+        throw std::runtime_error("[BuildOverviews] 실패: "
+                                 + std::string(CPLGetLastErrorMsg()));
 }
 
 int main(int argc, char* argv[])
