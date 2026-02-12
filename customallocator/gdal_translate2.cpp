@@ -48,28 +48,34 @@ static std::vector<std::string> collectTifFiles(const std::string& folder)
     return files;
 }
 
-void convertToMBTiles(const std::string& inputFolder,
-                      const std::string& outputPath)
+void convertToMBTiles(const std::string& inputFolder)
 {
+    const std::string outputPath = inputFolder + "\\output.mbtiles";
+
     std::vector<std::string> inputFiles = collectTifFiles(inputFolder);
 
     if (inputFiles.empty())
-        throw std::runtime_error("[입력] " + inputFolder + " 에서 tif 파일을 찾을 수 없음");
+        throw std::runtime_error("[Input] No tif files found in: " + inputFolder);
 
-    std::cout << "tif 파일 " << inputFiles.size() << "개 발견\n";
+    std::cout << "Input folder : " << inputFolder << "\n";
+    std::cout << "Output file  : " << outputPath << "\n";
+    std::cout << "Tif files    : " << inputFiles.size() << "\n";
     for (size_t i = 0; i < inputFiles.size(); i++)
         std::cout << "  " << inputFiles[i] << "\n";
+    std::cout << "\n";
 
     GDALAllRegister();
     CPLSetConfigOption("GDAL_NUM_THREADS", "ALL_CPUS");
 
-    // ── STEP 1. BuildVRT → /vsimem/merged.vrt ────────
+    // -- STEP 1/2. BuildVRT + GDALTranslate -> MBTiles ----
+    std::cout << "[1/2] BuildVRT + Translate to MBTiles...\n";
+
     std::vector<GDALDataset*> srcDS;
     srcDS.reserve(inputFiles.size());
     for (size_t i = 0; i < inputFiles.size(); i++) {
         GDALDataset* ds = (GDALDataset*)GDALOpen(inputFiles[i].c_str(), GA_ReadOnly);
         if (!ds)
-            throw std::runtime_error("[BuildVRT] GDALOpen 실패: " + inputFiles[i]
+            throw std::runtime_error("[BuildVRT] GDALOpen failed: " + inputFiles[i]
                                      + " | " + CPLGetLastErrorMsg());
         srcDS.push_back(ds);
     }
@@ -83,7 +89,6 @@ void convertToMBTiles(const std::string& inputFolder,
     GDALBuildVRTOptions* vrtOpts = GDALBuildVRTOptionsNew(const_cast<char**>(vrtArgv), nullptr);
 
     int usageErr = FALSE;
-    std::cout << "[1/3] BuildVRT...\n";
     GDALDataset* vrtDS = (GDALDataset*)GDALBuildVRT(
         "/vsimem/merged.vrt",
         (int)srcDS.size(),
@@ -96,10 +101,7 @@ void convertToMBTiles(const std::string& inputFolder,
     for (size_t i = 0; i < srcDS.size(); i++) GDALClose(srcDS[i]);
 
     if (!vrtDS)
-        throw std::runtime_error("[BuildVRT] 실패: " + std::string(CPLGetLastErrorMsg()));
-
-    // ── STEP 2. GDALTranslate → MBTiles ──────────────
-    std::cout << "[2/3] GDALTranslate → MBTiles\n";
+        throw std::runtime_error("[BuildVRT] Failed: " + std::string(CPLGetLastErrorMsg()));
 
     const char* transArgv[] = {
         "-of", "MBTILES",
@@ -121,14 +123,14 @@ void convertToMBTiles(const std::string& inputFolder,
     VSIUnlink("/vsimem/merged.vrt");
 
     if (!mbDS)
-        throw std::runtime_error("[GDALTranslate] 실패: " + std::string(CPLGetLastErrorMsg()));
+        throw std::runtime_error("[GDALTranslate] Failed: " + std::string(CPLGetLastErrorMsg()));
 
-    // ── STEP 3. BuildOverviews ────────────────────────
-    std::cout << "[3/3] BuildOverviews\n";
+    // -- STEP 2/2. BuildOverviews -------------------------
+    std::cout << "[2/2] Building overviews...\n";
 
     GDALDataset* ovDS = (GDALDataset*)GDALOpen(outputPath.c_str(), GA_Update);
     if (!ovDS)
-        throw std::runtime_error("[BuildOverviews] 파일 열기 실패: "
+        throw std::runtime_error("[BuildOverviews] Failed to open file: "
                                  + std::string(CPLGetLastErrorMsg()));
 
     int levels[] = {2, 4, 8, 16, 32, 64, 128};
@@ -146,24 +148,32 @@ void convertToMBTiles(const std::string& inputFolder,
     GDALClose(ovDS);
 
     if (err != CE_None)
-        throw std::runtime_error("[BuildOverviews] 실패: "
+        throw std::runtime_error("[BuildOverviews] Failed: "
                                  + std::string(CPLGetLastErrorMsg()));
 }
 
 int main(int argc, char* argv[])
 {
-    if (argc != 3) {
-        std::cerr << "사용법: " << argv[0] << " <입력폴더> <출력.mbtiles>\n";
-        std::cerr << "예시:   " << argv[0] << " C:\\data\\tiles output.mbtiles\n";
-        return 1;
+    std::string inputFolder;
+
+    if (argc >= 2) {
+        inputFolder = argv[1];
+    } else {
+        std::cout << "Enter the folder path containing tif files: ";
+        std::getline(std::cin, inputFolder);
     }
 
+    // Remove trailing slash if present
+    if (!inputFolder.empty() &&
+        (inputFolder.back() == '\\' || inputFolder.back() == '/'))
+        inputFolder.pop_back();
+
     try {
-        convertToMBTiles(argv[1], argv[2]);
-        std::cout << "완료: " << argv[2] << "\n";
+        convertToMBTiles(inputFolder);
+        std::cout << "\nDone.\n";
     }
     catch (const std::exception& e) {
-        std::cerr << "오류: " << e.what() << "\n";
+        std::cerr << "Error: " << e.what() << "\n";
         VSIUnlink("/vsimem/merged.vrt");
         return 1;
     }
