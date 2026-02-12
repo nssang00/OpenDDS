@@ -2,214 +2,143 @@
 #include <vector>
 #include <string>
 #include <stdexcept>
+#include <windows.h>
 
 #include "gdal_priv.h"
-#include "gdal_utils.h"   // GDALBuildVRT, GDALWarp, GDALTranslate
+#include "gdal_utils.h"
 #include "cpl_conv.h"
-#include "cpl_string.h"
-#include "ogr_spatialref.h"
+#include "cpl_vsi.h"
 
-// ─────────────────────────────────────────
-// 유틸: GDAL 에러 체크
-// ─────────────────────────────────────────
-void checkGDAL(CPLErr err, const std::string& step) {
-    if (err != CE_None)
-        throw std::runtime_error("[" + step + "] GDAL Error: " + CPLGetLastErrorMsg());
-}
-
-void checkPtr(void* ptr, const std::string& step) {
-    if (!ptr)
-        throw std::runtime_error("[" + step + "] Failed: " + CPLGetLastErrorMsg());
-}
-
-// ─────────────────────────────────────────
-// STEP 1. gdalbuildvrt
-//   gdalbuildvrt merged.vrt tile1.tif tile2.tif tile3.tif ...
-// ─────────────────────────────────────────
-GDALDataset* buildVRT(const std::vector<std::string>& inputFiles,
-                      const std::string& vrtPath)
+static std::vector<std::string> collectTifFiles(const std::string& folder)
 {
-    std::cout << "[1/4] BuildVRT: " << inputFiles.size() << " 파일 병합\n";
+    std::vector<std::string> files;
+    WIN32_FIND_DATAA fd;
 
-    // 입력 파일 오픈
+    HANDLE h = FindFirstFileA((folder + "\\*.tif").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                files.push_back(folder + "\\" + fd.cFileName);
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
+    }
+
+    h = FindFirstFileA((folder + "\\*.tiff").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                files.push_back(folder + "\\" + fd.cFileName);
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
+    }
+
+    std::sort(files.begin(), files.end());
+    return files;
+}
+
+void convertToMBTiles(const std::string& inputFolder,
+                      const std::string& outputPath)
+{
+    std::vector<std::string> inputFiles = collectTifFiles(inputFolder);
+
+    if (inputFiles.empty())
+        throw std::runtime_error("[입력] " + inputFolder + " 에서 tif 파일을 찾을 수 없음");
+
+    std::cout << "tif 파일 " << inputFiles.size() << "개 발견\n";
+    for (size_t i = 0; i < inputFiles.size(); i++)
+        std::cout << "  " << inputFiles[i] << "\n";
+
+    GDALAllRegister();
+    CPLSetConfigOption("GDAL_NUM_THREADS", "ALL_CPUS");
+
+    // ── STEP 1. BuildVRT → /vsimem/merged.vrt ────────
     std::vector<GDALDataset*> srcDS;
-    for (const auto& f : inputFiles) {
-        GDALDataset* ds = (GDALDataset*)GDALOpen(f.c_str(), GA_ReadOnly);
-        checkPtr(ds, "BuildVRT Open: " + f);
+    srcDS.reserve(inputFiles.size());
+    for (size_t i = 0; i < inputFiles.size(); i++) {
+        GDALDataset* ds = (GDALDataset*)GDALOpen(inputFiles[i].c_str(), GA_ReadOnly);
+        if (!ds)
+            throw std::runtime_error("[BuildVRT] GDALOpen 실패: " + inputFiles[i]
+                                     + " | " + CPLGetLastErrorMsg());
         srcDS.push_back(ds);
     }
 
-    // 옵션 구성 (-resolution highest -r bilinear 등)
-    // 명령어: gdalbuildvrt [-resolution {highest|lowest|average}] [-r bilinear]
     const char* vrtArgv[] = {
-        "-resolution", "highest",   // 가장 높은 해상도 기준
-        "-r",          "bilinear",  // 리샘플링 방식
+        "-srcnodata", "0 0 0",
+        "-vrtnodata", "0",
+        "-addalpha",
         nullptr
     };
-    GDALBuildVRTOptions* opts = GDALBuildVRTOptionsNew(
-        const_cast<char**>(vrtArgv), nullptr);
+    GDALBuildVRTOptions* vrtOpts = GDALBuildVRTOptionsNew(const_cast<char**>(vrtArgv), nullptr);
 
-    int bUsageError = FALSE;
+    int usageErr = FALSE;
     GDALDataset* vrtDS = (GDALDataset*)GDALBuildVRT(
-        vrtPath.c_str(),
+        "/vsimem/merged.vrt",
         (int)srcDS.size(),
         (GDALDatasetH*)srcDS.data(),
-        nullptr,   // papszSrcDSNames (srcDS로 전달하므로 null)
-        opts,
-        &bUsageError
+        nullptr,
+        vrtOpts,
+        &usageErr
     );
+    GDALBuildVRTOptionsFree(vrtOpts);
+    for (size_t i = 0; i < srcDS.size(); i++) GDALClose(srcDS[i]);
 
-    GDALBuildVRTOptionsFree(opts);
-    for (auto* ds : srcDS) GDALClose(ds);
+    if (!vrtDS)
+        throw std::runtime_error("[BuildVRT] 실패: " + std::string(CPLGetLastErrorMsg()));
 
-    checkPtr(vrtDS, "BuildVRT");
-    return vrtDS;
-}
-
-// ─────────────────────────────────────────
-// STEP 2. gdalwarp (재투영)
-//   gdalwarp -s_srs EPSG:3857 -t_srs EPSG:4326
-//            -r bilinear -of GTiff merged.vrt warped.tif
-// ─────────────────────────────────────────
-GDALDataset* warpReproject(GDALDataset* srcDS,
-                           const std::string& outputPath,
-                           const std::string& srcEPSG = "EPSG:3857",
-                           const std::string& dstEPSG = "EPSG:4326")
-{
-    std::cout << "[2/4] GDALWarp: " << srcEPSG << " → " << dstEPSG << "\n";
-
-    const char* warpArgv[] = {
-        "-s_srs",  srcEPSG.c_str(),
-        "-t_srs",  dstEPSG.c_str(),
-        "-r",      "bilinear",       // bilinear 리샘플링
-        "-of",     "GTiff",
-        "-co",     "COMPRESS=LZW",   // 중간 파일 압축
-        "-co",     "TILED=YES",
-        "-co",     "BLOCKXSIZE=256",
-        "-co",     "BLOCKYSIZE=256",
-        "-multi",                    // 멀티스레드
-        "-wo",     "NUM_THREADS=ALL_CPUS",
-        nullptr
-    };
-
-    GDALWarpAppOptions* opts = GDALWarpAppOptionsNew(
-        const_cast<char**>(warpArgv), nullptr);
-
-    int bUsageError = FALSE;
-    GDALDatasetH srcHandle = (GDALDatasetH)srcDS;
-
-    GDALDataset* warpedDS = (GDALDataset*)GDALWarp(
-        outputPath.c_str(),
-        nullptr,        // hDstDS (새 파일 생성)
-        1,              // nSrcCount
-        &srcHandle,
-        opts,
-        &bUsageError
-    );
-
-    GDALWarpAppOptionsFree(opts);
-    checkPtr(warpedDS, "GDALWarp");
-    return warpedDS;
-}
-
-// ─────────────────────────────────────────
-// STEP 3. gdal_translate → PNG 변환
-//   gdal_translate -of PNG -scale -ot Byte warped.tif output.png
-//   (또는 MBTiles용 타일 PNG)
-// ─────────────────────────────────────────
-GDALDataset* translateToPNG(GDALDataset* srcDS,
-                            const std::string& outputPath)
-{
-    std::cout << "[3/4] GDALTranslate → PNG\n";
-
+    // ── STEP 2. GDALTranslate → MBTiles ──────────────
     const char* transArgv[] = {
-        "-of",     "PNG",
-        "-ot",     "Byte",     // 8bit 변환
-        "-scale",              // 자동 min/max 스케일
-        // "-scale", "0", "65535", "0", "255",  // 수동 스케일 지정 시
+        "-of", "MBTILES",
+        "-co", "TILE_FORMAT=PNG",
         nullptr
     };
+    GDALTranslateOptions* transOpts = GDALTranslateOptionsNew(const_cast<char**>(transArgv), nullptr);
 
-    GDALTranslateOptions* opts = GDALTranslateOptionsNew(
-        const_cast<char**>(transArgv), nullptr);
-
-    int bUsageError = FALSE;
-    GDALDataset* pngDS = (GDALDataset*)GDALTranslate(
+    GDALDataset* mbDS = (GDALDataset*)GDALTranslate(
         outputPath.c_str(),
-        (GDALDatasetH)srcDS,
-        opts,
-        &bUsageError
+        (GDALDatasetH)vrtDS,
+        transOpts,
+        &usageErr
     );
+    GDALTranslateOptionsFree(transOpts);
+    GDALClose(vrtDS);
+    VSIUnlink("/vsimem/merged.vrt");
 
-    GDALTranslateOptionsFree(opts);
-    checkPtr(pngDS, "GDALTranslate");
-    return pngDS;
-}
+    if (!mbDS)
+        throw std::runtime_error("[GDALTranslate] 실패: " + std::string(CPLGetLastErrorMsg()));
 
-// ─────────────────────────────────────────
-// STEP 4. gdaladdo (오버뷰/피라미드 생성)
-//   gdaladdo -r average output.png 2 4 8 16 32 64
-// ─────────────────────────────────────────
-void buildOverviews(GDALDataset* ds)
-{
-    std::cout << "[4/4] BuildOverviews (gdaladdo)\n";
+    // ── STEP 3. BuildOverviews ────────────────────────
+    int levels[] = {2, 4, 8, 16, 32, 64, 128};
 
-    // 오버뷰 레벨: 2, 4, 8, 16, 32, 64
-    int overviewLevels[] = {2, 4, 8, 16, 32, 64};
-    int nLevels = sizeof(overviewLevels) / sizeof(int);
-
-    CPLErr err = ds->BuildOverviews(
-        "AVERAGE",      // 리샘플링 방식 (NEAREST / AVERAGE / GAUSS / CUBIC)
-        nLevels,
-        overviewLevels,
-        0,              // 전체 밴드 (0 = all)
+    CPLErr err = mbDS->BuildOverviews(
+        "BILINEAR",
+        sizeof(levels) / sizeof(int),
+        levels,
+        0,
         nullptr,
         GDALDummyProgress,
         nullptr
     );
+    GDALClose(mbDS);
 
-    checkGDAL(err, "BuildOverviews");
-    std::cout << "    오버뷰 생성 완료\n";
+    if (err != CE_None)
+        throw std::runtime_error("[BuildOverviews] 실패: " + std::string(CPLGetLastErrorMsg()));
 }
 
-// ─────────────────────────────────────────
-// MAIN
-// ─────────────────────────────────────────
-int main()
+int main(int argc, char* argv[])
 {
-    // GDAL 초기화
-    GDALAllRegister();
-    CPLSetConfigOption("GDAL_CACHEMAX", "1024");  // 1GB 캐시
+    if (argc != 3) {
+        std::cerr << "사용법: " << argv[0] << " <입력폴더> <출력.mbtiles>\n";
+        std::cerr << "예시:   " << argv[0] << " C:\\data\\tiles output.mbtiles\n";
+        return 1;
+    }
 
     try {
-        // 입력 파일 목록
-        std::vector<std::string> inputFiles = {
-            "section_01.tif",
-            "section_02.tif",
-            "section_03.tif",
-            // ... 추가 파일
-        };
-
-        // ── STEP 1: VRT 병합 ──────────────────
-        GDALDataset* vrtDS = buildVRT(inputFiles, "merged.vrt");
-
-        // ── STEP 2: 재투영 (3857 → 4326) ──────
-        GDALDataset* warpedDS = warpReproject(vrtDS, "warped.tif");
-        GDALClose(vrtDS);
-
-        // ── STEP 3: PNG 변환 ──────────────────
-        GDALDataset* pngDS = translateToPNG(warpedDS, "output.png");
-        GDALClose(warpedDS);
-
-        // ── STEP 4: 오버뷰 생성 ───────────────
-        buildOverviews(pngDS);
-
-        GDALClose(pngDS);
-
-        std::cout << "\n✅ 완료: output.png + 오버뷰 생성\n";
+        convertToMBTiles(argv[1], argv[2]);
+        std::cout << "완료: " << argv[2] << "\n";
     }
     catch (const std::exception& e) {
-        std::cerr << "❌ 오류: " << e.what() << "\n";
+        std::cerr << "오류: " << e.what() << "\n";
+        VSIUnlink("/vsimem/merged.vrt");
         return 1;
     }
 
