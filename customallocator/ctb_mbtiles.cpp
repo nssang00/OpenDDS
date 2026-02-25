@@ -1,74 +1,477 @@
-// ── TerrainBuild 클래스 ──────────────────────────────
-class TerrainBuild : public Command {
-public:
-  TerrainBuild(...) :
-    outputMbtiles(nullptr), ... {}
+ata <geodata@soton.ac.uk>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License.  You may obtain a copy
+ * of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *******************************************************************************/
 
-  // 사용자 방식: nullptr 체크로 간결하게
-  bool useMbtiles() const {
-    return outputMbtiles != nullptr && strlen(outputMbtiles) > 0;
-  }
+/**
+ * @file ctb-tile.cpp
+ * @brief Convert a GDAL raster to a tile format
+ *
+ * This tool takes a GDAL raster and by default converts it to gzip compressed
+ * terrain tiles which are written to an output directory on the filesystem.
+ *
+ * In the case of a multiband raster, only the first band is used to create the
+ * terrain heights.  No water mask is currently set and all tiles are flagged
+ * as being 'all land'.
+ *
+ * It is recommended that the input raster is in the EPSG 4326 spatial
+ * reference system. If this is not the case then the tiles will be reprojected
+ * to EPSG 4326 as required by the terrain tile format.
+ *
+ * Using the `--output-format` flag this tool can also be used to create tiles
+ * in other raster formats that are supported by GDAL.
+ */
 
-  static void setOutputMbtiles(command_t *command) {
-    static_cast<TerrainBuild *>(Command::self(command))->outputMbtiles = command->arg;
-  }
+#include <iostream>
+#include <sstream>
+#include <string.h>             // for strcmp
+#include <stdlib.h>             // for atoi
+#include <thread>
+#include <mutex>
+#include <future>
 
-  const char *outputMbtiles;
-  // ... 기존 멤버들
-};
-// ── MBTiles 헬퍼 (전역) ────────────────────────────
+#include "cpl_multiproc.h"      // for CPLGetNumCPUs
+#include "cpl_vsi.h"            // for virtual filesystem
+#include "gdal_priv.h"
+#include "commander.hpp"        // for cli parsing
+
+#include "GlobalMercator.hpp"
+#include "RasterIterator.hpp"
+#include "TerrainIterator.hpp"
+
+// [MBTiles] SQLite3 헤더 추가
+#include <sqlite3.h>
+
+using namespace std;
+using namespace ctb;
+
+#ifdef _WIN32
+static const char *osDirSep = "\\";
+#else
+static const char *osDirSep = "/";
+#endif
+
+// ============================================================
+// [MBTiles] 전역 DB 핸들 및 mutex
+// ============================================================
 static sqlite3 *mbtiles_db = nullptr;
-static std::mutex mbtilesMutex;
+static mutex   mbtilesMutex;
 
-// Y축 반전 (TMS → MBTiles 스펙)
+/// MBTiles Y축 반전 (XYZ → TMS 스펙)
 static int flipY(int y, int zoom) {
   return (1 << zoom) - 1 - y;
 }
 
-static void initMBTiles(const char *path) {
+/// MBTiles 파일 초기화 (테이블/인덱스/PRAGMA 생성)
+static void
+initMBTiles(const char *path) {
   if (sqlite3_open(path, &mbtiles_db) != SQLITE_OK) {
-    throw CTBException("Cannot open MBTiles file");
+    string msg = string("Cannot open MBTiles file: ") + sqlite3_errmsg(mbtiles_db);
+    throw CTBException(msg.c_str());
   }
 
+  // WAL 모드: 멀티스레드 write 성능 향상 (필수)
   const char *sqls[] = {
-    "PRAGMA journal_mode=WAL;",   // 멀티스레드 성능 향상 ← 핵심 추가
+    "PRAGMA journal_mode=WAL;",
+    "PRAGMA synchronous=NORMAL;",
     "CREATE TABLE IF NOT EXISTS tiles ("
-    "  zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER,"
-    "  tile_data BLOB, PRIMARY KEY(zoom_level, tile_column, tile_row))",
-    "CREATE TABLE IF NOT EXISTS metadata (name TEXT PRIMARY KEY, value TEXT)",
+    "  zoom_level  INTEGER NOT NULL,"
+    "  tile_column INTEGER NOT NULL,"
+    "  tile_row    INTEGER NOT NULL,"
+    "  tile_data   BLOB    NOT NULL,"
+    "  PRIMARY KEY (zoom_level, tile_column, tile_row));",
+    "CREATE TABLE IF NOT EXISTS metadata ("
+    "  name  TEXT PRIMARY KEY,"
+    "  value TEXT);",
     nullptr
   };
 
   for (int i = 0; sqls[i]; ++i) {
     char *err = nullptr;
-    sqlite3_exec(mbtiles_db, sqls[i], nullptr, nullptr, &err);
-    if (err) {
-      string msg = string("MBTiles init error: ") + err;
+    if (sqlite3_exec(mbtiles_db, sqls[i], nullptr, nullptr, &err) != SQLITE_OK) {
+      string msg = string("MBTiles init error: ") + (err ? err : "unknown");
       sqlite3_free(err);
       throw CTBException(msg.c_str());
     }
   }
 }
 
-// 내 방식의 mutex + 사용자 방식의 직접 blob 바인딩
-static void insertTile(int z, int x, int y, const void *data, int len) {
-  std::lock_guard<std::mutex> lock(mbtilesMutex); // ← 멀티스레드 필수
-
+/// 메타데이터 기록 (선택적)
+static void
+insertMBTilesMetadata(const char *name, const char *value) {
   sqlite3_stmt *stmt;
   sqlite3_prepare_v2(mbtiles_db,
-    "INSERT OR REPLACE INTO tiles VALUES (?,?,?,?)", -1, &stmt, nullptr);
-  sqlite3_bind_int(stmt, 1, z);
-  sqlite3_bind_int(stmt, 2, x);
-  sqlite3_bind_int(stmt, 3, flipY(y, z));
-  sqlite3_bind_blob(stmt, 4, data, len, SQLITE_STATIC);
+    "INSERT OR REPLACE INTO metadata (name, value) VALUES (?, ?);",
+    -1, &stmt, nullptr);
+  sqlite3_bind_text(stmt, 1, name,  -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, value, -1, SQLITE_STATIC);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 }
-// ── buildTerrain() ──────────────────────────────────
-static void buildTerrain(const TerrainTiler &tiler, TerrainBuild *command) {
+
+/// 타일 데이터를 MBTiles DB에 삽입 (thread-safe)
+static void
+insertTileMBTiles(int zoom, int x, int y, const void *data, int dataLen) {
+  // MBTiles 스펙: tile_row는 TMS 방식(Y축 반전)
+  int tmsY = flipY(y, zoom);
+
+  lock_guard<std::mutex> lock(mbtilesMutex);
+
+  sqlite3_stmt *stmt;
+  sqlite3_prepare_v2(mbtiles_db,
+    "INSERT OR REPLACE INTO tiles "
+    "(zoom_level, tile_column, tile_row, tile_data) VALUES (?, ?, ?, ?);",
+    -1, &stmt, nullptr);
+  sqlite3_bind_int (stmt, 1, zoom);
+  sqlite3_bind_int (stmt, 2, x);
+  sqlite3_bind_int (stmt, 3, tmsY);
+  sqlite3_bind_blob(stmt, 4, data, dataLen, SQLITE_STATIC);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
+
+// ============================================================
+
+/// Handle the terrain build CLI options
+class TerrainBuild : public Command {
+public:
+  TerrainBuild(const char *name, const char *version) :
+    Command(name, version),
+    outputDir("."),
+    outputFormat("Terrain"),
+    profile("geodetic"),
+    threadCount(-1),
+    tileSize(0),
+    startZoom(-1),
+    endZoom(-1),
+    verbosity(1),
+    outputMbtiles(nullptr)   // [MBTiles] 초기화
+  {}
+
+  void
+  check() const {
+    switch(command->argc) {
+    case 1:
+      return;
+    case 0:
+      cerr << "  Error: The gdal datasource must be specified" << endl;
+      break;
+    default:
+      cerr << "  Error: Only one command line argument must be specified" << endl;
+      break;
+    }
+
+    help();                   // print help and exit
+  }
+
+  static void
+  setOutputDir(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->outputDir = command->arg;
+  }
+
+  static void
+  setOutputFormat(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->outputFormat = command->arg;
+  }
+
+  static void
+  setProfile(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->profile = command->arg;
+  }
+
+  static void
+  setThreadCount(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->threadCount = atoi(command->arg);
+  }
+
+  static void
+  setTileSize(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->tileSize = atoi(command->arg);
+  }
+
+  static void
+  setStartZoom(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->startZoom = atoi(command->arg);
+  }
+
+  static void
+  setEndZoom(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->endZoom = atoi(command->arg);
+  }
+
+  static void
+  setQuiet(command_t *command) {
+    --(static_cast<TerrainBuild *>(Command::self(command))->verbosity);
+  }
+
+  static void
+  setVerbose(command_t *command) {
+    ++(static_cast<TerrainBuild *>(Command::self(command))->verbosity);
+  }
+
+  static void
+  addCreationOption(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->creationOptions.AddString(command->arg);
+  }
+
+  static void
+  setErrorThreshold(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->tilerOptions.errorThreshold = atof(command->arg);
+  }
+
+  static void
+  setWarpMemory(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->tilerOptions.warpMemoryLimit = atof(command->arg);
+  }
+
+  // [MBTiles] setter
+  static void
+  setOutputMbtiles(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->outputMbtiles = command->arg;
+  }
+
+  const char *
+  getInputFilename() const {
+    return  (command->argc == 1) ? command->argv[0] : NULL;
+  }
+
+  // [MBTiles] MBTiles 모드 여부 판단
+  bool useMbtiles() const {
+    return outputMbtiles != nullptr && strlen(outputMbtiles) > 0;
+  }
+
+  const char *outputDir,
+    *outputFormat,
+    *profile;
+
+  int threadCount,
+    tileSize,
+    startZoom,
+    endZoom,
+    verbosity;
+
+  const char *outputMbtiles;   // [MBTiles] 출력 .mbtiles 파일 경로
+
+  CPLStringList creationOptions;
+  TilerOptions tilerOptions;
+};
+
+/**
+ * Create a filename for a tile coordinate
+ *
+ * This also creates the tile directory structure.
+ */
+static string
+getTileFilename(const TileCoordinate *coord, const string dirname, const char *extension) {
+  static mutex mutex;
+  VSIStatBufL stat;
+  string filename = dirname + static_cast<ostringstream*>
+    (
+     &(ostringstream()
+       << coord->zoom
+       << osDirSep
+       << coord->x)
+     )->str();
+
+  lock_guard<std::mutex> lock(mutex);
+
+  // Check whether the `{zoom}/{x}` directory exists or not
+  if (VSIStatExL(filename.c_str(), &stat, VSI_STAT_EXISTS_FLAG | VSI_STAT_NATURE_FLAG)) {
+    filename = dirname + static_cast<ostringstream*>(&(ostringstream() << coord->zoom))->str();
+
+    // Check whether the `{zoom}` directory exists or not
+    if (VSIStatExL(filename.c_str(), &stat, VSI_STAT_EXISTS_FLAG | VSI_STAT_NATURE_FLAG)) {
+      // Create the `{zoom}` directory
+      if (VSIMkdir(filename.c_str(), 0755))
+        throw CTBException("Could not create the zoom level directory");
+
+    } else if (!VSI_ISDIR(stat.st_mode)) {
+      throw CTBException("Zoom level file path is not a directory");
+    }
+
+    // Create the `{zoom}/{x}` directory
+    filename += static_cast<ostringstream*>(&(ostringstream() << osDirSep << coord->x))->str();
+    if (VSIMkdir(filename.c_str(), 0755))
+      throw CTBException("Could not create the x level directory");
+
+  } else if (!VSI_ISDIR(stat.st_mode)) {
+    throw CTBException("X level file path is not a directory");
+  }
+
+  // Create the filename itself, adding the extension if required
+  filename += static_cast<ostringstream*>(&(ostringstream() << osDirSep << coord->y))->str();
+  if (extension != NULL) {
+    filename += ".";
+    filename += extension;
+  }
+
+  return filename;
+}
+
+/**
+ * Increment a TilerIterator whilst cooperating between threads
+ *
+ * This function maintains an global index on an iterator and when called
+ * ensures the iterator is incremented to point to the next global index.  This
+ * can therefore be called with different tiler iterators by different threads
+ * to ensure all tiles are iterated over consecutively.  It assumes individual
+ * tile iterators point to the same source GDAL dataset.
+ */
+template<typename T> int
+incrementIterator(T &iter, int currentIndex) {
+  static int globalIteratorIndex = 0; // keep track of where we are globally
+  static mutex mutex;        // ensure iterations occur serially between threads
+
+  lock_guard<std::mutex> lock(mutex);
+
+  while (currentIndex < globalIteratorIndex) {
+    ++iter;
+    ++currentIndex;
+  }
+  ++globalIteratorIndex;
+
+  return currentIndex;
+}
+
+/// Get a handle on the total number of tiles to be created
+static int iteratorSize = 0;    // the total number of tiles
+template<typename T> void
+setIteratorSize(T &iter) {
+  static mutex mutex;
+
+  lock_guard<std::mutex> lock(mutex);
+
+  if (iteratorSize == 0) {
+    iteratorSize = iter.getSize();
+  }
+}
+
+/// A thread safe wrapper around `GDALTermProgress`
+static int
+CPL_STDCALL termProgress(double dfComplete, const char *pszMessage, void *pProgressArg) {
+  static mutex mutex;          // GDALTermProgress isn't thread safe, so lock it
+  int status;
+
+  lock_guard<std::mutex> lock(mutex);
+  status = GDALTermProgress(dfComplete, pszMessage, pProgressArg);
+
+  return status;
+}
+
+/// In a thread safe manner describe the file just created
+static int
+CPL_STDCALL verboseProgress(double dfComplete, const char *pszMessage, void *pProgressArg) {
+  stringstream stream;
+  stream << "[" << (int) (dfComplete*100) << "%] " << pszMessage << endl;
+  cout << stream.str();
+
+  return TRUE;
+}
+
+// Default to outputting using the GDAL progress meter
+static GDALProgressFunc progressFunc = termProgress;
+
+/// Output the progress of the tiling operation
+int
+showProgress(int currentIndex, string filename) {
+  stringstream stream;
+  stream << "created " << filename << " in thread " << this_thread::get_id();
+  string message = stream.str();
+
+  return progressFunc(currentIndex / (double) iteratorSize, message.c_str(), NULL);
+}
+
+/// Output GDAL tiles represented by a tiler to a directory (or MBTiles)
+static void
+buildGDAL(const RasterTiler &tiler, TerrainBuild *command) {
+  GDALDriver *poDriver = GetGDALDriverManager()->GetDriverByName(command->outputFormat);
+
+  if (poDriver == NULL) {
+    throw CTBException("Could not retrieve GDAL driver");
+  }
+
+  if (poDriver->pfnCreateCopy == NULL) {
+    throw CTBException("The GDAL driver must be write enabled, specifically supporting 'CreateCopy'");
+  }
+
+  const char *extension = poDriver->GetMetadataItem(GDAL_DMD_EXTENSION);
   const string dirname = string(command->outputDir) + osDirSep;
   i_zoom startZoom = (command->startZoom < 0) ? tiler.maxZoomLevel() : command->startZoom,
-         endZoom   = (command->endZoom < 0)   ? 0 : command->endZoom;
+    endZoom = (command->endZoom < 0) ? 0 : command->endZoom;
+
+  RasterIterator iter(tiler, startZoom, endZoom);
+  int currentIndex = incrementIterator(iter, 0);
+  setIteratorSize(iter);
+
+  while (!iter.exhausted()) {
+    GDALTile *tile = *iter;
+    GDALDataset *poDstDS;
+
+    if (command->useMbtiles()) {
+      // ── [MBTiles] GDAL 가상 메모리 FS에 쓴 뒤 blob으로 읽어서 INSERT ──
+      // 스레드마다 고유한 /vsimem 경로 사용 (경로 충돌 방지)
+      ostringstream vpath_ss;
+      vpath_ss << "/vsimem/gdal_tile_"
+               << hash<thread::id>{}(this_thread::get_id())
+               << "." << (extension ? extension : "tmp");
+      const string vpath = vpath_ss.str();
+
+      poDstDS = poDriver->CreateCopy(vpath.c_str(), tile->dataset, FALSE,
+                                     command->creationOptions.List(), NULL, NULL);
+      delete tile;
+
+      if (poDstDS == NULL) {
+        throw CTBException("Could not create GDAL tile");
+      }
+      GDALClose(poDstDS);
+
+      // 가상 파일에서 바이트 읽기
+      vsi_l_offset fileLen = 0;
+      GByte *data = VSIGetMemFileBuffer(vpath.c_str(), &fileLen, FALSE);
+
+      const TileCoordinate *coord = iter.GridIterator::operator*();
+      insertTileMBTiles(coord->zoom, coord->x, coord->y, data, (int)fileLen);
+
+      VSIUnlink(vpath.c_str()); // 가상 파일 정리
+
+      currentIndex = incrementIterator(iter, currentIndex);
+      showProgress(currentIndex, vpath);
+
+    } else {
+      // ── 기존 디렉토리 저장 방식 ──
+      const string filename = getTileFilename(tile, dirname, extension);
+
+      poDstDS = poDriver->CreateCopy(filename.c_str(), tile->dataset, FALSE,
+                                     command->creationOptions.List(), NULL, NULL);
+      delete tile;
+
+      if (poDstDS == NULL) {
+        throw CTBException("Could not create GDAL tile");
+      }
+      GDALClose(poDstDS);
+
+      currentIndex = incrementIterator(iter, currentIndex);
+      showProgress(currentIndex, filename);
+    }
+  }
+}
+
+/// Output terrain tiles represented by a tiler to a directory (or MBTiles)
+static void
+buildTerrain(const TerrainTiler &tiler, TerrainBuild *command) {
+  const string dirname = string(command->outputDir) + osDirSep;
+  i_zoom startZoom = (command->startZoom < 0) ? tiler.maxZoomLevel() : command->startZoom,
+    endZoom = (command->endZoom < 0) ? 0 : command->endZoom;
 
   TerrainIterator iter(tiler, startZoom, endZoom);
   int currentIndex = incrementIterator(iter, 0);
@@ -78,72 +481,179 @@ static void buildTerrain(const TerrainTiler &tiler, TerrainBuild *command) {
     const TileCoordinate *coord = iter.GridIterator::operator*();
 
     if (command->useMbtiles()) {
-      // ── MBTiles 경로 (/vsimem으로 직렬화 후 INSERT) ──
+      // ── [MBTiles] /vsimem에 직렬화 후 blob INSERT ──
+      // 스레드마다 고유한 /vsimem 경로 사용 (경로 충돌 방지)
+      ostringstream vpath_ss;
+      vpath_ss << "/vsimem/terrain_tile_"
+               << hash<thread::id>{}(this_thread::get_id())
+               << ".terrain";
+      const string vpath = vpath_ss.str();
+
       TerrainTile *tile = *iter;
-
-      // 스레드별 고유 경로로 충돌 방지 (내 방식 버그 수정)
-      string vpath = concat("/vsimem/tile_",
-                            (uint64_t)std::hash<std::thread::id>{}(std::this_thread::get_id()),
-                            ".terrain");
-
       tile->writeFile(vpath.c_str());
       delete tile;
 
-      vsi_l_offset fileLen;
+      vsi_l_offset fileLen = 0;
       GByte *data = VSIGetMemFileBuffer(vpath.c_str(), &fileLen, FALSE);
 
-      insertTile(coord->zoom, coord->x, coord->y, data, (int)fileLen);
-      VSIUnlink(vpath.c_str());
+      insertTileMBTiles(coord->zoom, coord->x, coord->y, data, (int)fileLen);
 
+      VSIUnlink(vpath.c_str()); // 가상 파일 정리
+
+      currentIndex = incrementIterator(iter, currentIndex);
       showProgress(currentIndex, vpath);
 
     } else {
-      // ── 기존 파일 저장 경로 (원본 유지) ──
+      // ── 기존 디렉토리 저장 방식 ──
+      TerrainTile *tile = *iter;
       const string filename = getTileFilename(coord, dirname, "terrain");
-      if (!command->resume || !fileExists(filename)) {
-        TerrainTile *tile = *iter;
-        const string tmp = concat(filename, ".tmp");
-        tile->writeFile(tmp.c_str());
-        delete tile;
-        if (VSIRename(tmp.c_str(), filename.c_str()) != 0)
-          throw new CTBException("Could not rename temporary file");
-      }
+
+      tile->writeFile(filename.c_str());
+      delete tile;
+
+      currentIndex = incrementIterator(iter, currentIndex);
       showProgress(currentIndex, filename);
     }
-
-    currentIndex = incrementIterator(iter, currentIndex);
   }
 }
-// ── main() 수정 부분 ────────────────────────────────
 
-// 옵션 등록 (가장 먼저 추가)
-command.option("-M", "--output-mbtiles <file>",
-               "output to MBTiles file (overrides directory output)",
-               TerrainBuild::setOutputMbtiles);
-
-// 디렉토리 체크 조건 수정
-if (!command.useMbtiles()) {
-  VSIStatBufL stat;
-  if (VSIStatExL(command.outputDir, &stat, ...)) {
-    cerr << "Error: output directory does not exist" << endl;
+/**
+ * Perform a tile building operation
+ *
+ * This function is designed to be run in a separate thread.
+ */
+static int
+runTiler(TerrainBuild *command, Grid *grid) {
+  GDALDataset  *poDataset = (GDALDataset *) GDALOpen(command->getInputFilename(), GA_ReadOnly);
+  if (poDataset == NULL) {
+    cerr << "Error: could not open GDAL dataset" << endl;
     return 1;
   }
-}
 
-// DB 초기화
-if (command.useMbtiles()) {
   try {
-    initMBTiles(command.outputMbtiles);
+    if (strcmp(command->outputFormat, "Terrain") == 0) {
+      const TerrainTiler tiler(poDataset, *grid);
+      buildTerrain(tiler, command);
+    } else {                    // it's a GDAL format
+      const RasterTiler tiler(poDataset, *grid, command->tilerOptions);
+      buildGDAL(tiler, command);
+    }
+
   } catch (CTBException &e) {
     cerr << "Error: " << e.what() << endl;
-    return 1;
   }
+
+  GDALClose(poDataset);
+
+  return 0;
 }
 
-// ... 스레드 실행 ...
+int
+main(int argc, char *argv[]) {
+  // Specify the command line interface
+  TerrainBuild command = TerrainBuild(argv[0], version.cstr);
+  command.setUsage("[options] GDAL_DATASOURCE");
 
-// 종료 시 정리
-if (mbtiles_db) {
-  sqlite3_exec(mbtiles_db, "ANALYZE;", nullptr, nullptr, nullptr); // 쿼리 최적화
-  sqlite3_close(mbtiles_db);
+  // [MBTiles] -M 옵션을 가장 먼저 등록
+  command.option("-M", "--output-mbtiles <file.mbtiles>",
+                 "output tiles to an MBTiles SQLite file instead of a directory",
+                 TerrainBuild::setOutputMbtiles);
+
+  command.option("-o", "--output-dir <dir>", "specify the output directory for the tiles (defaults to working directory)", TerrainBuild::setOutputDir);
+  command.option("-f", "--output-format <format>", "specify the output format for the tiles. This is either `Terrain` (the default) or any format listed by `gdalinfo --formats`", TerrainBuild::setOutputFormat);
+  command.option("-p", "--profile <profile>", "specify the TMS profile for the tiles. This is either `geodetic` (the default) or `mercator`", TerrainBuild::setProfile);
+  command.option("-c", "--thread-count <count>", "specify the number of threads to use for tile generation. On multicore machines this defaults to the number of CPUs", TerrainBuild::setThreadCount);
+  command.option("-t", "--tile-size <size>", "specify the size of the tiles in pixels. This defaults to 65 for terrain tiles and 256 for other GDAL formats", TerrainBuild::setTileSize);
+  command.option("-s", "--start-zoom <zoom>", "specify the zoom level to start at. This should be greater than the end zoom level", TerrainBuild::setStartZoom);
+  command.option("-e", "--end-zoom <zoom>", "specify the zoom level to end at. This should be less than the start zoom level and >= 0", TerrainBuild::setEndZoom);
+  command.option("-n", "--creation-option <option>", "specify a GDAL creation option for the output dataset in the form NAME=VALUE. Can be specified multiple times. Not valid for Terrain tiles.", TerrainBuild::addCreationOption);
+  command.option("-z", "--error-threshold <threshold>", "specify the error threshold in pixel units for transformation approximation. Larger values should mean faster transforms. Defaults to 0.125", TerrainBuild::setErrorThreshold);
+  command.option("-m", "--warp-memory <bytes>", "The memory limit in bytes used for warp operations. Higher settings should be faster. Defaults to a conservative GDAL internal setting.", TerrainBuild::setWarpMemory);
+  command.option("-q", "--quiet", "only output errors", TerrainBuild::setQuiet);
+  command.option("-v", "--verbose", "be more noisy", TerrainBuild::setVerbose);
+
+  // Parse and check the arguments
+  command.parse(argc, argv);
+  command.check();
+
+  GDALAllRegister();
+
+  // Set the output type
+  if (command.verbosity > 1) {
+    progressFunc = verboseProgress; // noisy
+  } else if (command.verbosity < 1) {
+    progressFunc = GDALDummyProgress; // quiet
+  }
+
+  if (command.useMbtiles()) {
+    // ── [MBTiles] DB 초기화 ──
+    try {
+      initMBTiles(command.outputMbtiles);
+    } catch (CTBException &e) {
+      cerr << "Error: " << e.what() << endl;
+      return 1;
+    }
+
+    // 기본 메타데이터 기록
+    insertMBTilesMetadata("format", "terrain");
+    insertMBTilesMetadata("type",   "overlay");
+
+  } else {
+    // ── 기존 출력 디렉토리 유효성 검사 (MBTiles 모드에서는 불필요) ──
+    VSIStatBufL stat;
+    if (VSIStatExL(command.outputDir, &stat, VSI_STAT_EXISTS_FLAG | VSI_STAT_NATURE_FLAG)) {
+      cerr << "Error: The output directory does not exist: " << command.outputDir << endl;
+      return 1;
+    } else if (!VSI_ISDIR(stat.st_mode)) {
+      cerr << "Error: The output filepath is not a directory: " << command.outputDir << endl;
+      return 1;
+    }
+  }
+
+  // Define the grid we are going to use
+  Grid grid;
+  if (strcmp(command.profile, "geodetic") == 0) {
+    int tileSize = (command.tileSize < 1) ? 65 : command.tileSize;
+    grid = GlobalGeodetic(tileSize);
+  } else if (strcmp(command.profile, "mercator") == 0) {
+    int tileSize = (command.tileSize < 1) ? 256 : command.tileSize;
+    grid = GlobalMercator(tileSize);
+  } else {
+    cerr << "Error: Unknown profile: " << command.profile << endl;
+    return 1;
+  }
+
+  // Run the tilers in separate threads
+  vector<future<int>> tasks;
+  int threadCount = (command.threadCount > 0) ? command.threadCount : CPLGetNumCPUs();
+
+  // Instantiate the threads using futures from a packaged_task
+  for (int i = 0; i < threadCount ; ++i) {
+    packaged_task<int(TerrainBuild *, Grid *)> task(runTiler); // wrap the function
+    tasks.push_back(task.get_future());                        // get a future
+    thread(move(task), &command, &grid).detach(); // launch on a thread
+  }
+
+  // Synchronise the completion of the threads
+  for (auto &task : tasks) {
+    task.wait();
+  }
+
+  // Get the value from the futures
+  for (auto &task : tasks) {
+    int retval = task.get();
+
+    // return on the first encountered problem
+    if (retval)
+      return retval;
+  }
+
+  // [MBTiles] 종료 시 DB 최적화 후 닫기
+  if (mbtiles_db) {
+    sqlite3_exec(mbtiles_db, "ANALYZE;", nullptr, nullptr, nullptr);
+    sqlite3_close(mbtiles_db);
+    mbtiles_db = nullptr;
+  }
+
+  return 0;
 }
