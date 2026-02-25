@@ -1,4 +1,5 @@
-ata <geodata@soton.ac.uk>
+/*******************************************************************************
+ * Copyright 2014 GeoData <geodata@soton.ac.uk>
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License.  You may obtain a copy
