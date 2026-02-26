@@ -1,42 +1,37 @@
-#pragma once
+#ifndef CTB_Z_MEM_OUTPUT_STREAM_HPP
+#define CTB_Z_MEM_OUTPUT_STREAM_HPP
 
-#include "CTBOutputStream.hpp"  // 기존 CTBOutputStream 부모 클래스 포함
+#include "CTBException.hpp"
 #include <vector>
-#include <stdexcept>
+#include <cstdint>
 #include <zlib.h>
 
 namespace ctb {
 
-class CTBZMemOutputStream : public CTBOutputStream {
-public:
-    /**
-     * @param compression_level  Z_NO_COMPRESSION \~ Z_BEST_COMPRESSION (기본: Z_DEFAULT_COMPRESSION)
-     * @param chunk_size         내부 flush 시 사용하는 출력 청크 크기 (기본 64KB)
-     */
-    explicit CTBZMemOutputStream(int compression_level = Z_DEFAULT_COMPRESSION,
-                                 size_t chunk_size = 65536);
+    class CTBZMemOutputStream {
+    public:
+        CTBZMemOutputStream(int level = -1);
+        virtual ~CTBZMemOutputStream();
 
-    \~CTBZMemOutputStream() override;
+        // 데이터를 압축하여 내부 버퍼에 기록
+        uint32_t write(const void *ptr, uint32_t size);
 
-    uint32_t write(const void* ptr, uint32_t size) override;
+        // 스트림을 닫고 gzip Trailer(CRC32, ISIZE) 완성
+        void close();
 
-    void close() override;
+        // 결과물 접근자
+        const uint8_t* data() const { return out_buffer_.data(); }
+        size_t size() const { return out_buffer_.size(); }
 
-    // 추가 메서드: 압축 완료된 데이터를 꺼내기
-    std::vector<uint8_t> takeCompressedData();           // move semantics
-    const std::vector<uint8_t>& peekCompressedData() const { return out_buffer_; }
-    size_t getSize() const { return out_buffer_.size(); }
-    bool isClosed() const { return closed_; }
+    private:
+        z_stream zs_;
+        std::vector<uint8_t> out_buffer_;
+        bool closed_;
 
-private:
-    z_stream zstream_ = {};
-    std::vector<uint8_t> out_buffer_;       // 최종 압축 데이터 누적
-    std::vector<uint8_t> chunk_buffer_;     // 중간 출력용 임시 버퍼
-    bool closed_ = false;
-
-    void initZStream(int level);
-    void deflateChunk(int flush);
-    void ensureNotClosed() const;
-};
+        CTBZMemOutputStream(const CTBZMemOutputStream&) = delete;
+        CTBZMemOutputStream& operator=(const CTBZMemOutputStream&) = delete;
+    };
 
 } // namespace ctb
+
+#endif
