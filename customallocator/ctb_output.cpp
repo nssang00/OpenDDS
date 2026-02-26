@@ -1,3 +1,15 @@
+class TerrainBuild : public Command {
+public:
+  // ...
+  const char *mbtilesFilename;   // nullptr이면 파일 시스템 출력, 아니면 MBTiles 파일
+  static void setMbtiles(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->mbtilesFilename = command->arg;
+  }
+};
+
+command.option("-b", "--mbtiles <file>", "output to MBTiles file instead of directory", TerrainBuild::setMbtiles);
+//////
+
 #include <sqlite3.h>
 
 class CTBMBTilesTileSerializer : public TileSerializer {
