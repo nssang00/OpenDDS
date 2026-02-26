@@ -1,3 +1,37 @@
+#include "CTBException.hpp"
+#include <zlib.h>
+#include <vector>
+#include <cstdint>  // uint8_t 사용
+#include <cstring>
+
+namespace ctb {
+
+class CTBZBufferOutputStream {
+public:
+    explicit CTBZBufferOutputStream(int compressionLevel = Z_DEFAULT_COMPRESSION);
+    ~CTBZBufferOutputStream();
+
+    CTBZBufferOutputStream(const CTBZBufferOutputStream&) = delete;
+    CTBZBufferOutputStream& operator=(const CTBZBufferOutputStream&) = delete;
+
+    uint32_t write(const void* ptr, uint32_t size);
+    void close();
+
+    const uint8_t* data() const { return reinterpret_cast<const uint8_t*>(buffer_.data()); }
+    size_t size() const { return buffer_.size(); }
+
+private:
+    void ensureOutputSpace(size_t required = 4096);
+
+    z_stream        zstr_;      ///< zlib 압축 스트림
+    std::vector<char> buffer_;  ///< 압축 데이터가 저장될 버퍼
+    bool            closed_;    ///< 스트림이 닫혔으면 true
+};
+
+} // namespace ctb
+
+
+/////////////////
 #ifndef CTB_Z_MEM_OUTPUT_STREAM_HPP
 #define CTB_Z_MEM_OUTPUT_STREAM_HPP
 
