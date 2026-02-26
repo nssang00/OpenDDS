@@ -14,43 +14,28 @@
  * under the License.
  *******************************************************************************/
 
-/**
- * @file ctb-tile.cpp
- * @brief Convert a GDAL raster to a tile format
- *
- * This tool takes a GDAL raster and by default converts it to gzip compressed
- * terrain tiles which are written to an output directory on the filesystem.
- *
- * In the case of a multiband raster, only the first band is used to create the
- * terrain heights.  No water mask is currently set and all tiles are flagged
- * as being 'all land'.
- *
- * It is recommended that the input raster is in the EPSG 4326 spatial
- * reference system. If this is not the case then the tiles will be reprojected
- * to EPSG 4326 as required by the terrain tile format.
- *
- * Using the `--output-format` flag this tool can also be used to create tiles
- * in other raster formats that are supported by GDAL.
- */
-
 #include <iostream>
 #include <sstream>
-#include <string.h>             // for strcmp
-#include <stdlib.h>             // for atoi
+#include <string.h>
+#include <stdlib.h>
 #include <thread>
 #include <mutex>
 #include <future>
 
-#include "cpl_multiproc.h"      // for CPLGetNumCPUs
-#include "cpl_vsi.h"            // for virtual filesystem
+#include "cpl_multiproc.h"
+#include "cpl_vsi.h"
 #include "gdal_priv.h"
-#include "commander.hpp"        // for cli parsing
+#include "commander.hpp"
+#include "concat.hpp"
 
 #include "GlobalMercator.hpp"
 #include "RasterIterator.hpp"
 #include "TerrainIterator.hpp"
+#include "MeshIterator.hpp"
+#include "GDALDatasetReader.hpp"
+#include "CTBFileTileSerializer.hpp"
 
-// [MBTiles] SQLite3 헤더 추가
+// [MBTiles] SQLite3
 #include <sqlite3.h>
 
 using namespace std;
@@ -65,25 +50,23 @@ static const char *osDirSep = "/";
 // ============================================================
 // [MBTiles] 전역 DB 핸들 및 mutex
 // ============================================================
-static sqlite3 *mbtiles_db = nullptr;
-static mutex   mbtilesMutex;
+static sqlite3    *mbtiles_db = nullptr;
+static std::mutex  mbtilesMutex;
 
-/// MBTiles Y축 반전 (XYZ → TMS 스펙)
-static int flipY(int y, int zoom) {
+/// MBTiles Y축 반전: XYZ(CTB) → TMS 스펙
+static int mbtiles_flipY(int y, int zoom) {
   return (1 << zoom) - 1 - y;
 }
 
-/// MBTiles 파일 초기화 (테이블/인덱스/PRAGMA 생성)
-static void
-initMBTiles(const char *path) {
+/// MBTiles 파일 초기화
+static void initMBTiles(const char *path) {
   if (sqlite3_open(path, &mbtiles_db) != SQLITE_OK) {
-    string msg = string("Cannot open MBTiles file: ") + sqlite3_errmsg(mbtiles_db);
+    string msg = string("Cannot open MBTiles: ") + sqlite3_errmsg(mbtiles_db);
     throw CTBException(msg.c_str());
   }
 
-  // WAL 모드: 멀티스레드 write 성능 향상 (필수)
   const char *sqls[] = {
-    "PRAGMA journal_mode=WAL;",
+    "PRAGMA journal_mode=WAL;",       // 멀티스레드 write 성능
     "PRAGMA synchronous=NORMAL;",
     "CREATE TABLE IF NOT EXISTS tiles ("
     "  zoom_level  INTEGER NOT NULL,"
@@ -107,9 +90,8 @@ initMBTiles(const char *path) {
   }
 }
 
-/// 메타데이터 기록 (선택적)
-static void
-insertMBTilesMetadata(const char *name, const char *value) {
+/// 메타데이터 INSERT
+static void insertMBTilesMetadata(const char *name, const char *value) {
   sqlite3_stmt *stmt;
   sqlite3_prepare_v2(mbtiles_db,
     "INSERT OR REPLACE INTO metadata (name, value) VALUES (?, ?);",
@@ -120,13 +102,11 @@ insertMBTilesMetadata(const char *name, const char *value) {
   sqlite3_finalize(stmt);
 }
 
-/// 타일 데이터를 MBTiles DB에 삽입 (thread-safe)
-static void
-insertTileMBTiles(int zoom, int x, int y, const void *data, int dataLen) {
-  // MBTiles 스펙: tile_row는 TMS 방식(Y축 반전)
-  int tmsY = flipY(y, zoom);
+/// 타일 blob INSERT (thread-safe)
+static void insertTileMBTiles(int zoom, int x, int y, const void *data, int dataLen) {
+  int tmsY = mbtiles_flipY(y, zoom);
 
-  lock_guard<std::mutex> lock(mbtilesMutex);
+  std::lock_guard<std::mutex> lock(mbtilesMutex);
 
   sqlite3_stmt *stmt;
   sqlite3_prepare_v2(mbtiles_db,
@@ -142,8 +122,55 @@ insertTileMBTiles(int zoom, int x, int y, const void *data, int dataLen) {
 }
 
 // ============================================================
+// [MBTiles] CTBMBTilesMeshSerializer
+//
+// MeshSerializer 인터페이스를 구현.
+// MeshTile::writeFile() 결과를 /vsimem/ 가상경로에 직렬화한 뒤
+// blob으로 읽어 SQLite tiles 테이블에 INSERT한다.
+//
+// buildMesh()는 MeshSerializer& 를 받으므로,
+// CTBFileTileSerializer 대신 이 클래스를 그대로 넘길 수 있다.
+// ============================================================
+class CTBMBTilesMeshSerializer : public MeshSerializer {
+public:
+  CTBMBTilesMeshSerializer() {}
 
-/// Handle the terrain build CLI options
+  // resume 로직 없음 (필요 시 DB SELECT로 구현 가능)
+  bool mustSerializeCoordinate(const TileCoordinate *coordinate) override {
+    return true;
+  }
+
+  void serializeTile(MeshTile *tile, bool writeVertexNormals = false) override {
+    const TileCoordinate &coord = tile->getCoordinate();
+
+    // 스레드별 고유 /vsimem 경로 — 멀티스레드 경로 충돌 방지
+    ostringstream vpath_ss;
+    vpath_ss << "/vsimem/mesh_tile_"
+             << std::hash<std::thread::id>{}(std::this_thread::get_id())
+             << ".terrain";
+    const string vpath = vpath_ss.str();
+
+    // Quantized-Mesh 포맷으로 가상 파일에 직렬화
+    tile->writeFile(vpath.c_str(), writeVertexNormals);
+
+    // 가상 파일에서 blob 읽기
+    vsi_l_offset fileLen = 0;
+    GByte *data = VSIGetMemFileBuffer(vpath.c_str(), &fileLen, FALSE);
+
+    if (data && fileLen > 0) {
+      insertTileMBTiles(coord.zoom, coord.x, coord.y, data, (int)fileLen);
+    }
+
+    VSIUnlink(vpath.c_str()); // 가상 파일 정리
+  }
+
+  void startSerialization() override {}
+  void endSerialization()   override {}
+};
+
+// ============================================================
+// TerrainBuild 클래스
+// ============================================================
 class TerrainBuild : public Command {
 public:
   TerrainBuild(const char *name, const char *version) :
@@ -156,388 +183,474 @@ public:
     startZoom(-1),
     endZoom(-1),
     verbosity(1),
-    outputMbtiles(nullptr)   // [MBTiles] 초기화
+    resume(false),
+    meshQualityFactor(1.0),
+    metadata(false),
+    cesiumFriendly(false),
+    vertexNormals(false),
+    outputMbtiles(nullptr)   // [MBTiles]
   {}
 
-  void
-  check() const {
+  void check() const {
     switch(command->argc) {
-    case 1:
-      return;
-    case 0:
-      cerr << "  Error: The gdal datasource must be specified" << endl;
-      break;
-    default:
-      cerr << "  Error: Only one command line argument must be specified" << endl;
-      break;
+    case 1: return;
+    case 0: cerr << "  Error: The gdal datasource must be specified" << endl; break;
+    default: cerr << "  Error: Only one command line argument must be specified" << endl; break;
     }
-
-    help();                   // print help and exit
+    help();
   }
 
-  static void
-  setOutputDir(command_t *command) {
+  static void setOutputDir(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->outputDir = command->arg;
   }
-
-  static void
-  setOutputFormat(command_t *command) {
+  static void setOutputFormat(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->outputFormat = command->arg;
   }
-
-  static void
-  setProfile(command_t *command) {
+  static void setProfile(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->profile = command->arg;
   }
-
-  static void
-  setThreadCount(command_t *command) {
+  static void setThreadCount(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->threadCount = atoi(command->arg);
   }
-
-  static void
-  setTileSize(command_t *command) {
+  static void setTileSize(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->tileSize = atoi(command->arg);
   }
-
-  static void
-  setStartZoom(command_t *command) {
+  static void setStartZoom(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->startZoom = atoi(command->arg);
   }
-
-  static void
-  setEndZoom(command_t *command) {
+  static void setEndZoom(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->endZoom = atoi(command->arg);
   }
-
-  static void
-  setQuiet(command_t *command) {
+  static void setQuiet(command_t *command) {
     --(static_cast<TerrainBuild *>(Command::self(command))->verbosity);
   }
-
-  static void
-  setVerbose(command_t *command) {
+  static void setVerbose(command_t *command) {
     ++(static_cast<TerrainBuild *>(Command::self(command))->verbosity);
   }
-
-  static void
-  addCreationOption(command_t *command) {
+  static void setResume(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->resume = true;
+  }
+  static void setResampleAlg(command_t *command) {
+    GDALResampleAlg eResampleAlg;
+    if      (strcmp(command->arg, "nearest")     == 0) eResampleAlg = GRA_NearestNeighbour;
+    else if (strcmp(command->arg, "bilinear")    == 0) eResampleAlg = GRA_Bilinear;
+    else if (strcmp(command->arg, "cubic")       == 0) eResampleAlg = GRA_Cubic;
+    else if (strcmp(command->arg, "cubicspline") == 0) eResampleAlg = GRA_CubicSpline;
+    else if (strcmp(command->arg, "lanczos")     == 0) eResampleAlg = GRA_Lanczos;
+    else if (strcmp(command->arg, "average")     == 0) eResampleAlg = GRA_Average;
+    else if (strcmp(command->arg, "mode")        == 0) eResampleAlg = GRA_Mode;
+    else if (strcmp(command->arg, "max")         == 0) eResampleAlg = GRA_Max;
+    else if (strcmp(command->arg, "min")         == 0) eResampleAlg = GRA_Min;
+    else if (strcmp(command->arg, "med")         == 0) eResampleAlg = GRA_Med;
+    else if (strcmp(command->arg, "q1")          == 0) eResampleAlg = GRA_Q1;
+    else if (strcmp(command->arg, "q3")          == 0) eResampleAlg = GRA_Q3;
+    else {
+      cerr << "Error: Unknown resampling algorithm: " << command->arg << endl;
+      static_cast<TerrainBuild *>(Command::self(command))->help();
+    }
+    static_cast<TerrainBuild *>(Command::self(command))->tilerOptions.resampleAlg = eResampleAlg;
+  }
+  static void addCreationOption(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->creationOptions.AddString(command->arg);
   }
-
-  static void
-  setErrorThreshold(command_t *command) {
+  static void setErrorThreshold(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->tilerOptions.errorThreshold = atof(command->arg);
   }
-
-  static void
-  setWarpMemory(command_t *command) {
+  static void setWarpMemory(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->tilerOptions.warpMemoryLimit = atof(command->arg);
   }
-
+  static void setMeshQualityFactor(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->meshQualityFactor = atof(command->arg);
+  }
+  static void setMetadata(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->metadata = true;
+  }
+  static void setCesiumFriendly(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->cesiumFriendly = true;
+  }
+  static void setVertexNormals(command_t *command) {
+    static_cast<TerrainBuild *>(Command::self(command))->vertexNormals = true;
+  }
   // [MBTiles] setter
-  static void
-  setOutputMbtiles(command_t *command) {
+  static void setOutputMbtiles(command_t *command) {
     static_cast<TerrainBuild *>(Command::self(command))->outputMbtiles = command->arg;
   }
 
-  const char *
-  getInputFilename() const {
-    return  (command->argc == 1) ? command->argv[0] : NULL;
+  const char *getInputFilename() const {
+    return (command->argc == 1) ? command->argv[0] : NULL;
   }
 
-  // [MBTiles] MBTiles 모드 여부 판단
+  // [MBTiles] Mesh + MBTiles 모드 여부
   bool useMbtiles() const {
     return outputMbtiles != nullptr && strlen(outputMbtiles) > 0;
   }
 
-  const char *outputDir,
-    *outputFormat,
-    *profile;
-
-  int threadCount,
-    tileSize,
-    startZoom,
-    endZoom,
-    verbosity;
-
-  const char *outputMbtiles;   // [MBTiles] 출력 .mbtiles 파일 경로
-
+  const char *outputDir, *outputFormat, *profile;
+  int threadCount, tileSize, startZoom, endZoom, verbosity;
+  bool resume;
   CPLStringList creationOptions;
   TilerOptions tilerOptions;
+  double meshQualityFactor;
+  bool metadata, cesiumFriendly, vertexNormals;
+  const char *outputMbtiles;  // [MBTiles]
 };
 
-/**
- * Create a filename for a tile coordinate
- *
- * This also creates the tile directory structure.
- */
-static string
-getTileFilename(const TileCoordinate *coord, const string dirname, const char *extension) {
-  static mutex mutex;
-  VSIStatBufL stat;
-  string filename = dirname + static_cast<ostringstream*>
-    (
-     &(ostringstream()
-       << coord->zoom
-       << osDirSep
-       << coord->x)
-     )->str();
+// ============================================================
+// 이하 헬퍼 — 원본과 동일
+// ============================================================
 
-  lock_guard<std::mutex> lock(mutex);
-
-  // Check whether the `{zoom}/{x}` directory exists or not
-  if (VSIStatExL(filename.c_str(), &stat, VSI_STAT_EXISTS_FLAG | VSI_STAT_NATURE_FLAG)) {
-    filename = dirname + static_cast<ostringstream*>(&(ostringstream() << coord->zoom))->str();
-
-    // Check whether the `{zoom}` directory exists or not
-    if (VSIStatExL(filename.c_str(), &stat, VSI_STAT_EXISTS_FLAG | VSI_STAT_NATURE_FLAG)) {
-      // Create the `{zoom}` directory
-      if (VSIMkdir(filename.c_str(), 0755))
-        throw CTBException("Could not create the zoom level directory");
-
-    } else if (!VSI_ISDIR(stat.st_mode)) {
-      throw CTBException("Zoom level file path is not a directory");
-    }
-
-    // Create the `{zoom}/{x}` directory
-    filename += static_cast<ostringstream*>(&(ostringstream() << osDirSep << coord->x))->str();
-    if (VSIMkdir(filename.c_str(), 0755))
-      throw CTBException("Could not create the x level directory");
-
-  } else if (!VSI_ISDIR(stat.st_mode)) {
-    throw CTBException("X level file path is not a directory");
-  }
-
-  // Create the filename itself, adding the extension if required
-  filename += static_cast<ostringstream*>(&(ostringstream() << osDirSep << coord->y))->str();
-  if (extension != NULL) {
-    filename += ".";
-    filename += extension;
-  }
-
-  return filename;
-}
-
-/**
- * Increment a TilerIterator whilst cooperating between threads
- *
- * This function maintains an global index on an iterator and when called
- * ensures the iterator is incremented to point to the next global index.  This
- * can therefore be called with different tiler iterators by different threads
- * to ensure all tiles are iterated over consecutively.  It assumes individual
- * tile iterators point to the same source GDAL dataset.
- */
+static int globalIteratorIndex = 0;
 template<typename T> int
 incrementIterator(T &iter, int currentIndex) {
-  static int globalIteratorIndex = 0; // keep track of where we are globally
-  static mutex mutex;        // ensure iterations occur serially between threads
-
+  static mutex mutex;
   lock_guard<std::mutex> lock(mutex);
-
-  while (currentIndex < globalIteratorIndex) {
-    ++iter;
-    ++currentIndex;
-  }
+  while (currentIndex < globalIteratorIndex) { ++iter; ++currentIndex; }
   ++globalIteratorIndex;
-
   return currentIndex;
 }
 
-/// Get a handle on the total number of tiles to be created
-static int iteratorSize = 0;    // the total number of tiles
+static int iteratorSize = 0;
 template<typename T> void
 setIteratorSize(T &iter) {
   static mutex mutex;
-
   lock_guard<std::mutex> lock(mutex);
-
-  if (iteratorSize == 0) {
-    iteratorSize = iter.getSize();
-  }
+  if (iteratorSize == 0) iteratorSize = iter.getSize();
 }
 
-/// A thread safe wrapper around `GDALTermProgress`
-static int
-CPL_STDCALL termProgress(double dfComplete, const char *pszMessage, void *pProgressArg) {
-  static mutex mutex;          // GDALTermProgress isn't thread safe, so lock it
+static int CPL_STDCALL termProgress(double dfComplete, const char *pszMessage, void *pProgressArg) {
+  static mutex mutex;
   int status;
-
   lock_guard<std::mutex> lock(mutex);
   status = GDALTermProgress(dfComplete, pszMessage, pProgressArg);
-
   return status;
 }
 
-/// In a thread safe manner describe the file just created
-static int
-CPL_STDCALL verboseProgress(double dfComplete, const char *pszMessage, void *pProgressArg) {
+static int CPL_STDCALL verboseProgress(double dfComplete, const char *pszMessage, void *pProgressArg) {
   stringstream stream;
-  stream << "[" << (int) (dfComplete*100) << "%] " << pszMessage << endl;
+  stream << "[" << (int)(dfComplete * 100) << "%] " << pszMessage << endl;
   cout << stream.str();
-
   return TRUE;
 }
 
-// Default to outputting using the GDAL progress meter
 static GDALProgressFunc progressFunc = termProgress;
 
-/// Output the progress of the tiling operation
-int
-showProgress(int currentIndex, string filename) {
+int showProgress(int currentIndex, string filename) {
   stringstream stream;
   stream << "created " << filename << " in thread " << this_thread::get_id();
   string message = stream.str();
-
-  return progressFunc(currentIndex / (double) iteratorSize, message.c_str(), NULL);
+  return progressFunc(currentIndex / (double)iteratorSize, message.c_str(), NULL);
+}
+int showProgress(int currentIndex) {
+  return progressFunc(currentIndex / (double)iteratorSize, NULL, NULL);
 }
 
-/// Output GDAL tiles represented by a tiler to a directory (or MBTiles)
+static bool fileExists(const std::string &filename) {
+  VSIStatBufL statbuf;
+  return VSIStatExL(filename.c_str(), &statbuf, VSI_STAT_EXISTS_FLAG) == 0;
+}
+
+static bool fileCopy(const std::string &sourceFilename, const std::string &targetFilename) {
+  FILE *fp_s = VSIFOpen(sourceFilename.c_str(), "rb");
+  if (!fp_s) return false;
+  FILE *fp_t = VSIFOpen(targetFilename.c_str(), "wb");
+  if (!fp_t) return false;
+  VSIFSeek(fp_s, 0, SEEK_END);
+  long fileSize = VSIFTell(fp_s);
+  if (fileSize > 0) {
+    VSIFSeek(fp_s, 0, SEEK_SET);
+    void *buffer = VSIMalloc(fileSize);
+    VSIFRead(buffer, 1, fileSize, fp_s);
+    VSIFWrite(buffer, 1, fileSize, fp_t);
+    VSIFree(buffer);
+  }
+  VSIFClose(fp_t);
+  VSIFClose(fp_s);
+  return fileSize > 0;
+}
+
+// ============================================================
+// TerrainMetadata — 원본과 동일
+// ============================================================
+class TerrainMetadata {
+public:
+  TerrainMetadata() {}
+  struct LevelInfo {
+    LevelInfo() { startX = startY = std::numeric_limits<int>::max(); finalX = finalY = std::numeric_limits<int>::min(); }
+    int startX, startY, finalX, finalY;
+    inline void add(const TileCoordinate *c) {
+      startX = std::min(startX, (int)c->x); startY = std::min(startY, (int)c->y);
+      finalX = std::max(finalX, (int)c->x); finalY = std::max(finalY, (int)c->y);
+    }
+    inline void add(const LevelInfo &l) {
+      startX = std::min(startX, l.startX); startY = std::min(startY, l.startY);
+      finalX = std::max(finalX, l.finalX); finalY = std::max(finalY, l.finalY);
+    }
+  };
+  std::vector<LevelInfo> levels;
+  CRSBounds bounds;
+
+  void add(const Grid &grid, const TileCoordinate *coordinate) {
+    CRSBounds tileBounds = grid.tileBounds(*coordinate);
+    i_zoom zoom = coordinate->zoom;
+    if ((1 + zoom) > levels.size()) levels.resize(1 + zoom, LevelInfo());
+    levels[zoom].add(coordinate);
+    if (bounds.getMaxX() == bounds.getMinX()) {
+      bounds = tileBounds;
+    } else {
+      bounds.setMinX(std::min(bounds.getMinX(), tileBounds.getMinX()));
+      bounds.setMinY(std::min(bounds.getMinY(), tileBounds.getMinY()));
+      bounds.setMaxX(std::max(bounds.getMaxX(), tileBounds.getMaxX()));
+      bounds.setMaxY(std::max(bounds.getMaxY(), tileBounds.getMaxY()));
+    }
+  }
+  void add(const TerrainMetadata &o) {
+    if (o.levels.size() == 0) return;
+    if (o.levels.size() > levels.size()) levels.resize(o.levels.size(), LevelInfo());
+    for (size_t i = 0; i < o.levels.size(); i++) levels[i].add(o.levels[i]);
+    bounds.setMinX(std::min(bounds.getMinX(), o.bounds.getMinX()));
+    bounds.setMinY(std::min(bounds.getMinY(), o.bounds.getMinY()));
+    bounds.setMaxX(std::max(bounds.getMaxX(), o.bounds.getMaxX()));
+    bounds.setMaxY(std::max(bounds.getMaxY(), o.bounds.getMaxY()));
+  }
+
+  void writeJsonFile(const std::string &filename, const std::string &datasetName,
+                     const std::string &outputFormat = "Terrain",
+                     const std::string &profile = "geodetic",
+                     bool writeVertexNormals = false) const {
+    FILE *fp = fopen(filename.c_str(), "w");
+    if (!fp) throw CTBException("Failed to open metadata file");
+    fprintf(fp, "{\n");
+    fprintf(fp, "  \"tilejson\": \"2.1.0\",\n");
+    fprintf(fp, "  \"name\": \"%s\",\n", datasetName.c_str());
+    fprintf(fp, "  \"description\": \"\",\n");
+    fprintf(fp, "  \"version\": \"1.1.0\",\n");
+    if      (strcmp(outputFormat.c_str(), "Terrain") == 0) fprintf(fp, "  \"format\": \"heightmap-1.0\",\n");
+    else if (strcmp(outputFormat.c_str(), "Mesh")    == 0) fprintf(fp, "  \"format\": \"quantized-mesh-1.0\",\n");
+    else                                                   fprintf(fp, "  \"format\": \"GDAL\",\n");
+    fprintf(fp, "  \"attribution\": \"\",\n");
+    fprintf(fp, "  \"schema\": \"tms\",\n");
+    if (writeVertexNormals) fprintf(fp, "  \"extensions\": [ \"octvertexnormals\" ],\n");
+    fprintf(fp, "  \"tiles\": [ \"{z}/{x}/{y}.terrain?v={version}\" ],\n");
+    fprintf(fp, "  \"projection\": \"%s\",\n", strcmp(profile.c_str(), "geodetic") == 0 ? "EPSG:4326" : "EPSG:3857");
+    fprintf(fp, "  \"bounds\": [ %.2f, %.2f, %.2f, %.2f ],\n",
+      bounds.getMinX(), bounds.getMinY(), bounds.getMaxX(), bounds.getMaxY());
+    fprintf(fp, "  \"available\": [\n");
+    for (size_t i = 0, icount = levels.size(); i < icount; i++) {
+      const LevelInfo &level = levels[i];
+      fprintf(fp, (i > 0) ? "   ,[ " : "    [ ");
+      if (level.finalX >= level.startX)
+        fprintf(fp, "{ \"startX\": %i, \"startY\": %i, \"endX\": %i, \"endY\": %i }",
+          level.startX, level.startY, level.finalX, level.finalY);
+      fprintf(fp, " ]\n");
+    }
+    fprintf(fp, "  ]\n}\n");
+    fclose(fp);
+  }
+};
+
+// ============================================================
+// createEmptyRootElevationFile — 원본과 동일
+// ============================================================
+static std::string
+createEmptyRootElevationFile(std::string &fileName, const Grid &grid, const TileCoordinate &coord) {
+  GDALDriver *poDriver = GetGDALDriverManager()->GetDriverByName("GTiff");
+  if (!poDriver) throw CTBException("Could not retrieve GTiff GDAL driver");
+
+  CRSBounds tileBounds = grid.tileBounds(coord);
+  tileBounds.setMinX(tileBounds.getMinX() + 1); tileBounds.setMinY(tileBounds.getMinY() + 1);
+  tileBounds.setMaxX(tileBounds.getMaxX() - 1); tileBounds.setMaxY(tileBounds.getMaxY() - 1);
+  const i_tile tileSize = grid.tileSize() - 2;
+  const double resolution = tileBounds.getWidth() / tileSize;
+  double adfGeoTransform[6] = { tileBounds.getMinX(), resolution, 0, tileBounds.getMaxY(), 0, -resolution };
+
+  OGRSpatialReference oSRS;
+#if (GDAL_VERSION_MAJOR >= 3)
+  oSRS.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+#endif
+  if (oSRS.importFromEPSG(4326) != OGRERR_NONE) throw CTBException("Could not create EPSG:4326 spatial reference");
+  char *pszDstWKT = NULL;
+  if (oSRS.exportToWkt(&pszDstWKT) != OGRERR_NONE) {
+    CPLFree(pszDstWKT); throw CTBException("Could not create EPSG:4326 WKT string");
+  }
+
+  fileName += ".tif";
+  GDALDataset *poDataset = poDriver->Create(fileName.c_str(), tileSize, tileSize, 1, GDT_Float32, NULL);
+  if (poDataset->SetProjection(pszDstWKT) != CE_None) {
+    poDataset->Release(); CPLFree(pszDstWKT);
+    throw CTBException("Could not set projection on temporary elevation file");
+  }
+  CPLFree(pszDstWKT);
+  if (poDataset->SetGeoTransform(adfGeoTransform) != CE_None) {
+    poDataset->Release(); throw CTBException("Could not set GeoTransform on temporary elevation file");
+  }
+  float *rasterHeights = (float *)CPLCalloc(tileSize * tileSize, sizeof(float));
+  GDALRasterBand *heightsBand = poDataset->GetRasterBand(1);
+  if (heightsBand->RasterIO(GF_Write, 0, 0, tileSize, tileSize,
+                            rasterHeights, tileSize, tileSize, GDT_Float32, 0, 0) != CE_None) {
+    CPLFree(rasterHeights); throw CTBException("Could not write heights on temporary elevation file");
+  }
+  CPLFree(rasterHeights);
+  poDataset->FlushCache(); poDataset->Release();
+  return fileName;
+}
+
+// ============================================================
+// buildGDAL — 원본과 동일
+// ============================================================
 static void
-buildGDAL(const RasterTiler &tiler, TerrainBuild *command) {
+buildGDAL(GDALSerializer &serializer, const RasterTiler &tiler, TerrainBuild *command, TerrainMetadata *metadata) {
   GDALDriver *poDriver = GetGDALDriverManager()->GetDriverByName(command->outputFormat);
-
-  if (poDriver == NULL) {
-    throw CTBException("Could not retrieve GDAL driver");
-  }
-
-  if (poDriver->pfnCreateCopy == NULL) {
-    throw CTBException("The GDAL driver must be write enabled, specifically supporting 'CreateCopy'");
-  }
+  if (!poDriver)                    throw CTBException("Could not retrieve GDAL driver");
+  if (!poDriver->pfnCreateCopy)     throw CTBException("The GDAL driver must support 'CreateCopy'");
 
   const char *extension = poDriver->GetMetadataItem(GDAL_DMD_EXTENSION);
-  const string dirname = string(command->outputDir) + osDirSep;
   i_zoom startZoom = (command->startZoom < 0) ? tiler.maxZoomLevel() : command->startZoom,
-    endZoom = (command->endZoom < 0) ? 0 : command->endZoom;
+         endZoom   = (command->endZoom   < 0) ? 0 : command->endZoom;
 
   RasterIterator iter(tiler, startZoom, endZoom);
   int currentIndex = incrementIterator(iter, 0);
   setIteratorSize(iter);
 
   while (!iter.exhausted()) {
-    GDALTile *tile = *iter;
-    GDALDataset *poDstDS;
-
-    if (command->useMbtiles()) {
-      // ── [MBTiles] GDAL 가상 메모리 FS에 쓴 뒤 blob으로 읽어서 INSERT ──
-      // 스레드마다 고유한 /vsimem 경로 사용 (경로 충돌 방지)
-      ostringstream vpath_ss;
-      vpath_ss << "/vsimem/gdal_tile_"
-               << hash<thread::id>{}(this_thread::get_id())
-               << "." << (extension ? extension : "tmp");
-      const string vpath = vpath_ss.str();
-
-      poDstDS = poDriver->CreateCopy(vpath.c_str(), tile->dataset, FALSE,
-                                     command->creationOptions.List(), NULL, NULL);
+    const TileCoordinate *coordinate = iter.GridIterator::operator*();
+    if (metadata) metadata->add(tiler.grid(), coordinate);
+    if (serializer.mustSerializeCoordinate(coordinate)) {
+      GDALTile *tile = *iter;
+      serializer.serializeTile(tile, poDriver, extension, command->creationOptions);
       delete tile;
-
-      if (poDstDS == NULL) {
-        throw CTBException("Could not create GDAL tile");
-      }
-      GDALClose(poDstDS);
-
-      // 가상 파일에서 바이트 읽기
-      vsi_l_offset fileLen = 0;
-      GByte *data = VSIGetMemFileBuffer(vpath.c_str(), &fileLen, FALSE);
-
-      const TileCoordinate *coord = iter.GridIterator::operator*();
-      insertTileMBTiles(coord->zoom, coord->x, coord->y, data, (int)fileLen);
-
-      VSIUnlink(vpath.c_str()); // 가상 파일 정리
-
-      currentIndex = incrementIterator(iter, currentIndex);
-      showProgress(currentIndex, vpath);
-
-    } else {
-      // ── 기존 디렉토리 저장 방식 ──
-      const string filename = getTileFilename(tile, dirname, extension);
-
-      poDstDS = poDriver->CreateCopy(filename.c_str(), tile->dataset, FALSE,
-                                     command->creationOptions.List(), NULL, NULL);
-      delete tile;
-
-      if (poDstDS == NULL) {
-        throw CTBException("Could not create GDAL tile");
-      }
-      GDALClose(poDstDS);
-
-      currentIndex = incrementIterator(iter, currentIndex);
-      showProgress(currentIndex, filename);
     }
+    currentIndex = incrementIterator(iter, currentIndex);
+    showProgress(currentIndex);
   }
 }
 
-/// Output terrain tiles represented by a tiler to a directory (or MBTiles)
+// ============================================================
+// buildTerrain — 원본과 동일
+// ============================================================
 static void
-buildTerrain(const TerrainTiler &tiler, TerrainBuild *command) {
-  const string dirname = string(command->outputDir) + osDirSep;
+buildTerrain(TerrainSerializer &serializer, const TerrainTiler &tiler, TerrainBuild *command, TerrainMetadata *metadata) {
   i_zoom startZoom = (command->startZoom < 0) ? tiler.maxZoomLevel() : command->startZoom,
-    endZoom = (command->endZoom < 0) ? 0 : command->endZoom;
+         endZoom   = (command->endZoom   < 0) ? 0 : command->endZoom;
 
   TerrainIterator iter(tiler, startZoom, endZoom);
   int currentIndex = incrementIterator(iter, 0);
   setIteratorSize(iter);
+  GDALDatasetReaderWithOverviews reader(tiler);
 
   while (!iter.exhausted()) {
-    const TileCoordinate *coord = iter.GridIterator::operator*();
-
-    if (command->useMbtiles()) {
-      // ── [MBTiles] /vsimem에 직렬화 후 blob INSERT ──
-      // 스레드마다 고유한 /vsimem 경로 사용 (경로 충돌 방지)
-      ostringstream vpath_ss;
-      vpath_ss << "/vsimem/terrain_tile_"
-               << hash<thread::id>{}(this_thread::get_id())
-               << ".terrain";
-      const string vpath = vpath_ss.str();
-
-      TerrainTile *tile = *iter;
-      tile->writeFile(vpath.c_str());
+    const TileCoordinate *coordinate = iter.GridIterator::operator*();
+    if (metadata) metadata->add(tiler.grid(), coordinate);
+    if (serializer.mustSerializeCoordinate(coordinate)) {
+      TerrainTile *tile = iter.operator*(&reader);
+      serializer.serializeTile(tile);
       delete tile;
-
-      vsi_l_offset fileLen = 0;
-      GByte *data = VSIGetMemFileBuffer(vpath.c_str(), &fileLen, FALSE);
-
-      insertTileMBTiles(coord->zoom, coord->x, coord->y, data, (int)fileLen);
-
-      VSIUnlink(vpath.c_str()); // 가상 파일 정리
-
-      currentIndex = incrementIterator(iter, currentIndex);
-      showProgress(currentIndex, vpath);
-
-    } else {
-      // ── 기존 디렉토리 저장 방식 ──
-      TerrainTile *tile = *iter;
-      const string filename = getTileFilename(coord, dirname, "terrain");
-
-      tile->writeFile(filename.c_str());
-      delete tile;
-
-      currentIndex = incrementIterator(iter, currentIndex);
-      showProgress(currentIndex, filename);
     }
+    currentIndex = incrementIterator(iter, currentIndex);
+    showProgress(currentIndex);
   }
 }
 
-/**
- * Perform a tile building operation
- *
- * This function is designed to be run in a separate thread.
- */
+// ============================================================
+// buildMesh — 원본과 동일 (serializer 타입만 호출부에서 바꿈)
+// ============================================================
+static void
+buildMesh(MeshSerializer &serializer, const MeshTiler &tiler, TerrainBuild *command, TerrainMetadata *metadata, bool writeVertexNormals = false) {
+  i_zoom startZoom = (command->startZoom < 0) ? tiler.maxZoomLevel() : command->startZoom,
+         endZoom   = (command->endZoom   < 0) ? 0 : command->endZoom;
+
+  MeshIterator iter(tiler, startZoom, endZoom);
+  int currentIndex = incrementIterator(iter, 0);
+  setIteratorSize(iter);
+  GDALDatasetReaderWithOverviews reader(tiler);
+
+  while (!iter.exhausted()) {
+    const TileCoordinate *coordinate = iter.GridIterator::operator*();
+    if (metadata) metadata->add(tiler.grid(), coordinate);
+
+    if (serializer.mustSerializeCoordinate(coordinate)) {
+      MeshTile *tile = iter.operator*(&reader);
+      serializer.serializeTile(tile, writeVertexNormals);
+      delete tile;
+    }
+
+    currentIndex = incrementIterator(iter, currentIndex);
+    showProgress(currentIndex);
+  }
+}
+
+static void
+buildMetadata(const RasterTiler &tiler, TerrainBuild *command, TerrainMetadata *metadata) {
+  const string dirname = string(command->outputDir) + osDirSep;
+  i_zoom startZoom = (command->startZoom < 0) ? tiler.maxZoomLevel() : command->startZoom,
+         endZoom   = (command->endZoom   < 0) ? 0 : command->endZoom;
+  const std::string filename = concat(dirname, "layer.json");
+
+  RasterIterator iter(tiler, startZoom, endZoom);
+  int currentIndex = incrementIterator(iter, 0);
+  setIteratorSize(iter);
+
+  while (!iter.exhausted()) {
+    const TileCoordinate *coordinate = iter.GridIterator::operator*();
+    if (metadata) metadata->add(tiler.grid(), coordinate);
+    currentIndex = incrementIterator(iter, currentIndex);
+    showProgress(currentIndex, filename);
+  }
+}
+
+// ============================================================
+// runTiler — [MBTiles] Mesh 분기에서 serializer 선택
+// ============================================================
 static int
-runTiler(TerrainBuild *command, Grid *grid) {
-  GDALDataset  *poDataset = (GDALDataset *) GDALOpen(command->getInputFilename(), GA_ReadOnly);
-  if (poDataset == NULL) {
+runTiler(const char *inputFilename, TerrainBuild *command, Grid *grid, TerrainMetadata *metadata) {
+  GDALDataset *poDataset = (GDALDataset *)GDALOpen(inputFilename, GA_ReadOnly);
+  if (!poDataset) {
     cerr << "Error: could not open GDAL dataset" << endl;
     return 1;
   }
 
+  TerrainMetadata *threadMetadata = metadata ? new TerrainMetadata() : NULL;
+
   try {
-    if (strcmp(command->outputFormat, "Terrain") == 0) {
-      const TerrainTiler tiler(poDataset, *grid);
-      buildTerrain(tiler, command);
-    } else {                    // it's a GDAL format
+    if (command->metadata) {
+      CTBFileTileSerializer serializer(string(command->outputDir) + osDirSep, command->resume);
+      serializer.startSerialization();
       const RasterTiler tiler(poDataset, *grid, command->tilerOptions);
-      buildGDAL(tiler, command);
+      buildMetadata(tiler, command, threadMetadata);
+      serializer.endSerialization();
+
+    } else if (strcmp(command->outputFormat, "Terrain") == 0) {
+      // heightmap-1.0 — 원본과 동일, 파일 serializer
+      CTBFileTileSerializer serializer(string(command->outputDir) + osDirSep, command->resume);
+      serializer.startSerialization();
+      const TerrainTiler tiler(poDataset, *grid);
+      buildTerrain(serializer, tiler, command, threadMetadata);
+      serializer.endSerialization();
+
+    } else if (strcmp(command->outputFormat, "Mesh") == 0) {
+      // ── [MBTiles] Quantized-Mesh: serializer를 조건에 따라 선택 ──
+      const MeshTiler tiler(poDataset, *grid, command->tilerOptions, command->meshQualityFactor);
+
+      if (command->useMbtiles()) {
+        // MBTiles 모드: CTBMBTilesMeshSerializer 사용
+        CTBMBTilesMeshSerializer serializer;
+        serializer.startSerialization();
+        buildMesh(serializer, tiler, command, threadMetadata, command->vertexNormals);
+        serializer.endSerialization();
+      } else {
+        // 파일 모드: 기존 CTBFileTileSerializer 사용
+        CTBFileTileSerializer serializer(string(command->outputDir) + osDirSep, command->resume);
+        serializer.startSerialization();
+        buildMesh(serializer, tiler, command, threadMetadata, command->vertexNormals);
+        serializer.endSerialization();
+      }
+
+    } else {
+      // GDAL 포맷 — 원본과 동일
+      CTBFileTileSerializer serializer(string(command->outputDir) + osDirSep, command->resume);
+      serializer.startSerialization();
+      const RasterTiler tiler(poDataset, *grid, command->tilerOptions);
+      buildGDAL(serializer, tiler, command, threadMetadata);
+      serializer.endSerialization();
     }
 
   } catch (CTBException &e) {
@@ -546,61 +659,75 @@ runTiler(TerrainBuild *command, Grid *grid) {
 
   GDALClose(poDataset);
 
+  if (threadMetadata) {
+    static std::mutex mutex;
+    std::lock_guard<std::mutex> lock(mutex);
+    metadata->add(*threadMetadata);
+    delete threadMetadata;
+  }
   return 0;
 }
 
+// ============================================================
+// main
+// ============================================================
 int
 main(int argc, char *argv[]) {
-  // Specify the command line interface
   TerrainBuild command = TerrainBuild(argv[0], version.cstr);
   command.setUsage("[options] GDAL_DATASOURCE");
 
-  // [MBTiles] -M 옵션을 가장 먼저 등록
+  // [MBTiles] -M 옵션을 가장 먼저 등록 (tippecanoe 스타일)
   command.option("-M", "--output-mbtiles <file.mbtiles>",
-                 "output tiles to an MBTiles SQLite file instead of a directory",
+                 "output Quantized-Mesh tiles to MBTiles SQLite file (requires -f Mesh)",
                  TerrainBuild::setOutputMbtiles);
 
-  command.option("-o", "--output-dir <dir>", "specify the output directory for the tiles (defaults to working directory)", TerrainBuild::setOutputDir);
-  command.option("-f", "--output-format <format>", "specify the output format for the tiles. This is either `Terrain` (the default) or any format listed by `gdalinfo --formats`", TerrainBuild::setOutputFormat);
-  command.option("-p", "--profile <profile>", "specify the TMS profile for the tiles. This is either `geodetic` (the default) or `mercator`", TerrainBuild::setProfile);
-  command.option("-c", "--thread-count <count>", "specify the number of threads to use for tile generation. On multicore machines this defaults to the number of CPUs", TerrainBuild::setThreadCount);
-  command.option("-t", "--tile-size <size>", "specify the size of the tiles in pixels. This defaults to 65 for terrain tiles and 256 for other GDAL formats", TerrainBuild::setTileSize);
-  command.option("-s", "--start-zoom <zoom>", "specify the zoom level to start at. This should be greater than the end zoom level", TerrainBuild::setStartZoom);
-  command.option("-e", "--end-zoom <zoom>", "specify the zoom level to end at. This should be less than the start zoom level and >= 0", TerrainBuild::setEndZoom);
-  command.option("-n", "--creation-option <option>", "specify a GDAL creation option for the output dataset in the form NAME=VALUE. Can be specified multiple times. Not valid for Terrain tiles.", TerrainBuild::addCreationOption);
-  command.option("-z", "--error-threshold <threshold>", "specify the error threshold in pixel units for transformation approximation. Larger values should mean faster transforms. Defaults to 0.125", TerrainBuild::setErrorThreshold);
-  command.option("-m", "--warp-memory <bytes>", "The memory limit in bytes used for warp operations. Higher settings should be faster. Defaults to a conservative GDAL internal setting.", TerrainBuild::setWarpMemory);
-  command.option("-q", "--quiet", "only output errors", TerrainBuild::setQuiet);
-  command.option("-v", "--verbose", "be more noisy", TerrainBuild::setVerbose);
+  command.option("-o", "--output-dir <dir>",             "specify the output directory for the tiles (defaults to working directory)", TerrainBuild::setOutputDir);
+  command.option("-f", "--output-format <format>",       "specify the output format: `Terrain` (default), `Mesh` (Quantized-Mesh), or any GDAL format", TerrainBuild::setOutputFormat);
+  command.option("-p", "--profile <profile>",            "specify the TMS profile: `geodetic` (default) or `mercator`", TerrainBuild::setProfile);
+  command.option("-c", "--thread-count <count>",         "specify the number of threads to use", TerrainBuild::setThreadCount);
+  command.option("-t", "--tile-size <size>",             "specify the size of the tiles in pixels", TerrainBuild::setTileSize);
+  command.option("-s", "--start-zoom <zoom>",            "specify the zoom level to start at", TerrainBuild::setStartZoom);
+  command.option("-e", "--end-zoom <zoom>",              "specify the zoom level to end at", TerrainBuild::setEndZoom);
+  command.option("-r", "--resampling-method <algorithm>","specify the raster resampling algorithm", TerrainBuild::setResampleAlg);
+  command.option("-n", "--creation-option <option>",     "specify a GDAL creation option", TerrainBuild::addCreationOption);
+  command.option("-z", "--error-threshold <threshold>",  "error threshold for transformation approximation", TerrainBuild::setErrorThreshold);
+  command.option("-m", "--warp-memory <bytes>",          "memory limit for warp operations", TerrainBuild::setWarpMemory);
+  command.option("-R", "--resume",                       "do not overwrite existing files", TerrainBuild::setResume);
+  command.option("-g", "--mesh-qfactor <factor>",        "mesh quality factor (default 1.0)", TerrainBuild::setMeshQualityFactor);
+  command.option("-l", "--layer",                        "only output the layer.json metadata file", TerrainBuild::setMetadata);
+  command.option("-C", "--cesium-friendly",              "force creation of missing root tiles", TerrainBuild::setCesiumFriendly);
+  command.option("-N", "--vertex-normals",               "write Oct-Encoded Per-Vertex Normals (Mesh only)", TerrainBuild::setVertexNormals);
+  command.option("-q", "--quiet",                        "only output errors", TerrainBuild::setQuiet);
+  command.option("-v", "--verbose",                      "be more noisy", TerrainBuild::setVerbose);
 
-  // Parse and check the arguments
   command.parse(argc, argv);
   command.check();
 
   GDALAllRegister();
 
-  // Set the output type
-  if (command.verbosity > 1) {
-    progressFunc = verboseProgress; // noisy
-  } else if (command.verbosity < 1) {
-    progressFunc = GDALDummyProgress; // quiet
-  }
+  if      (command.verbosity > 1) progressFunc = verboseProgress;
+  else if (command.verbosity < 1) progressFunc = GDALDummyProgress;
 
+  // [MBTiles] 옵션 검증 및 DB 초기화
   if (command.useMbtiles()) {
-    // ── [MBTiles] DB 초기화 ──
+    if (strcmp(command.outputFormat, "Mesh") != 0) {
+      cerr << "Error: --output-mbtiles (-M) is only supported with -f Mesh" << endl;
+      return 1;
+    }
     try {
       initMBTiles(command.outputMbtiles);
     } catch (CTBException &e) {
       cerr << "Error: " << e.what() << endl;
       return 1;
     }
-
-    // 기본 메타데이터 기록
-    insertMBTilesMetadata("format", "terrain");
+    // MBTiles 기본 메타데이터
+    insertMBTilesMetadata("format", "quantized-mesh-1.0");
     insertMBTilesMetadata("type",   "overlay");
+    if (command.getInputFilename())
+      insertMBTilesMetadata("name", command.getInputFilename());
 
   } else {
-    // ── 기존 출력 디렉토리 유효성 검사 (MBTiles 모드에서는 불필요) ──
+    // 기존 출력 디렉토리 유효성 검사 (MBTiles 모드에서는 불필요)
     VSIStatBufL stat;
     if (VSIStatExL(command.outputDir, &stat, VSI_STAT_EXISTS_FLAG | VSI_STAT_NATURE_FLAG)) {
       cerr << "Error: The output directory does not exist: " << command.outputDir << endl;
@@ -611,7 +738,7 @@ main(int argc, char *argv[]) {
     }
   }
 
-  // Define the grid we are going to use
+  // Define the grid
   Grid grid;
   if (strcmp(command.profile, "geodetic") == 0) {
     int tileSize = (command.tileSize < 1) ? 65 : command.tileSize;
@@ -624,29 +751,63 @@ main(int argc, char *argv[]) {
     return 1;
   }
 
-  // Run the tilers in separate threads
+  // Run tilers in threads
   vector<future<int>> tasks;
   int threadCount = (command.threadCount > 0) ? command.threadCount : CPLGetNumCPUs();
 
-  // Instantiate the threads using futures from a packaged_task
-  for (int i = 0; i < threadCount ; ++i) {
-    packaged_task<int(TerrainBuild *, Grid *)> task(runTiler); // wrap the function
-    tasks.push_back(task.get_future());                        // get a future
-    thread(move(task), &command, &grid).detach(); // launch on a thread
+  const string dirname = string(command.outputDir) + osDirSep;
+  const std::string layerJsonPath = concat(dirname, "layer.json");
+  TerrainMetadata *metadata = command.metadata ? new TerrainMetadata() : NULL;
+
+  for (int i = 0; i < threadCount; ++i) {
+    packaged_task<int(const char *, TerrainBuild *, Grid *, TerrainMetadata *)> task(runTiler);
+    tasks.push_back(task.get_future());
+    thread(move(task), command.getInputFilename(), &command, &grid, metadata).detach();
   }
 
-  // Synchronise the completion of the threads
-  for (auto &task : tasks) {
-    task.wait();
-  }
-
-  // Get the value from the futures
+  for (auto &task : tasks) task.wait();
   for (auto &task : tasks) {
     int retval = task.get();
+    if (retval) { delete metadata; return retval; }
+  }
 
-    // return on the first encountered problem
-    if (retval)
-      return retval;
+  // CesiumJS friendly — 원본과 동일
+  if (command.cesiumFriendly && (strcmp(command.profile, "geodetic") == 0) && command.endZoom <= 0) {
+    if (!command.metadata) {
+      std::string dirName0  = string(command.outputDir) + osDirSep + "0" + osDirSep + "0";
+      std::string dirName1  = string(command.outputDir) + osDirSep + "0" + osDirSep + "1";
+      std::string tileName0 = dirName0 + osDirSep + "0.terrain";
+      std::string tileName1 = dirName1 + osDirSep + "0.terrain";
+
+      i_zoom missingZoom = 65535;
+      ctb::TileCoordinate missingTileCoord(missingZoom, 0, 0);
+      std::string missingTileName;
+
+      if      ( fileExists(tileName0) && !fileExists(tileName1)) { VSIMkdir(dirName1.c_str(), 0755); missingTileCoord = ctb::TileCoordinate(0, 1, 0); missingTileName = tileName1; }
+      else if (!fileExists(tileName0) &&  fileExists(tileName1)) { VSIMkdir(dirName0.c_str(), 0755); missingTileCoord = ctb::TileCoordinate(0, 0, 0); missingTileName = tileName0; }
+
+      if (missingTileCoord.zoom != missingZoom) {
+        globalIteratorIndex = 0;
+        command.startZoom = command.endZoom = 0;
+        missingTileName = createEmptyRootElevationFile(missingTileName, grid, missingTileCoord);
+        runTiler(missingTileName.c_str(), &command, &grid, NULL);
+        VSIUnlink(missingTileName.c_str());
+      }
+    }
+    if (metadata && metadata->levels.size() > 0) {
+      TerrainMetadata::LevelInfo &level = metadata->levels.at(0);
+      level.startX = 0; level.startY = 0; level.finalX = 1; level.finalY = 0;
+    }
+  }
+
+  if (metadata) {
+    std::string datasetName(command.getInputFilename());
+    datasetName = datasetName.substr(datasetName.find_last_of("/\\") + 1);
+    const size_t rfindpos = datasetName.rfind('.');
+    if (std::string::npos != rfindpos) datasetName = datasetName.erase(rfindpos);
+    metadata->writeJsonFile(layerJsonPath, datasetName, std::string(command.outputFormat),
+                            std::string(command.profile), command.vertexNormals);
+    delete metadata;
   }
 
   // [MBTiles] 종료 시 DB 최적화 후 닫기
