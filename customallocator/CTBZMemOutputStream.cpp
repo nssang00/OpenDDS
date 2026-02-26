@@ -1,3 +1,80 @@
+#include "CTBZBufferOutputStream.hpp"
+
+namespace ctb {
+
+CTBZBufferOutputStream::CTBZBufferOutputStream(int compressionLevel)
+    : buffer_(), closed_(false)
+{
+    std::memset(&zstr_, 0, sizeof(zstr_));
+
+    int ret = deflateInit2(&zstr_, compressionLevel, Z_DEFLATED,
+                           15 + 16, 8, Z_DEFAULT_STRATEGY);
+    if (ret != Z_OK) {
+        throw CTBException("deflateInit2 failed");
+    }
+
+    buffer_.resize(16384);
+    zstr_.next_out = reinterpret_cast<Bytef*>(buffer_.data());
+    zstr_.avail_out = static_cast<uInt>(buffer_.size());
+}
+
+CTBZBufferOutputStream::~CTBZBufferOutputStream() {
+     close();
+}
+
+void CTBZBufferOutputStream::ensureOutputSpace(size_t required) {
+    if (zstr_.avail_out < required) {
+        size_t used = buffer_.size() - zstr_.avail_out;
+
+        buffer_.resize(used + required + 4096);
+
+        zstr_.next_out = reinterpret_cast<Bytef*>(buffer_.data() + used);
+        zstr_.avail_out = static_cast<uInt>(buffer_.size() - used);
+    }
+}
+
+uint32_t CTBZBufferOutputStream::write(const void* ptr, uint32_t size) {
+    if (closed_) {
+        throw CTBException("Stream already closed");
+    }
+    if (size == 0) return 0;
+
+    zstr_.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(ptr));
+    zstr_.avail_in = size;
+
+    while (zstr_.avail_in > 0) {
+        ensureOutputSpace(4096);
+
+        int ret = deflate(&zstr_, Z_NO_FLUSH);
+        if (ret != Z_OK) {
+            throw CTBException("deflate failed");
+        }
+    }
+
+    return size;
+}
+
+void CTBZBufferOutputStream::close() {
+    if (closed_) return;
+
+    int ret;
+    do {
+        ensureOutputSpace(4096);
+        ret = deflate(&zstr_, Z_FINISH);
+        if (ret != Z_OK && ret != Z_STREAM_END) {
+            throw CTBException("deflate(Z_FINISH) failed");
+        }
+    } while (ret != Z_STREAM_END);
+
+    buffer_.resize(buffer_.size() - zstr_.avail_out);
+
+    (void)deflateEnd(&zstr_);
+    closed_ = true;
+}
+
+} // namespace ctb
+
+//////////////////
 #include "CTBZMemOutputStream.hpp"
 
 using namespace ctb;
