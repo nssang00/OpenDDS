@@ -1,55 +1,44 @@
 #include "CTBZMemOutputStream.hpp"
-#include <cstring>   // std::memcpy
 
 using namespace ctb;
 
-CTBZMemOutputStream::CTBZMemOutputStream(int level, size_t chunk_size) {
-    initZStream(level);
-    chunk_buffer_.resize(chunk_size);
-}
+CTBZMemOutputStream::CTBZMemOutputStream(int level) : closed_(false) {
+    zs_.zalloc = Z_NULL;
+    zs_.zfree = Z_NULL;
+    zs_.opaque = Z_NULL;
 
-void CTBZMemOutputStream::initZStream(int level) {
-    zstream_.zalloc = Z_NULL;
-    zstream_.zfree  = Z_NULL;
-    zstream_.opaque = Z_NULL;
-
-    // gzip 헤더 + 창 크기 15 + gzip wrapper (16)
-    int windowBits = 15 + 16;
-
-    if (deflateInit2(&zstream_, level, Z_DEFLATED, windowBits, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-        throw CTBException("deflateInit2 failed for gzip stream");
+    // gzip 래퍼 설정을 위한 windowBits: 15 + 16
+    if (deflateInit2(&zs_, level, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        throw CTBException("Failed to initialize zlib stream");
     }
+    
+    out_buffer_.reserve(64 * 1024); 
 }
 
-CTBZMemOutputStream::\~CTBZMemOutputStream() {
+CTBZMemOutputStream::~CTBZMemOutputStream() {
     if (!closed_) {
-        try { close(); } catch (...) {}
+        deflateEnd(&zs_);
     }
-    deflateEnd(&zstream_);
 }
 
-uint32_t CTBZMemOutputStream::write(const void* ptr, uint32_t size) {
-    ensureNotClosed();
-
+uint32_t CTBZMemOutputStream::write(const void *ptr, uint32_t size) {
+    if (closed_) throw CTBException("Stream already closed");
     if (size == 0) return 0;
 
-    zstream_.next_in   = reinterpret_cast<Bytef*>(const_cast<void*>(ptr));
-    zstream_.avail_in  = size;
+    zs_.next_in = reinterpret_cast<Bytef*>(const_cast<void*>(ptr));
+    zs_.avail_in = size;
 
-    while (zstream_.avail_in > 0) {
-        zstream_.next_out  = chunk_buffer_.data();
-        zstream_.avail_out = static_cast<uInt>(chunk_buffer_.size());
+    uint8_t temp[16384];
+    while (zs_.avail_in > 0) {
+        zs_.next_out = temp;
+        zs_.avail_out = sizeof(temp);
 
-        int ret = deflate(&zstream_, Z_NO_FLUSH);
-        if (ret != Z_OK && ret != Z_STREAM_END) {
-            throw CTBException("deflate() error during write");
-        }
+        int ret = deflate(&zs_, Z_NO_FLUSH);
+        if (ret == Z_STREAM_ERROR) throw CTBException("zlib deflate error");
 
-        size_t produced = chunk_buffer_.size() - zstream_.avail_out;
-        if (produced > 0) {
-            out_buffer_.insert(out_buffer_.end(),
-                               chunk_buffer_.begin(),
-                               chunk_buffer_.begin() + produced);
+        size_t compressedSize = sizeof(temp) - zs_.avail_out;
+        if (compressedSize > 0) {
+            out_buffer_.insert(out_buffer_.end(), temp, temp + compressedSize);
         }
     }
 
@@ -59,42 +48,22 @@ uint32_t CTBZMemOutputStream::write(const void* ptr, uint32_t size) {
 void CTBZMemOutputStream::close() {
     if (closed_) return;
 
-    // 최종 flush (Z_FINISH)
-    deflateChunk(Z_FINISH);
-
-    // deflateEnd는 소멸자에서도 호출되지만 여기서도 안전하게
-    deflateEnd(&zstream_);
-    closed_ = true;
-}
-
-void CTBZMemOutputStream::deflateChunk(int flush) {
+    uint8_t temp[16384];
+    int ret;
     do {
-        zstream_.next_out  = chunk_buffer_.data();
-        zstream_.avail_out = static_cast<uInt>(chunk_buffer_.size());
+        zs_.next_out = temp;
+        zs_.avail_out = sizeof(temp);
 
-        int ret = deflate(&zstream_, flush);
-        if (ret == Z_STREAM_ERROR) {
-            throw CTBException("deflate stream error");
+        // 더 이상 입력이 없음을 알리고 마무리(Trailer) 생성
+        ret = deflate(&zs_, Z_FINISH);
+        if (ret == Z_STREAM_ERROR) throw CTBException("zlib finalize error");
+
+        size_t compressedSize = sizeof(temp) - zs_.avail_out;
+        if (compressedSize > 0) {
+            out_buffer_.insert(out_buffer_.end(), temp, temp + compressedSize);
         }
+    } while (ret != Z_STREAM_END); // Z_STREAM_END가 나올 때까지 반복
 
-        size_t produced = chunk_buffer_.size() - zstream_.avail_out;
-        if (produced > 0) {
-            out_buffer_.insert(out_buffer_.end(),
-                               chunk_buffer_.begin(),
-                               chunk_buffer_.begin() + produced);
-        }
-
-        if (ret == Z_STREAM_END) break;
-    } while (zstream_.avail_out == 0);  // 더 출력할 게 있으면 반복
-}
-
-void CTBZMemOutputStream::ensureNotClosed() const {
-    if (closed_) {
-        throw CTBException("CTBZMemOutputStream already closed");
-    }
-}
-
-std::vector<uint8_t> CTBZMemOutputStream::takeCompressedData() {
-    close();  // 필요 시 자동 close
-    return std::move(out_buffer_);
+    deflateEnd(&zs_);
+    closed_ = true;
 }
