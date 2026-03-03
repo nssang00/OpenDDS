@@ -1,26 +1,21 @@
-#include <type_traits>   // ← 꼭 추가!
+#include <type_traits>
 
 template <typename ValueType>
 ValueType AnyCast(Any& operand)
 {
-    typedef typename TypeWrapper<ValueType>::TYPE NonRef;
+    using Target = std::decay_t<ValueType>;
 
-    NonRef* result = AnyCast<NonRef>(&operand);
-    if (result) {
-        return *result;
-    }
+    Target* result = AnyCast<Target>(&operand);
+    if (result) return *result;
 
-    if constexpr (std::is_same_v<NonRef, double>)
-    {
-        if (int* p = AnyCast<int>(&operand))
-        {
-            return static_cast<double>(*p);
+    if constexpr (std::is_same_v<Target, double>) {
+        if (int* p = AnyCast<int>(&operand)) {
+            return static_cast<ValueType>(static_cast<double>(*p));
         }
     }
 
     throw Poco::BadCastException("Failed to convert between Any types");
 }
-
 ///////
 template <typename ValueType>
 ValueType AnyCast(Any& operand)
