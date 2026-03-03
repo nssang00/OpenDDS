@@ -1,21 +1,22 @@
 template <>
-double* AnyCast<double>(Any* operand)
+double AnyCast<double>(Any& operand)
 {
-    if (!operand) return nullptr;
-    
     // double이면 그대로 반환
-    if (operand->type() == typeid(double))
-        return &static_cast<Any::Holder<double>*>(operand->_content.get())->_held;
-    
-    // int가 들어오면 double로 변환해서 재저장
-    if (operand->type() == typeid(int))
-    {
-        int val = static_cast<Any::Holder<int>*>(operand->_content.get())->_held;
-        *operand = static_cast<double>(val); // Any 안의 값을 double로 교체
-        return &static_cast<Any::Holder<double>*>(operand->_content.get())->_held;
-    }
+    if (double* p = AnyCast<double>(&operand))
+        return *p;
 
-    return nullptr;
+    // int면 double로 캐스팅
+    if (int* p = AnyCast<int>(&operand))
+        return static_cast<double>(*p);
+
+    std::string s = "RefAnyCast: Failed to convert between Any types ";
+    if (!operand.empty())
+    {
+        s.append(1, '(');
+        s.append(operand.type().name());
+        s.append(" => double)");
+    }
+    throw std::runtime_error(s);
 }
 
 ///////
