@@ -1,3 +1,34 @@
+template <typename ValueType>
+ValueType AnyCast(Any& operand)
+{
+    typedef typename TypeWrapper< ValueType >::TYPE NonRef;
+
+    NonRef* result = AnyCast<NonRef>(&operand);
+    if (!result)
+    {
+        // int -> double 자동 변환
+        if (typeid(NonRef) == typeid(double) && operand.type() == typeid(int))
+        {
+            int* intVal = AnyCast<int>(&operand);
+            operand = static_cast<double>(*intVal); // Any를 double로 재저장
+            return *AnyCast<NonRef>(&operand);
+        }
+
+        std::string s = "RefAnyCast: Failed to convert between Any types ";
+        if (!operand.empty())
+        {
+            s.append(1, '(');
+            s.append(operand.type().name());
+            s.append(" => ");
+            s.append(typeid(ValueType).name());
+            s.append(1, ')');
+        }
+        throw std::runtime_error(s);
+    }		
+    return *result;
+}
+/////
+
 template <>
 double AnyCast<double>(Any& operand)
 {
