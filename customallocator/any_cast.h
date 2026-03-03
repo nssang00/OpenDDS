@@ -1,3 +1,44 @@
+template <typename TargetType>
+bool tryNumericCast(Any& operand, TargetType& out)
+{
+    if (!std::is_arithmetic<TargetType>::value) return false;
+
+    const std::type_info& t = operand.type();
+    if      (t == typeid(int))    { out = static_cast<TargetType>(static_cast<int>(operand));    return true; }
+    else if (t == typeid(double)) { out = static_cast<TargetType>(static_cast<double>(operand)); return true; }
+    else if (t == typeid(float))  { out = static_cast<TargetType>(static_cast<float>(operand));  return true; }
+    else if (t == typeid(bool))   { out = static_cast<TargetType>(static_cast<bool>(operand));   return true; }
+    return false;
+}
+
+template <typename ValueType>
+ValueType AnyCast(Any& operand)
+{
+    typedef typename TypeWrapper<ValueType>::TYPE NonRef;
+
+    NonRef* result = AnyCast<NonRef>(&operand);
+    if (!result)
+    {
+        // 숫자 타입 간 자동 변환 시도
+        NonRef numericResult{};
+        if (tryNumericCast(operand, numericResult))
+            return numericResult;
+
+        std::string s = "RefAnyCast: Failed to convert between Any types ";
+        if (!operand.empty())
+        {
+            s.append(1, '(');
+            s.append(operand.type().name());
+            s.append(" => ");
+            s.append(typeid(ValueType).name());
+            s.append(1, ')');
+        }
+        throw std::runtime_error(s);
+    }
+    return *result;
+}
+
+/////////////
 #include <type_traits>   // C++11에 std::is_same, std::decay 존재
 #include "Poco/Any.h"    // 또는 당신의 Any 헤더
 
