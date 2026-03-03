@@ -1,3 +1,24 @@
+template <>
+double* AnyCast<double>(Any* operand)
+{
+    if (!operand) return nullptr;
+    
+    // double이면 그대로 반환
+    if (operand->type() == typeid(double))
+        return &static_cast<Any::Holder<double>*>(operand->_content.get())->_held;
+    
+    // int가 들어오면 double로 변환해서 재저장
+    if (operand->type() == typeid(int))
+    {
+        int val = static_cast<Any::Holder<int>*>(operand->_content.get())->_held;
+        *operand = static_cast<double>(val); // Any 안의 값을 double로 교체
+        return &static_cast<Any::Holder<double>*>(operand->_content.get())->_held;
+    }
+
+    return nullptr;
+}
+
+///////
 template <typename TargetType>
 bool tryNumericCast(Any& operand, TargetType& out)
 {
