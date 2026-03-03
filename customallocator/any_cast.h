@@ -1,4 +1,18 @@
 template <typename ValueType>
+ValueType AnyCast(const Any& operand)
+{
+	typedef typename TypeWrapper<ValueType>::TYPE NonRef;
+
+	if (typeid(NonRef) == typeid(double)) {
+		if (const int* intVal = AnyCast<int>(&operand)) {
+			return static_cast<double>(*intVal);
+		}
+	}
+	return AnyCast<NonRef&>(const_cast<Any&>(operand));
+}
+
+//////////
+template <typename ValueType>
 ValueType AnyCast(Any& operand)
 {
     typedef typename TypeWrapper< ValueType >::TYPE NonRef;
