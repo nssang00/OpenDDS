@@ -14,8 +14,9 @@ ValueType AnyCast(Any& operand)
 
     throw BadCastException("Failed to convert between Any types");
 }
+namespace Poco {
 
-// 기본 - 변환 불가
+// ✅ 클래스 밖, 네임스페이스 안에 선언
 template <typename To>
 struct NumericAnyCaster {
     static To cast(Any& operand) {
@@ -23,8 +24,7 @@ struct NumericAnyCaster {
     }
 };
 
-// double 전용 특수화
-template <>
+template <>                          // ✅ template<> 명시
 struct NumericAnyCaster<double> {
     static double cast(Any& operand) {
         int* p = AnyCast<int>(&operand);
@@ -33,6 +33,7 @@ struct NumericAnyCaster<double> {
     }
 };
 
+// AnyCast도 클래스 밖, 같은 네임스페이스 안
 template <typename ValueType>
 ValueType AnyCast(Any& operand)
 {
@@ -41,6 +42,7 @@ ValueType AnyCast(Any& operand)
     NonRef* result = AnyCast<NonRef>(&operand);
     if (result) return *result;
 
-    // 구조체 특수화로 위임
     return NumericAnyCaster<NonRef>::cast(operand);
 }
+
+} // namespace Poco
