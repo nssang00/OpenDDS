@@ -1,3 +1,34 @@
+#include <type_traits>   // C++11에 std::is_same, std::decay 존재
+#include "Poco/Any.h"    // 또는 당신의 Any 헤더
+
+template <typename ValueType>
+ValueType AnyCast(Any& operand)
+{
+    // C++11에서는 std::decay_t 대신 std::decay::type 사용
+    typedef typename std::decay<ValueType>::type Decayed;
+
+    // 1. 정확한 타입 매칭 먼저 시도
+    Decayed* ptr = AnyCast<Decayed>(&operand);
+    if (ptr)
+    {
+        return *ptr;
+    }
+
+    // 2. double 요청 시 int → double 변환 지원
+    // C++11에서는 if constexpr 대신 일반 if + 템플릿 특수화/조건 활용
+    if (std::is_same<Decayed, double>::value)
+    {
+        int* ip = AnyCast<int>(&operand);
+        if (ip)
+        {
+            double value = static_cast<double>(*ip);
+            return value;   // ValueType이 double 이므로 안전
+        }
+    }
+
+    throw Poco::BadCastException("Failed to convert between Any types");
+}
+///////
 #include <type_traits>   // std::decay_t, std::is_reference_v 등
 
 template <typename ValueType>
