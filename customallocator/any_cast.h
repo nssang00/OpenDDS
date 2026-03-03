@@ -15,20 +15,23 @@ ValueType AnyCast(Any& operand)
     throw BadCastException("Failed to convert between Any types");
 }
 
-
 // 기본 - 변환 불가
 template <typename To>
-To numericAnyCast(Any& operand) {
-    throw BadCastException("Failed to convert between Any types");
-}
+struct NumericAnyCaster {
+    static To cast(Any& operand) {
+        throw BadCastException("Failed to convert between Any types");
+    }
+};
 
 // double 전용 특수화
 template <>
-double numericAnyCast<double>(Any& operand) {
-    int* p = AnyCast<int>(&operand);
-    if (p) return static_cast<double>(*p);
-    throw BadCastException("Failed to convert between Any types");
-}
+struct NumericAnyCaster<double> {
+    static double cast(Any& operand) {
+        int* p = AnyCast<int>(&operand);
+        if (p) return static_cast<double>(*p);
+        throw BadCastException("Failed to convert between Any types");
+    }
+};
 
 template <typename ValueType>
 ValueType AnyCast(Any& operand)
@@ -38,6 +41,6 @@ ValueType AnyCast(Any& operand)
     NonRef* result = AnyCast<NonRef>(&operand);
     if (result) return *result;
 
-    // 타입 불일치 → 특수화된 함수로 위임
-    return numericAnyCast<NonRef>(operand);
+    // 구조체 특수화로 위임
+    return NumericAnyCaster<NonRef>::cast(operand);
 }
