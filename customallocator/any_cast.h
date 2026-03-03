@@ -1,3 +1,43 @@
+#include <type_traits>   // std::decay_t, std::is_reference_v 등
+
+template <typename ValueType>
+ValueType AnyCast(Any& operand)
+{
+    using Decayed = std::decay_t<ValueType>;
+
+    // 1. 정확한 타입 매칭 시도
+    Decayed* ptr = AnyCast<Decayed>(&operand);
+    if (ptr)
+    {
+        if constexpr (std::is_reference_v<ValueType>)
+            return *ptr;           // 참조 타입이면 참조 반환
+        else
+            return *ptr;           // 값 타입이면 복사 반환
+    }
+
+    // 2. double 요청 시 int → double 변환
+    if constexpr (std::is_same_v<Decayed, double>)
+    {
+        if (int* p = AnyCast<int>(&operand))
+        {
+            double value = static_cast<double>(*p);
+
+            if constexpr (std::is_reference_v<ValueType>)
+            {
+                // 참조 타입으로는 임시 객체를 바인딩할 수 없음 → 에러 방지
+                static_assert(false, "Cannot bind reference to converted temporary (int -> double)");
+                // 또는 throw 해도 되지만, 컴파일 타임에 막는 게 더 좋음
+            }
+            else
+            {
+                return static_cast<ValueType>(value);
+            }
+        }
+    }
+
+    throw Poco::BadCastException("Failed to convert between Any types");
+}
+////
 #include <type_traits>
 
 template <typename ValueType>
