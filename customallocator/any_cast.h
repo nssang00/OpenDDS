@@ -1,3 +1,27 @@
+#include <type_traits>   // ← 꼭 추가!
+
+template <typename ValueType>
+ValueType AnyCast(Any& operand)
+{
+    typedef typename TypeWrapper<ValueType>::TYPE NonRef;
+
+    NonRef* result = AnyCast<NonRef>(&operand);
+    if (result) {
+        return *result;
+    }
+
+    if constexpr (std::is_same_v<NonRef, double>)
+    {
+        if (int* p = AnyCast<int>(&operand))
+        {
+            return static_cast<double>(*p);
+        }
+    }
+
+    throw Poco::BadCastException("Failed to convert between Any types");
+}
+
+///////
 template <typename ValueType>
 ValueType AnyCast(Any& operand)
 {
