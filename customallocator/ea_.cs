@@ -1,3 +1,44 @@
+
+using EA;
+using System.Windows.Forms;
+
+public class MyAddin
+{
+    // 필수
+    public string EA_Connect(Repository repository)
+    {
+        return "MyAddin connected";
+    }
+
+    public void EA_Disconnect()
+    {
+    }
+
+    // 메뉴
+    public object EA_GetMenuItems(Repository repository, string location, string menuName)
+    {
+        if (menuName == "") return "My Addin Menu";
+        else if (menuName == "My Addin Menu") return new string[] { "Open Builder" };
+        return "";
+    }
+
+    public void EA_MenuClick(Repository repository, string location, string menuName, string itemName)
+    {
+        if (itemName == "Open Builder")
+        {
+            var form = new MyBuilderForm(repository);
+            form.Show();
+        }
+    }
+
+    // 선택적 이벤트
+    public void EA_OnPostNewElement(Repository repository, EventProperties info)
+    {
+        // Element 생성 후 자동 처리
+    }
+}
+
+//////////////
 using System;
 using EA;
 
