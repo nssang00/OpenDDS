@@ -48,3 +48,64 @@ class Program
         repository.Exit();
     }
 }
+
+//////////
+using System;
+using EA;
+
+class Program
+{
+    static void Main()
+    {
+        Repository repository = new Repository();
+
+        bool opened = repository.OpenFile(@"C:\Model\sample.qea");
+        if (!opened)
+        {
+            Console.WriteLine("파일 열기 실패");
+            return;
+        }
+
+        // 루트 모델 순회
+        foreach (Package model in repository.Models)
+        {
+            PrintPackage(model, 0);
+        }
+
+        repository.CloseFile();
+        repository.Exit();
+    }
+
+    static void PrintPackage(Package package, int depth)
+    {
+        string indent = new string(' ', depth * 2);
+        Console.WriteLine($"{indent}📦 Package: {package.Name}");
+
+        // 클래스 출력
+        foreach (Element element in package.Elements)
+        {
+            if (element.Type == "Class")
+            {
+                Console.WriteLine($"{indent}  🧱 Class: {element.Name}");
+
+                // 멤버 변수
+                foreach (Attribute attr in element.Attributes)
+                {
+                    Console.WriteLine($"{indent}    - {attr.Name} : {attr.Type}");
+                }
+
+                // 메서드
+                foreach (Method method in element.Methods)
+                {
+                    Console.WriteLine($"{indent}    + {method.Name}() : {method.ReturnType}");
+                }
+            }
+        }
+
+        // 하위 패키지 재귀 호출
+        foreach (Package child in package.Packages)
+        {
+            PrintPackage(child, depth + 1);
+        }
+    }
+}
