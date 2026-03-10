@@ -16,6 +16,7 @@ namespace EAtoIDL.Model
 
     public class ModelPackage
     {
+        public int          PackageID   { get; set; }           // t_package.Package_ID
         public string       Guid        { get; set; } = string.Empty;
         public string       Name        { get; set; } = string.Empty;
         /// <summary>null이면 루트 패키지.</summary>
