@@ -1,0 +1,343 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using EAtoIDL.Model;
+
+namespace EAtoIDL.Generator
+{
+    /// <summary>
+    /// 내부 모델을 OMG DDS IDL 4.x 파일로 변환합니다.
+    ///
+    /// 출력 규칙:
+    ///   • 패키지 = 폴더 + 요소별 .idl 파일
+    ///   • 중복 타입 정의 방지 → #ifndef / #define / #endif 헤더 가드
+    ///   • 타입 간 의존관계 → #include (루트 기준 절대 경로, UMAA 스타일)
+    ///   • 상속 → IDL 4.x struct 상속 (struct Child : Parent { ... })
+    ///   • 패키지 계층 → 중첩 module 블록
+    /// </summary>
+    public class IDLFileGenerator
+    {
+        private readonly List<ModelPackage>               _roots;
+        private readonly Dictionary<string, ModelElement> _byGuid;
+        private readonly string                           _outputRoot;
+
+        private int _fileCount;
+        private int _errorCount;
+
+        /// <summary>Windows MAX_PATH 제한 우회용 long path 루트.</summary>
+        private readonly string _longOutputRoot;
+
+        public IDLFileGenerator(
+            List<ModelPackage>               roots,
+            Dictionary<string, ModelElement> byGuid,
+            string                           outputRoot)
+        {
+            _roots          = roots;
+            _byGuid         = byGuid;
+            _outputRoot     = outputRoot;
+            _longOutputRoot = ToLongPath(Path.GetFullPath(outputRoot));
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  공개 진입점
+        // ─────────────────────────────────────────────────────────────────
+
+        public void Generate()
+        {
+            Directory.CreateDirectory(_longOutputRoot);
+
+            foreach (var pkg in _roots)
+                GeneratePackage(pkg);
+
+            Console.WriteLine();
+            Console.WriteLine($"  생성 완료: {_fileCount}개 파일 " +
+                              $"(오류 {_errorCount}건)");
+            Console.WriteLine($"  출력 경로: {Path.GetFullPath(_outputRoot)}");
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  패키지 재귀 처리
+        // ─────────────────────────────────────────────────────────────────
+
+        private void GeneratePackage(ModelPackage pkg)
+        {
+            // 패키지 → 폴더
+            Directory.CreateDirectory(ToLongPath(pkg.AbsoluteFolder(_outputRoot)));
+
+            foreach (var elem in pkg.Elements)
+                SafeGenerateElement(elem);
+
+            foreach (var child in pkg.SubPackages)
+                GeneratePackage(child);
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  요소별 .idl 파일 생성
+        // ─────────────────────────────────────────────────────────────────
+
+        private void SafeGenerateElement(ModelElement elem)
+        {
+            try
+            {
+                var content      = BuildIdlContent(elem);
+                var filePath     = Path.Combine(_outputRoot, elem.RelativeIdlPath);
+                var longFilePath = ToLongPath(Path.GetFullPath(filePath));
+
+                var dir = Path.GetDirectoryName(longFilePath);
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
+
+                File.WriteAllText(longFilePath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                Console.WriteLine($"  [OK] {elem.RelativeIdlPath}");
+                _fileCount++;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"  [ERR] {elem.RelativeIdlPath} : {ex.Message}");
+                _errorCount++;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  IDL 텍스트 생성
+        // ─────────────────────────────────────────────────────────────────
+
+        private string BuildIdlContent(ModelElement elem)
+        {
+            var sb = new StringBuilder();
+
+            WriteFileHeader(sb, elem);
+            WriteHeaderGuardOpen(sb, elem);
+            WriteIncludes(sb, elem);
+
+            int moduleDepth;
+            WriteModulesOpen(sb, elem, out moduleDepth);
+            WriteElementBody(sb, elem, moduleDepth);
+            WriteModulesClose(sb, elem, moduleDepth);
+            WriteHeaderGuardClose(sb, elem);
+
+            return sb.ToString();
+        }
+
+        // ── 파일 헤더 주석 ─────────────────────────────────────────────────
+
+        private static void WriteFileHeader(StringBuilder sb, ModelElement elem)
+        {
+            sb.AppendLine("// ---------------------------------------------------------------------------");
+            sb.AppendLine($"// {elem.Name}.idl");
+            sb.AppendLine($"// Module : {elem.FullyQualifiedName}");
+            sb.AppendLine($"// Kind   : {elem.Kind}");
+            if (!string.IsNullOrEmpty(elem.Stereotype))
+                sb.AppendLine($"// Stereo : \u00ab{elem.Stereotype}\u00bb");
+            sb.AppendLine($"// Auto-generated by EAtoIDL \u2014 DO NOT EDIT MANUALLY");
+            sb.AppendLine("// ---------------------------------------------------------------------------");
+            sb.AppendLine();
+        }
+
+        // ── 헤더 가드 ──────────────────────────────────────────────────────
+
+        private static void WriteHeaderGuardOpen(StringBuilder sb, ModelElement elem)
+        {
+            var guard = GuardName(elem);
+            sb.AppendLine($"#ifndef {guard}");
+            sb.AppendLine($"#define {guard}");
+            sb.AppendLine();
+        }
+
+        private static void WriteHeaderGuardClose(StringBuilder sb, ModelElement elem)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"#endif // {GuardName(elem)}");
+        }
+
+        // ── #include ───────────────────────────────────────────────────────
+
+        private static void WriteIncludes(StringBuilder sb, ModelElement elem)
+        {
+            var deps = elem.DirectDependencies().ToList();
+            if (!deps.Any()) return;
+
+            foreach (var dep in deps)
+            {
+                // UMAA 스타일: 루트 기준 절대 경로, 슬래시 정규화
+                var includePath = dep.RelativeIdlPath.Replace('\\', '/');
+                sb.AppendLine($"#include \"{includePath}\"");
+            }
+            sb.AppendLine();
+        }
+
+        // ── module 블록 열기 ────────────────────────────────────────────────
+
+        private static void WriteModulesOpen(StringBuilder sb, ModelElement elem,
+                                             out int moduleDepth)
+        {
+            var parts = elem.ModuleParts();
+            for (int i = 0; i < parts.Count; i++)
+            {
+                sb.AppendLine($"{Indent(i)}module {parts[i]}");
+                sb.AppendLine($"{Indent(i)}{{");
+            }
+            moduleDepth = parts.Count;
+            if (moduleDepth > 0) sb.AppendLine();
+        }
+
+        // ── module 블록 닫기 ────────────────────────────────────────────────
+
+        private static void WriteModulesClose(StringBuilder sb, ModelElement elem,
+                                              int moduleDepth)
+        {
+            if (moduleDepth == 0) return;
+            sb.AppendLine();
+            var parts = elem.ModuleParts();
+            for (int i = moduleDepth - 1; i >= 0; i--)
+            {
+                sb.AppendLine($"{Indent(i)}}}; // module {parts[i]}");
+            }
+        }
+
+        // ── 요소 본문 분기 ─────────────────────────────────────────────────
+
+        private void WriteElementBody(StringBuilder sb, ModelElement elem, int depth)
+        {
+            switch (elem.Kind)
+            {
+                case ElementKind.Struct:   WriteStruct(sb, elem, depth);   break;
+                case ElementKind.Enum:     WriteEnum(sb, elem, depth);     break;
+                case ElementKind.DataType: WriteTypedef(sb, elem, depth);  break;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  struct 생성 (IDL 4.x 상속 지원)
+        // ─────────────────────────────────────────────────────────────────
+
+        private static void WriteStruct(StringBuilder sb, ModelElement elem, int depth)
+        {
+            var ind = Indent(depth);
+
+            // 상속: struct Child : Parent::FQN { ... }
+            var inheritance = elem.ParentElement != null
+                ? $" : {elem.ParentElement.FullyQualifiedName}"
+                : string.Empty;
+
+            sb.AppendLine($"{ind}struct {elem.Name}{inheritance}");
+            sb.AppendLine($"{ind}{{");
+
+            if (elem.Fields.Count == 0)
+            {
+                sb.AppendLine($"{ind}  // (empty struct \u2014 inherited fields only)");
+            }
+            else
+            {
+                foreach (var field in elem.Fields)
+                {
+                    var typeName = ResolveFieldType(field);
+                    sb.AppendLine($"{ind}  {typeName} {field.Name};");
+                }
+            }
+
+            sb.AppendLine($"{ind}}};");
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  enum 생성
+        // ─────────────────────────────────────────────────────────────────
+
+        private static void WriteEnum(StringBuilder sb, ModelElement elem, int depth)
+        {
+            var ind = Indent(depth);
+
+            sb.AppendLine($"{ind}enum {elem.Name}");
+            sb.AppendLine($"{ind}{{");
+
+            for (int i = 0; i < elem.Literals.Count; i++)
+            {
+                var lit   = elem.Literals[i];
+                var comma = i < elem.Literals.Count - 1 ? "," : string.Empty;
+
+                // 값이 있으면 주석으로 표시 (IDL enum은 값 할당 미지원)
+                var valueComment = !string.IsNullOrEmpty(lit.Value)
+                    ? $"  // = {lit.Value}"
+                    : string.Empty;
+
+                sb.AppendLine($"{ind}  {lit.Name}{comma}{valueComment}");
+            }
+
+            sb.AppendLine($"{ind}}};");
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  typedef 생성 (DataType)
+        // ─────────────────────────────────────────────────────────────────
+
+        private static void WriteTypedef(StringBuilder sb, ModelElement elem, int depth)
+        {
+            var ind = Indent(depth);
+
+            string aliasTarget;
+            if (elem.AliasResolvedElement != null)
+                aliasTarget = elem.AliasResolvedElement.FullyQualifiedName;
+            else if (!string.IsNullOrEmpty(elem.AliasRawTypeName))
+                aliasTarget = TypeMapper.Map(elem.AliasRawTypeName);
+            else
+                aliasTarget = "octet";
+
+            sb.AppendLine($"{ind}typedef {aliasTarget} {elem.Name};");
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  필드 타입 해석
+        // ─────────────────────────────────────────────────────────────────
+
+        private static string ResolveFieldType(ModelField field)
+        {
+            // 기본 타입 이름 결정
+            string baseType = field.ResolvedType != null
+                ? field.ResolvedType.FullyQualifiedName    // 모델 요소 타입
+                : TypeMapper.Map(field.RawTypeName);       // 원시 타입
+
+            if (!field.IsSequence) return baseType;
+
+            // bounded / unbounded sequence
+            int? bound = field.BoundedSize;
+            return bound.HasValue
+                ? $"sequence<{baseType}, {bound.Value}>"   // bounded sequence
+                : $"sequence<{baseType}>";                 // unbounded sequence
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  유틸리티
+        // ─────────────────────────────────────────────────────────────────
+
+        /// <summary>헤더 가드 이름: MODULE_SUBMODULE_CLASSNAME_IDL</summary>
+        private static string GuardName(ModelElement elem) =>
+            string.Join("_", elem.ModuleParts()
+                              .Concat(new[] { elem.Name, "IDL" }))
+                  .ToUpperInvariant();
+
+        /// <summary>depth × 2칸 들여쓰기 문자열 반환.</summary>
+        private static string Indent(int depth) => new string(' ', depth * 2);
+
+        /// <summary>
+        /// Windows MAX_PATH(260자) 제한 우회: 경로 앞에 \\?\\ 접두사를 붙입니다.
+        /// 이미 접두사가 있거나 UNC 경로이면 그대로 반환합니다.
+        /// Windows 외 환경(Linux/Mac)에서는 그대로 반환합니다.
+        /// </summary>
+        private static string ToLongPath(string path)
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return path;
+
+            if (path.StartsWith(@"\\?\") || path.StartsWith(@"\\?\UNC\"))
+                return path;
+
+            if (path.StartsWith(@"\\"))
+                return @"\\?\UNC\" + path.Substring(2);
+
+            return @"\\?\" + path;
+        }
+    }
+}
