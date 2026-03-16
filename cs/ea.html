@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Sparx EA Architecture</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background:#ffffff;
+    margin:40px;
+}
+
+/* 전체 레이아웃 */
+.container {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:60px;
+}
+
+/* EA 본체 */
+.ea {
+    position:relative;
+    width:420px;
+    padding:30px;
+    border:3px solid #1e88e5;
+    border-radius:12px;
+    background:#e3f2fd;
+}
+
+/* 내부 컴포넌트 */
+.component {
+    border:2px solid #90caf9;
+    background:#ffffff;
+    padding:15px;
+    border-radius:8px;
+    margin-top:20px;
+}
+
+/* COM 포트 (열린 입구 느낌) */
+.com-port {
+    position:absolute;
+    right:-30px;
+    top:50%;
+    transform:translateY(-50%);
+    width:30px;
+    height:120px;
+    border:3px solid #fb8c00;
+    border-left:none;
+    border-radius:0 10px 10px 0;
+    background:#fff3e0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    font-weight:bold;
+    color:#e65100;
+}
+
+/* 외부 플러그인 */
+.plugin {
+    width:220px;
+    padding:20px;
+    border:3px solid #ef6c00;
+    border-radius:10px;
+    background:#fff3e0;
+    text-align:center;
+}
+
+/* 화살표 */
+.arrow {
+    width:60px;
+    height:2px;
+    background:#333;
+    position:relative;
+}
+
+.arrow::after {
+    content:"";
+    position:absolute;
+    right:-6px;
+    top:-4px;
+    border-left:8px solid #333;
+    border-top:5px solid transparent;
+    border-bottom:5px solid transparent;
+}
+
+/* 텍스트 */
+.title {
+    font-size:18px;
+    font-weight:bold;
+    margin-bottom:10px;
+}
+
+.small {
+    font-size:13px;
+    color:#555;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- EA 내부 -->
+    <div class="ea">
+        <div class="title">EA.exe</div>
+
+        <div class="component">
+            <strong>Document Generator</strong><br>
+            Internal Function<br>
+            <span class="small">✔ Direct Call / Fast ⚡</span>
+        </div>
+
+        <div class="component">
+            <strong>COM Interface</strong><br>
+            Automation API
+        </div>
+
+        <!-- 열린 COM 입구 -->
+        <div class="com-port">COM</div>
+    </div>
+
+    <!-- 화살표 -->
+    <div class="arrow"></div>
+
+    <!-- 외부 -->
+    <div class="plugin">
+        <div class="title">IDL Generator</div>
+        External Plugin<br><br>
+        <span class="small">COM Communication<br>Slow 🐢</span>
+    </div>
+
+</div>
+
+</body>
+</html>
