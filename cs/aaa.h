@@ -1,3 +1,49 @@
+class CTB_DLL ctb::GDALTile :
+  public Tile
+{
+public:
+  /// Take ownership of a dataset and optional transformer
+  GDALTile(GDALDataset *dataset, void *transformer):
+    Tile(),
+    dataset(dataset),
+    transformer(transformer)
+  {}
+
+~GDALTile() {
+  if (dataset != NULL) {
+    GDALClose(dataset);
+
+    if (transformer != NULL) {
+      GDALDestroyGenImgProjTransformer(transformer);
+    }
+  }
+}
+
+  GDALDataset *dataset;
+
+  /// Detach the underlying GDAL dataset
+  GDALDataset *detach(){
+  if (dataset != NULL) {
+    GDALDataset *poDataset = dataset;
+    dataset = NULL;
+
+    if (transformer != NULL) {
+      GDALDestroyGenImgProjTransformer(transformer);
+      transformer = NULL;
+    }
+    return poDataset;
+  }
+  return NULL;
+}
+
+protected:
+  friend class GDALTiler;
+
+  /// The image to image transformer
+  void *transformer;
+};
+
+
 GDALTile *
 GDALTiler::createRasterTile(GDALDataset *dataset, const TileCoordinate &coord) const {
   // Convert the tile bounds into a geo transform
