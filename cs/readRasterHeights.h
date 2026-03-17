@@ -1,7 +1,6 @@
-/* static */
+
 GDALDataset *
-GDALTiler::buildWarpedVRT(const GDALTiler &tiler,
-                           GDALDataset *dataset,
+GDALTiler::buildWarpedVRT(GDALDataset *dataset,
                            const TileCoordinate &coord)
 {
   if (dataset == nullptr)
@@ -9,8 +8,8 @@ GDALTiler::buildWarpedVRT(const GDALTiler &tiler,
 
   // Geo transform 계산
   double adfGeoTransform[6];
-  const double resolution    = tiler.mGrid.resolution(coord.zoom);
-  const CRSBounds tileBounds = tiler.mGrid.tileBounds(coord);
+  const double resolution    = mGrid.resolution(coord.zoom);
+  const CRSBounds tileBounds = mGrid.tileBounds(coord);
 
   adfGeoTransform[0] = tileBounds.getMinX();  // min longitude
   adfGeoTransform[1] = resolution;
@@ -29,17 +28,17 @@ GDALTiler::buildWarpedVRT(const GDALTiler &tiler,
     throw CTBException("The source dataset no longer has a spatial reference system assigned");
 
   if (tiler.requiresReprojection()) {
-    pszGridWKT = tiler.crsWKT.c_str();
+    pszGridWKT = crsWKT.c_str();
     transformOptions.SetNameValue("SRC_SRS", pszSrcWKT);
     transformOptions.SetNameValue("DST_SRS", pszGridWKT);
   }
 
   // Warp 옵션 구성
   GDALWarpOptions *psWarpOptions = GDALCreateWarpOptions();
-  psWarpOptions->eResampleAlg      = tiler.options.resampleAlg;
-  psWarpOptions->dfWarpMemoryLimit = tiler.options.warpMemoryLimit;
+  psWarpOptions->eResampleAlg      = options.resampleAlg;
+  psWarpOptions->dfWarpMemoryLimit = options.warpMemoryLimit;
   psWarpOptions->hSrcDS            = hSrcDS;
-  psWarpOptions->nBandCount        = tiler.poDataset->GetRasterCount();
+  psWarpOptions->nBandCount        = poDataset->GetRasterCount();
   psWarpOptions->panSrcBands =
     (int *) CPLMalloc(sizeof(int) * psWarpOptions->nBandCount);
   psWarpOptions->panDstBands =
@@ -56,7 +55,7 @@ GDALTiler::buildWarpedVRT(const GDALTiler &tiler,
   for (short unsigned int i = 0; i < psWarpOptions->nBandCount; ++i) {
     int bGotNoData = FALSE;
     double noDataValue =
-      tiler.poDataset->GetRasterBand(i + 1)->GetNoDataValue(&bGotNoData);
+      poDataset->GetRasterBand(i + 1)->GetNoDataValue(&bGotNoData);
     if (!bGotNoData) noDataValue = -32768;
 
     psWarpOptions->padfSrcNoDataReal[i] = noDataValue;
@@ -95,7 +94,7 @@ GDALTiler::buildWarpedVRT(const GDALTiler &tiler,
   }
 
   // Approximate vs Exact transform
-  if (tiler.options.errorThreshold) {
+  if (options.errorThreshold) {
     psWarpOptions->pTransformerArg =
       GDALCreateApproxTransformer(GDALGenImgProjTransform,
                                   transformerArg, tiler.options.errorThreshold);
@@ -113,7 +112,7 @@ GDALTiler::buildWarpedVRT(const GDALTiler &tiler,
 
   // VRT dataset 생성
   GDALDatasetH hDstDS = GDALCreateWarpedVRT(
-    hWrkSrcDS, tiler.mGrid.tileSize(), tiler.mGrid.tileSize(),
+    hWrkSrcDS, mGrid.tileSize(), mGrid.tileSize(),
     adfGeoTransform, psWarpOptions);
   GDALDestroyWarpOptions(psWarpOptions);
 
@@ -146,7 +145,7 @@ ctb::GDALDatasetReader::readRasterHeights(const GDALTiler &tiler,
                                            ctb::i_tile tileSizeX,
                                            ctb::i_tile tileSizeY)
 {
-  GDALDataset *vrtDataset = GDALTiler::buildWarpedVRT(tiler, dataset, coord);
+  GDALDataset *vrtDataset = tiler.buildWarpedVRT(tiler, dataset, coord);
 
   const ctb::i_tile TILE_CELL_SIZE = tileSizeX * tileSizeY;
   std::vector<float> rasterHeights(TILE_CELL_SIZE, 0.0f);
