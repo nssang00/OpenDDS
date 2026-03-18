@@ -29,7 +29,6 @@ ctb::MeshTiler::buildMeshTile(MeshTile *terrainTile, GDALDataset *dataset, const
       ctb::CRSBounds neighborBounds = mGrid.tileBounds(neighborCoord);
 
       if (datasetBounds.overlaps(neighborBounds)) {
-        // ↓ 수정된 부분
         auto it = std::find_if(mHeightCache.begin(), mHeightCache.end(),
           [&](const auto &entry) { return entry.first == neighborCoord; });
 
@@ -37,17 +36,15 @@ ctb::MeshTiler::buildMeshTile(MeshTile *terrainTile, GDALDataset *dataset, const
           if (mHeightCache.size() >= HEIGHT_CACHE_MAX_SIZE) {
             mHeightCache.erase(mHeightCache.begin());
           }
-          float *raw = ctb::GDALDatasetReader::readRasterHeights(
-            *this, dataset, neighborCoord, mGrid.tileSize(), mGrid.tileSize()
+          std::vector<float> heights;
+          ctb::GDALDatasetReader::readRasterHeights(
+            *this, dataset, neighborCoord, mGrid.tileSize(), mGrid.tileSize(), heights
           );
-          size_t count = static_cast<size_t>(mGrid.tileSize()) * mGrid.tileSize();
-          mHeightCache.emplace_back(neighborCoord, std::vector<float>(raw, raw + count));
+          mHeightCache.emplace_back(neighborCoord, std::move(heights));
           it = std::prev(mHeightCache.end());
-          CPLFree(raw);
         }
 
         ctb::chunk::heightfield neighborHeightfield(it->second.data(), TILE_SIZE);
-        // ↑ 수정된 부분
         neighborHeightfield.applyGeometricError(maximumGeometricError);
         heightfield.applyBorderActivationState(neighborHeightfield, borderIndex);
       }
@@ -63,7 +60,7 @@ ctb::MeshTiler::buildMeshTile(MeshTile *terrainTile, GDALDataset *dataset, const
   if (coord.zoom != maxZoomLevel()) {
     CRSBounds tileBounds = mGrid.tileBounds(coord);
 
-    if (! (bounds().overlaps(tileBounds))) {
+    if (!(bounds().overlaps(tileBounds))) {
       terrainTile->setAllChildren(false);
     } else {
       if (bounds().overlaps(tileBounds.getSW())) {
