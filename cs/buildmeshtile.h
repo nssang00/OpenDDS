@@ -1,3 +1,27 @@
+const std::vector<float> &
+ctb::MeshTiler::getOrReadRasterHeights(GDALDataset *dataset, const ctb::TileCoordinate &coord) {
+  auto it = std::find_if(mHeightCache.begin(), mHeightCache.end(),
+    [&](const auto &entry) { return entry.first == coord; });
+
+  if (it == mHeightCache.end()) {
+    if (mHeightCache.size() >= HEIGHT_CACHE_MAX_SIZE) {
+      mHeightCache.erase(mHeightCache.begin());
+    }
+    std::vector<float> heights;
+    ctb::GDALDatasetReader::readRasterHeights(
+      *this, dataset, coord, mGrid.tileSize(), mGrid.tileSize(), heights
+    );
+    mHeightCache.emplace_back(coord, std::move(heights));
+    it = std::prev(mHeightCache.end());
+  }
+
+  return it->second;
+}
+그러면 buildMeshTile 안에서는:
+const std::vector<float> &neighborHeights = getOrReadRasterHeights(dataset, neighborCoord);
+ctb::chunk::heightfield neighborHeightfield(neighborHeights.data(), TILE_SIZE);
+
+//////////
 void 
 ctb::MeshTiler::buildMeshTile(MeshTile *terrainTile, GDALDataset *dataset, const TileCoordinate &coord, float *rasterHeights, ctb::i_tile tileSizeX, ctb::i_tile tileSizeY) {
   const ctb::i_tile TILE_SIZE = tileSizeX;
