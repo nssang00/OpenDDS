@@ -1,27 +1,37 @@
-static int gProcessedTileCount = 0;
+static int gDispatchedTileCount = 0;
 
-// 기존 showProgress 대신
-static int
-showMetaTileProgress() {
+static const std::vector<ctb::TileCoordinate> *
+getNextMetaTileBlock(int &startIndex) {
   static std::mutex mutex;
   std::lock_guard<std::mutex> lock(mutex);
-  return progressFunc(++gProcessedTileCount / (double)iteratorSize, NULL, NULL);
+
+  if (gMetaBlockIndex >= (int)gMetaTileBlocks.size())
+    return NULL;
+
+  const std::vector<ctb::TileCoordinate> *block = &gMetaTileBlocks[gMetaBlockIndex++];
+  startIndex = gDispatchedTileCount;
+  gDispatchedTileCount += (int)block->size();
+
+  return block;
 }
 // buildMeshMetaTile 안에서
-for (int i = 0; i < (int)block->size(); i++) {
-  const ctb::TileCoordinate &coord = (*block)[i];
+int blockStartIndex;
+const std::vector<ctb::TileCoordinate> *block;
+while ((block = getNextMetaTileBlock(blockStartIndex)) != NULL) {
+  for (int i = 0; i < (int)block->size(); i++) {
+    const ctb::TileCoordinate &coord = (*block)[i];
 
-  if (metadata) metadata->add(tiler.grid(), &coord);
+    if (metadata) metadata->add(tiler.grid(), &coord);
 
-  if (serializer.mustSerializeCoordinate(&coord)) {
-    MeshTile *tile = tiler.createTile(coord, &reader);
-    serializer.serializeTile(tile, writeVertexNormals);
-    delete tile;
+    if (serializer.mustSerializeCoordinate(&coord)) {
+      MeshTile *tile = tiler.createTile(coord, &reader);
+      serializer.serializeTile(tile, writeVertexNormals);
+      delete tile;
+    }
+
+    showProgress(blockStartIndex + i);
   }
-
-  showMetaTileProgress();
 }
-
 
 
 
