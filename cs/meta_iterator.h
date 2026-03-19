@@ -1,3 +1,32 @@
+static int gProcessedTileCount = 0;
+
+// 기존 showProgress 대신
+static int
+showMetaTileProgress() {
+  static std::mutex mutex;
+  std::lock_guard<std::mutex> lock(mutex);
+  return progressFunc(++gProcessedTileCount / (double)iteratorSize, NULL, NULL);
+}
+// buildMeshMetaTile 안에서
+for (int i = 0; i < (int)block->size(); i++) {
+  const ctb::TileCoordinate &coord = (*block)[i];
+
+  if (metadata) metadata->add(tiler.grid(), &coord);
+
+  if (serializer.mustSerializeCoordinate(&coord)) {
+    MeshTile *tile = tiler.createTile(coord, &reader);
+    serializer.serializeTile(tile, writeVertexNormals);
+    delete tile;
+  }
+
+  showMetaTileProgress();
+}
+
+
+
+
+/////////////////////////
+
 ```cpp
 static constexpr int META_TILE_DIM = 8;
 
