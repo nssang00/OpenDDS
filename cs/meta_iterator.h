@@ -1,3 +1,32 @@
+## 문제는 변수 위치
+
+`next_commit`이 루프 안에 있으면 매 블록마다 5000으로 리셋됩니다.
+
+```cpp
+// ❌ 루프 안 → 매번 리셋
+while ((block = getNextMetaTileBlock(blockStartIndex)) != NULL) {
+  int next_commit = 5000;  // 매 블록마다 5000으로 리셋
+  if (count >= next_commit) commit();  // 거의 매번 커밋
+}
+
+// ✅ 루프 밖
+int next_commit = 5000;
+while ((block = getNextMetaTileBlock(blockStartIndex)) != NULL) {
+  // ... 처리 ...
+  int completed = gDispatchedTileCount.fetch_add(...);
+  
+  if (completed >= next_commit) {
+    serializer.commit();
+    next_commit += 5000;
+  }
+}
+serializer.commit();  // 잔여분
+```
+
+멀티스레드면 `next_commit`도 atomic이어야 하지만, 정확도가 필요없다면 그냥 둬도 됩니다. 최악의 경우 두 스레드가 동시에 commit을 호출하는 정도입니다.
+
+
+//////////
 dispatch 시점에 증가하던 걸 → 완료 시점으로 이동만 하면 됩니다.
 // getNextMetaTileBlock 안에서 gDispatchedTileCount 증가 제거
 // → 완료 후 증가로 이동
