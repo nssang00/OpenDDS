@@ -1,3 +1,27 @@
+dispatch 시점에 증가하던 걸 → 완료 시점으로 이동만 하면 됩니다.
+// getNextMetaTileBlock 안에서 gDispatchedTileCount 증가 제거
+// → 완료 후 증가로 이동
+
+while ((block = getNextMetaTileBlock(blockStartIndex)) != NULL) {
+  for (int i = 0; i < (int)block->size(); i++) {
+    const ctb::TileCoordinate &coord = (*block)[i];
+
+    if (metadata) metadata->add(tiler.grid(), &coord);
+
+    if (serializer.mustSerializeCoordinate(&coord)) {
+      MeshTile *tile = tiler.createTile(coord, &reader);
+      serializer.serializeTile(tile, writeVertexNormals);
+      delete tile;
+    }
+  }
+
+  // dispatch 기준 → 완료 기준으로 변경
+  showProgress(gDispatchedTileCount.fetch_add((int)block->size()) + (int)block->size() - 1);
+}
+gDispatchedTileCount가 std::atomic<int>이면 그대로, 아니면:
+static std::atomic<int> gDispatchedTileCount{0};  // atomic으로만 변경
+
+//////////
 // zoom 고정 임계값 제거 → 실제 타일 수로 계산
 static int
 getMetaTileDimForZoom(int tilesX, int tilesY, int numThreads) {
