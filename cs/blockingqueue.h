@@ -110,4 +110,17 @@ void run() {
     // writer는 소멸자에서 자동으로 join
 }
 
-`TileWriteData`와 같은 파일에 있으니 헤더 의존성도 따로 신경 쓸 필요 없어서 더 단순해집니다.
+MBTilesWriter writer(db);  // writer 생성
+
+for (int i = 0; i < threadCount; ++i) {
+    packaged_task<int()> task([&]() {  // 시그니처를 void()로 단순화
+        return runTiler(command.getInputFilename(), &command, &grid, metadata, writer);
+    });
+    tasks.push_back(task.get_future());
+    thread(move(task)).detach();
+}
+
+for (auto& task : tasks) {
+    task.wait();
+}
+// writer 소멸자에서 자동 close + join
