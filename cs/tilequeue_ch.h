@@ -1,3 +1,50 @@
+int main() {
+    TileQueue queue;
+
+    // Consumer thread (람다)
+    std::thread consumerThread([&queue]() {
+        MBTilesWriter writer("tiles.mbtiles");
+
+        TileData tile;
+        int count = 0;
+
+        while (queue.pop(tile)) {
+            writer.insert(tile);
+
+            if (++count % 5000 == 0) {
+                writer.commit();
+            }
+        }
+
+        writer.commit(); // 마지막 flush
+    });
+
+    // Producer threads
+    std::vector<std::thread> producers;
+
+    for (int i = 0; i < 4; ++i) {
+        producers.emplace_back([&queue, i]() {
+            for (int j = 0; j < 10000; ++j) {
+                TileData tile;
+                tile.coord = {10, i * 10000 + j, j};
+                tile.tileData = std::vector<char>(256, 'a');
+
+                queue.push(std::move(tile));
+            }
+        });
+    }
+
+    for (auto& t : producers) {
+        t.join();
+    }
+
+    queue.close();        // 생산 종료
+    consumerThread.join(); // consumer 종료
+
+    return 0;
+}
+/////////////////////
+
 #include <queue>
 #include <mutex>
 #include <condition_variable>
