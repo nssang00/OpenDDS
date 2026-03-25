@@ -1,3 +1,25 @@
+const std::vector<float> &neighborHeights = getOrReadRasterHeights(dataset, neighborCoord);
+ctb::chunk::heightfield neighborHeightfield(neighborHeights.data(), TILE_SIZE);
+
+// levels 캐시 확인
+auto levIt = std::find_if(mLevelsCache.begin(), mLevelsCache.end(),
+  [&](const auto &entry) { return entry.first == neighborCoord; });
+
+if (levIt != mLevelsCache.end()) {
+  // 캐시 hit → applyGeometricError skip
+  neighborHeightfield.setLevels(levIt->second);
+} else {
+  neighborHeightfield.applyGeometricError(maximumGeometricError);
+
+  // 캐시 저장
+  if (mLevelsCache.size() >= HEIGHT_CACHE_MAX_SIZE)
+    mLevelsCache.erase(mLevelsCache.begin());
+  mLevelsCache.emplace_back(neighborCoord, neighborHeightfield.getLevels());
+}
+
+heightfield.applyBorderActivationState(neighborHeightfield, borderIndex);
+
+
 const std::vector<float> &
 ctb::MeshTiler::getOrReadRasterHeights(GDALDataset *dataset, const ctb::TileCoordinate &coord) {
   auto it = std::find_if(mHeightCache.begin(), mHeightCache.end(),
