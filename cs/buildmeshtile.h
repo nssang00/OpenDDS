@@ -1,3 +1,35 @@
+struct HeightCacheEntry {
+  std::vector<float> heights;
+  std::vector<int> levels;
+};
+
+mutable std::vector<std::pair<ctb::TileCoordinate, HeightCacheEntry>> mHeightCache;
+사용 시:
+auto it = std::find_if(mHeightCache.begin(), mHeightCache.end(),
+  [&](const auto &entry) { return entry.first == neighborCoord; });
+
+if (it == mHeightCache.end()) {
+  if (mHeightCache.size() >= HEIGHT_CACHE_MAX_SIZE)
+    mHeightCache.erase(mHeightCache.begin());
+
+  HeightCacheEntry entry;
+  ctb::GDALDatasetReader::readRasterHeights(..., entry.heights);
+
+  ctb::chunk::heightfield neighborHeightfield(entry.heights.data(), TILE_SIZE);
+  neighborHeightfield.applyGeometricError(maximumGeometricError);
+  entry.levels = neighborHeightfield.getLevels();  // levels 저장
+
+  mHeightCache.emplace_back(neighborCoord, std::move(entry));
+  it = std::prev(mHeightCache.end());
+}
+
+// heights는 포인터로 참조, levels는 setLevels로 복원
+ctb::chunk::heightfield neighborHeightfield(it->second.heights.data(), TILE_SIZE);
+neighborHeightfield.setLevels(it->second.levels);  // applyGeometricError skip
+
+heightfield.applyBorderActivationState(neighborHeightfield, borderIndex);
+////////////
+
 std::vector<int> getLevels() const {
   return std::vector<int>(m_levels, m_levels + m_size * m_size);
 }
