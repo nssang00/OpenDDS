@@ -1,3 +1,10 @@
+std::vector<int> getLevels() const {
+  return std::vector<int>(m_levels, m_levels + m_size * m_size);
+}
+void setLevels(const std::vector<int> &levels) {
+  std::memcpy(m_levels, levels.data(), m_size * m_size * sizeof(int));
+}
+
 const std::vector<float> &neighborHeights = getOrReadRasterHeights(dataset, neighborCoord);
 ctb::chunk::heightfield neighborHeightfield(neighborHeights.data(), TILE_SIZE);
 
