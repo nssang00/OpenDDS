@@ -1,3 +1,46 @@
+const HeightCacheEntry &
+ctb::MeshTiler::getOrBuildHeightCacheEntry(
+  GDALDataset *dataset,
+  const ctb::TileCoordinate &neighborCoord,
+  double maximumGeometricError,
+  int tileSize)
+{
+  auto it = std::find_if(mHeightCache.begin(), mHeightCache.end(),
+    [&](const auto &entry) { return entry.first == neighborCoord; });
+
+  if (it == mHeightCache.end()) {
+    if (mHeightCache.size() >= HEIGHT_CACHE_MAX_SIZE)
+      mHeightCache.erase(mHeightCache.begin());
+
+    HeightCacheEntry entry;
+    ctb::GDALDatasetReader::readRasterHeights(
+      *this, dataset, neighborCoord, tileSize, tileSize, entry.heights
+    );
+
+    ctb::chunk::heightfield tempHf(entry.heights.data(), tileSize);
+    tempHf.applyGeometricError(maximumGeometricError);
+    entry.levels = tempHf.getLevels();
+
+    mHeightCache.emplace_back(neighborCoord, std::move(entry));
+    it = std::prev(mHeightCache.end());
+  }
+
+  return it->second;
+}
+호출부:
+if (datasetBounds.overlaps(neighborBounds)) {
+  const HeightCacheEntry &entry = getOrBuildHeightCacheEntry(
+    dataset, neighborCoord, maximumGeometricError, TILE_SIZE
+  );
+
+  ctb::chunk::heightfield neighborHeightfield(entry.heights.data(), TILE_SIZE);
+  neighborHeightfield.setLevels(entry.levels);
+
+  heightfield.applyBorderActivationState(neighborHeightfield, borderIndex);
+}
+
+
+//////;;
 struct HeightCacheEntry {
   std::vector<float> heights;
   std::vector<int> levels;
