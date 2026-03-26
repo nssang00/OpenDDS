@@ -1,3 +1,28 @@
+ctb::chunk::heightfield heightfield(rasterHeights, TILE_SIZE);
+
+if (coord.zoom <= 6) {
+  // 캐시 사용 불가, 직접 계산
+  heightfield.applyGeometricError(maximumGeometricError, true);
+} else {
+  // 캐시에서 levels 가져옴
+  const HeightCacheEntry &entry = getOrBuildHeightCacheEntry(
+    dataset, coord, maximumGeometricError, TILE_SIZE
+  );
+  heightfield.setLevels(entry.levels);
+
+  // neighbor 처리
+  for (int borderIndex = 0; borderIndex < 4; borderIndex++) {
+    // ...
+    const HeightCacheEntry &neighborEntry = getOrBuildHeightCacheEntry(
+      dataset, neighborCoord, maximumGeometricError, TILE_SIZE
+    );
+    ctb::chunk::heightfield neighborHeightfield(neighborEntry.heights.data(), TILE_SIZE);
+    neighborHeightfield.setLevels(neighborEntry.levels);
+    heightfield.applyBorderActivationState(neighborHeightfield, borderIndex);
+  }
+}
+////////////
+
 const HeightCacheEntry &
 ctb::MeshTiler::getOrBuildHeightCacheEntry(
   GDALDataset *dataset,
