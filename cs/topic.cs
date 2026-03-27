@@ -1,130 +1,147 @@
-// ITopicMessage.h
-public interface class ITopicMessage {
-    void Deserialize(array<System::Byte>^ data);
+TopicSystem.h
+#pragma once
+using namespace System;
+using namespace System::Collections::Generic;
+
+public interface class ISerializable
+{
+    void Deserialize(IntPtr data, int size);
+    IntPtr Serialize(int% size);
 };
 
-// TopicManager.h
-public ref class TopicManager sealed {
+public interface class ITopicMessage : public ISerializable
+{
+    property String^ TopicName { String^ get(); }
+};
+
+public delegate ITopicMessage^ CreateMessageDelegate();
+public delegate void OnMessageDelegate(String^ topicName, ITopicMessage^ msg);
+
+public ref class TopicManager sealed
+{
 private:
     static TopicManager^ _instance = gcnew TopicManager();
-    System::Collections::Generic::Dictionary<System::String^, System::Type^>^ _registry;
+    Dictionary<String^, CreateMessageDelegate^>^ _registry;
 
-    TopicManager() {
-        _registry = gcnew System::Collections::Generic::Dictionary<System::String^, System::Type^>();
+    TopicManager()
+    {
+        _registry = gcnew Dictionary<String^, CreateMessageDelegate^>();
     }
 
 public:
-    static property TopicManager^ Instance {
+    static property TopicManager^ Instance
+    {
         TopicManager^ get() { return _instance; }
     }
 
-    void Register(System::String^ topicName, System::Type^ type) {
+    event OnMessageDelegate^ OnMessage;
+
+    void Register(String^ topicName, CreateMessageDelegate^ factory)
+    {
         if (!_registry->ContainsKey(topicName))
-            _registry->Add(topicName, type);
+            _registry->Add(topicName, factory);
     }
 
-    ITopicMessage^ CreateAndDeserialize(System::String^ topicName, array<System::Byte>^ data) {
-        System::Type^ type;
-        if (!_registry->TryGetValue(topicName, type))
-            throw gcnew System::Exception("Unknown topic: " + topicName);
+    // 내부에서 생성 + deserialize 후 OnMessage로 바로 던짐
+    void Dispatch(String^ topicName, IntPtr data, int size)
+    {
+        CreateMessageDelegate^ factory;
+        if (!_registry->TryGetValue(topicName, factory))
+            throw gcnew Exception("Unknown topic: " + topicName);
 
-        // Activator로 인스턴스 생성 후 Deserialize 호출
-        ITopicMessage^ msg = safe_cast<ITopicMessage^>(System::Activator::CreateInstance(type));
-        msg->Deserialize(data);
-        return msg;
+        ITopicMessage^ msg = factory();
+        msg->Deserialize(data, size);
+        OnMessage(topicName, msg);
     }
 };
-2. 생성되는 ref class 템플릿
-코드젠이 아래 패턴으로 클래스를 뽑아내면 됩니다.
-// [Generated] SensorData.h
-public ref class SensorDataMessage : public ITopicMessage {
+Messages.h (코드젠 대상)
+#pragma once
+#include "TopicSystem.h"
+using namespace System;
+
+public ref class SensorDataMessage : public ITopicMessage
+{
 public:
-    // 실제 필드
     float Temperature;
     float Humidity;
 
-    // ★ static 생성자 → 클래스 최초 로드 시 자동 등록
-    static SensorDataMessage() {
-        TopicManager::Instance->Register("sensor/data", SensorDataMessage::typeid);
+    virtual property String^ TopicName
+    {
+        String^ get() { return "sensor/data"; }
     }
 
-    virtual void Deserialize(array<System::Byte>^ data) override {
-        // 예: 네이티브 구조체로 pin_ptr 후 memcpy
-        pin_ptr<System::Byte> p = &data[0];
-        NativeSensorData* native = reinterpret_cast<NativeSensorData*>(p);
+    static ITopicMessage^ Create()
+    {
+        return gcnew SensorDataMessage();
+    }
+
+    static SensorDataMessage()
+    {
+        TopicManager::Instance->Register("sensor/data",
+            gcnew CreateMessageDelegate(&SensorDataMessage::Create));
+    }
+
+    #pragma pack(push, 1)
+    struct Native {
+        float temperature;
+        float humidity;
+    };
+    #pragma pack(pop)
+
+    virtual void Deserialize(IntPtr data, int size) override
+    {
+        Native* native = reinterpret_cast<Native*>(data.ToPointer());
         Temperature = native->temperature;
         Humidity    = native->humidity;
     }
-};
 
-// [Generated] CameraFrame.h
-public ref class CameraFrameMessage : public ITopicMessage {
-public:
-    int Width, Height;
-    array<System::Byte>^ PixelData;
-
-    static CameraFrameMessage() {
-        TopicManager::Instance->Register("camera/frame", CameraFrameMessage::typeid);
-    }
-
-    virtual void Deserialize(array<System::Byte>^ data) override {
-        // ... 역직렬화 로직
+    virtual IntPtr Serialize(int% size) override
+    {
+        Native* native = new Native();
+        native->temperature = Temperature;
+        native->humidity    = Humidity;
+        size = sizeof(Native);
+        return IntPtr(native);
     }
 };
-3. 문제: static 생성자는 실제로 참조될 때만 실행됨
-CLR의 static 생성자는 해당 타입이 처음 사용될 때 실행됩니다. 아무도 참조 안 하면 등록이 안 됩니다.
-해결책: 강제 초기화 모듈 생성
-// TopicRegistry.h  ← 코드젠이 함께 생성
-public ref class TopicRegistry abstract sealed {
-public:
-    static void Initialize() {
-        // 각 타입에 접근해서 static 생성자를 강제 실행
-        System::Runtime::CompilerServices::RuntimeHelpers::RunClassConstructor(
-            SensorDataMessage::typeid->TypeHandle);
-        System::Runtime::CompilerServices::RuntimeHelpers::RunClassConstructor(
-            CameraFrameMessage::typeid->TypeHandle);
-        // 새 토픽 추가 시 여기도 코드젠으로 자동 추가
-    }
-};
-또는 더 자동화하려면 커스텀 Attribute + 반사:
-// 마킹용 attribute
-[System::AttributeUsage(System::AttributeTargets::Class)]
-public ref class TopicAttribute : public System::Attribute {
-public:
-    System::String^ TopicName;
-    TopicAttribute(System::String^ name) : TopicName(name) {}
-};
+TopicRegistry.h (코드젠 대상)
+#pragma once
+#include "Messages.h"
 
-// 사용
-[Topic("sensor/data")]
-public ref class SensorDataMessage : public ITopicMessage { ... };
-
-// 스타트업에서 어셈블리 스캔
-static void AutoRegisterAll() {
-    auto assembly = System::Reflection::Assembly::GetExecutingAssembly();
-    for each (System::Type^ t in assembly->GetTypes()) {
-        auto attr = safe_cast<TopicAttribute^>(
-            System::Attribute::GetCustomAttribute(t, TopicAttribute::typeid));
-        if (attr != nullptr)
-            TopicManager::Instance->Register(attr->TopicName, t);
-    }
-}
-4. C# 사용 측
-// 앱 시작 시 한 번만
-TopicRegistry.Initialize(); // 또는 AutoRegisterAll()
-
-// 메시지 수신 시
-void OnTopicReceived(string topicName, byte[] data)
+public ref class TopicRegistry abstract sealed
 {
-    var msg = TopicManager.Instance.CreateAndDeserialize(topicName, data);
+public:
+    static void Initialize()
+    {
+        SensorDataMessage::Create();
+        // [Generated] 새 토픽 추가 시 한 줄 추가
+    }
+};
+C# - 사용자는 그냥 받아서 쓰면 끝
+// 앱 시작 시 한 번
+TopicRegistry.Initialize();
 
+// 토픽명 + 객체 바로 수신
+TopicManager.Instance.OnMessage += (topicName, msg) =>
+{
     switch (msg)
     {
         case SensorDataMessage sensor:
-            Console.WriteLine($"Temp: {sensor.Temperature}");
+            Console.WriteLine($"온도: {sensor.Temperature}, 습도: {sensor.Humidity}");
             break;
+
         case CameraFrameMessage cam:
-            Console.WriteLine($"Frame: {cam.Width}x{cam.Height}");
+            Console.WriteLine($"프레임: {cam.Width}x{cam.Height}");
             break;
     }
-}
+};
+흐름
+C++ void* + topicName
+        ↓
+Dispatch(topicName, IntPtr, size)
+  factory()                     ← gcnew 직접 호출
+  msg->Deserialize(IntPtr)      ← 복사 없이 포인터 캐스팅
+  OnMessage(topicName, msg)     ← C# 콜백
+        ↓
+C# case SensorDataMessage sensor
+  sensor.Temperature 바로 사용  ← 캐스팅/복사 없음
