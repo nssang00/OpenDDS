@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FastDDS SHM — Boost Segment 구조 완전 해부</title>
+<style>
+:root {
+  --bg:    #ffffff; --bg2:  #f6f5f1; --bg3: #ededea; --bg4: #e5e4e0;
+  --t1:    #181816; --t2:   #55544f; --t3: #8a8880; --t4: #b4b2a9;
+  --b:     rgba(0,0,0,0.10); --b2: rgba(0,0,0,0.20);
+  --blue50:#E6F1FB; --blue100:#B5D4F4; --blue200:#85B7EB; --blue400:#378ADD; --blue600:#185FA5; --blue800:#0C447C;
+  --teal50:#E1F5EE; --teal100:#9FE1CB; --teal200:#5DCAA5; --teal600:#0F6E56; --teal800:#085041;
+  --purple50:#EEEDFE; --purple100:#CECBF6; --purple200:#AFA9EC; --purple600:#534AB7; --purple800:#3C3489;
+  --amber50:#FAEEDA; --amber100:#FAC775; --amber200:#EF9F27; --amber600:#854F0B; --amber800:#633806;
+  --coral50:#FAECE7; --coral100:#F5C4B3; --coral200:#F0997B; --coral600:#993C1D; --coral800:#712B13;
+  --gray50:#F1EFE8; --gray200:#B4B2A9; --gray600:#5F5E5A; --gray800:#444441;
+  --green50:#EAF3DE; --green200:#97C459; --green600:#3B6D11; --green800:#27500A;
+  --r: 8px; --rl: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a; --bg2:#242422; --bg3:#2c2c2a; --bg4:#343432;
+  --t1:#e8e6de; --t2:#a8a69e; --t3:#6e6c66; --t4:#4a4846;
+  --b:rgba(255,255,255,0.08); --b2:rgba(255,255,255,0.18);
+  --blue50:#042C53; --blue100:#0C447C; --blue200:#185FA5; --blue400:#378ADD; --blue600:#85B7EB; --blue800:#B5D4F4;
+  --teal50:#04342C; --teal100:#085041; --teal200:#0F6E56; --teal600:#5DCAA5; --teal800:#9FE1CB;
+  --purple50:#26215C; --purple100:#3C3489; --purple200:#534AB7; --purple600:#AFA9EC; --purple800:#CECBF6;
+  --amber50:#412402; --amber100:#633806; --amber200:#854F0B; --amber600:#EF9F27; --amber800:#FAC775;
+  --coral50:#4A1B0C; --coral100:#712B13; --coral200:#993C1D; --coral600:#F0997B; --coral800:#F5C4B3;
+  --gray50:#2C2C2A; --gray200:#5F5E5A; --gray600:#B4B2A9; --gray800:#D3D1C7;
+  --green50:#173404; --green200:#3B6D11; --green600:#97C459; --green800:#C0DD97;
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);line-height:1.65;font-size:14px;padding:2rem 1.5rem;max-width:1100px;margin:0 auto}
+h1{font-size:24px;font-weight:600;margin-bottom:.25rem}
+h2{font-size:17px;font-weight:500;margin:2.5rem 0 .9rem;padding-bottom:.4rem;border-bottom:.5px solid var(--b2)}
+h3{font-size:14px;font-weight:500;margin-bottom:.5rem;color:var(--t1)}
+p{color:var(--t2);margin-bottom:.65rem;line-height:1.7}
+code{font-family:"SFMono-Regular",Consolas,"Cascadia Code",monospace;font-size:11.5px;background:var(--bg3);padding:1px 5px;border-radius:4px;color:var(--t1)}
+pre{font-family:"SFMono-Regular",Consolas,"Cascadia Code",monospace;font-size:12px;background:var(--bg3);border:0.5px solid var(--b2);border-radius:var(--r);padding:.9rem 1rem;overflow-x:auto;line-height:1.6;color:var(--t1);margin-bottom:1rem}
+pre .cm{color:var(--t3)} pre .kw{color:var(--blue600)} pre .ty{color:var(--purple600)} pre .st{color:var(--teal600)} pre .nm{color:var(--amber600)} pre .nu{color:var(--coral600)}
+.subtitle{color:var(--t3);font-size:13px;margin-bottom:2rem}
+hr{border:none;border-top:.5px solid var(--b2);margin:2rem 0}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-bottom:1.25rem}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:1.25rem}
+.card{background:var(--bg2);border:.5px solid var(--b);border-radius:var(--rl);padding:1rem 1.1rem}
+.card-title{font-weight:500;font-size:13px;margin-bottom:6px}
+.card-body{font-size:12.5px;color:var(--t2);line-height:1.65}
+.badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;margin-bottom:6px}
+.b-blue{background:var(--blue50);color:var(--blue800)}
+.b-teal{background:var(--teal50);color:var(--teal800)}
+.b-purple{background:var(--purple50);color:var(--purple800)}
+.b-amber{background:var(--amber50);color:var(--amber800)}
+.b-coral{background:var(--coral50);color:var(--coral800)}
+.b-gray{background:var(--gray50);color:var(--gray800)}
+.b-green{background:var(--green50);color:var(--green800)}
+.info{background:var(--blue50);border:.5px solid var(--blue200);border-radius:var(--r);padding:.65rem .9rem;font-size:12.5px;color:var(--blue800);margin-bottom:1rem}
+.warn{background:var(--amber50);border:.5px solid var(--amber200);border-radius:var(--r);padding:.65rem .9rem;font-size:12.5px;color:var(--amber800);margin-bottom:1rem}
+.note{background:var(--teal50);border:.5px solid var(--teal200);border-radius:var(--r);padding:.65rem .9rem;font-size:12.5px;color:var(--teal800);margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:1rem}
+th{text-align:left;padding:6px 10px;background:var(--bg3);font-weight:500;color:var(--t1);border-bottom:.5px solid var(--b2)}
+td{padding:6px 10px;border-bottom:.5px solid var(--b);color:var(--t2);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.field-row{display:flex;gap:8px;margin-bottom:5px;align-items:baseline}
+.field-name{font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;color:var(--t1);min-width:200px;flex-shrink:0}
+.field-type{font-size:11px;color:var(--t3);min-width:140px;flex-shrink:0;font-family:monospace}
+.field-desc{font-size:12px;color:var(--t2)}
+.mem-block{border-radius:var(--r);overflow:hidden;border:.5px solid var(--b2);margin-bottom:1.25rem}
+.mem-header{padding:7px 12px;font-size:12px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.mem-row{padding:6px 12px;border-top:.5px solid var(--b);font-size:12px;display:flex;align-items:center;gap:10px}
+.mem-row:nth-child(even){background:var(--bg2)}
+.mem-offset{font-family:monospace;font-size:11px;color:var(--t3);min-width:70px;flex-shrink:0}
+.mem-label{flex:1;color:var(--t1)}
+.mem-size{font-family:monospace;font-size:11px;color:var(--t3)}
+.mem-tag{font-size:10px;padding:1px 6px;border-radius:99px;flex-shrink:0}
+svg{display:block}
+.flow-step{display:flex;gap:10px;margin-bottom:9px}
+.fs-num{width:22px;height:22px;border-radius:50%;background:var(--purple50);color:var(--purple800);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.fs-body{flex:1}
+.fs-title{font-weight:500;font-size:13px;margin-bottom:2px}
+.fs-desc{font-size:12.5px;color:var(--t2)}
+.seg-label{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
+</style>
+</head>
+<body>
+
+<h1>FastDDS SHM — Boost Segment 구조 완전 해부</h1>
+<p class="subtitle">SharedMemGlobal · SharedMemManager · MultiProducerConsumerRingBuffer &nbsp;|&nbsp; boost::interprocess 기반</p>
+
+<!-- ══════════════ 1. 두 종류의 세그먼트 ══════════════ -->
+<h2>1. 두 종류의 SHM 세그먼트</h2>
+<p>FastDDS SHM 트랜스포트는 역할이 전혀 다른 두 종류의 shared_memory 세그먼트를 사용합니다.</p>
+
+<div class="grid-2">
+  <div class="card">
+    <span class="badge b-blue">포트 세그먼트</span>
+    <div class="card-title">신호 전달 전용 — 링버퍼 컨테이너</div>
+    <div class="card-body">
+      <strong>이름:</strong> <code>{domain}_port{port_id}</code><br>
+      예) <code>fastdds_port7412</code><br><br>
+      <strong>소유자:</strong> 포트에 접근하는 최초 프로세스가 생성.<br>
+      <code>ref_counter</code>가 0이 되면 마지막 소유자가 직접 삭제.<br><br>
+      <strong>내용:</strong> PortNode + Cell 배열 + RingBuffer::Node<br>
+      실제 메시지 데이터는 없음 — 참조(descriptor)만 저장
+    </div>
+  </div>
+  <div class="card">
+    <span class="badge b-teal">데이터 세그먼트</span>
+    <div class="card-title">데이터 보관 전용 — Publisher 소유</div>
+    <div class="card-body">
+      <strong>이름:</strong> <code>{domain}_{uuid}</code><br>
+      예) <code>fastdds_a3f2b8c1d4e5...</code><br><br>
+      <strong>소유자:</strong> Publisher 프로세스가 생성 및 소유.<br>
+      소유자 종료 시 <code>RobustExclusiveLock(_el)</code> 해제 → Watchdog이 감지 후 정리.<br><br>
+      <strong>내용:</strong> BufferNode 배열 + 직렬화된 RTPS 메시지 원본<br>
+      zero-copy의 핵심 — Subscriber는 여기를 직접 읽음
+    </div>
+  </div>
+</div>
+
+<div class="info">
+  <strong>왜 분리하나?</strong>&nbsp; 포트 세그먼트는 여러 프로세스가 공유하는 신호 채널이고, 데이터 세그먼트는 Publisher 하나가 소유하는 메모리 풀입니다. 수명·소유권·크기 요건이 완전히 다르기 때문에 분리합니다.
+</div>
+
+<!-- 락 파일 규칙 -->
+<h3>세그먼트별 락 파일 규칙</h3>
+<table>
+  <tr><th>파일명</th><th>종류</th><th>용도</th></tr>
+  <tr><td><code>{domain}_port{id}_mutex</code></td><td>boost named_mutex</td><td>포트 세그먼트 생성/삭제 경쟁 방지</td></tr>
+  <tr><td><code>{domain}_port{id}_el</code></td><td>RobustExclusiveLock</td><td>ReadExclusive 모드 단독 리스너 잠금</td></tr>
+  <tr><td><code>{domain}_port{id}_sl</code></td><td>RobustSharedLock</td><td>ReadShared 모드 공유 리스너 잠금</td></tr>
+  <tr><td><code>{domain}_{uuid}_el</code></td><td>RobustExclusiveLock</td><td>데이터 세그먼트 생존 표시 (프로세스 크래시 감지용)</td></tr>
+</table>
+
+<hr>
+
+<!-- ══════════════ 2. boost managed_shared_memory 동작 원리 ══════════════ -->
+<h2>2. boost::interprocess 동작 원리</h2>
+
+<div class="grid-2">
+  <div>
+    <h3>세그먼트 생성 / 열기</h3>
+    <pre><span class="cm">// 생성 (최초 프로세스)</span>
+<span class="kw">new</span> <span class="ty">SharedMemSegment</span>(
+    boost::interprocess::<span class="nm">create_only</span>,
+    <span class="st">"fastdds_port7412"</span>,
+    segment_size            <span class="cm">// 바이트 단위 총 크기</span>
+);
+
+<span class="cm">// 열기 (다른 프로세스)</span>
+<span class="kw">new</span> <span class="ty">SharedMemSegment</span>(
+    boost::interprocess::<span class="nm">open_only</span>,
+    <span class="st">"fastdds_port7412"</span>
+);</pre>
+    <p style="font-size:12.5px;color:var(--t2)">두 프로세스는 서로 다른 가상 주소에 같은 물리 메모리를 매핑합니다. OS가 페이지 테이블로 연결.</p>
+  </div>
+  <div>
+    <h3>객체 배치 — construct&lt;T&gt;()</h3>
+    <pre><span class="cm">// 이름 있는 객체 (다른 프로세스가 이름으로 조회 가능)</span>
+<span class="ty">PortNode</span>* node = segment.construct&lt;<span class="ty">PortNode</span>&gt;(
+    <span class="st">"port_node_abi5"</span>   <span class="cm">// 이름</span>
+)();                   <span class="cm">// 생성자 인수</span>
+
+<span class="cm">// 익명 배열 (오프셋으로만 접근)</span>
+<span class="ty">Cell</span>* cells = segment.construct&lt;<span class="ty">Cell</span>&gt;(
+    boost::interprocess::<span class="nm">anonymous_instance</span>
+)[max_buffer_descriptors]();
+
+<span class="cm">// 이름으로 찾기 (다른 프로세스에서)</span>
+<span class="ty">PortNode</span>* node = segment.find&lt;<span class="ty">PortNode</span>&gt;(
+    <span class="st">"port_node_abi5"</span>
+).first;</pre>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div>
+    <h3>원시 메모리 할당 — allocate()</h3>
+    <pre><span class="cm">// 데이터 세그먼트에서 메시지용 메모리 할당</span>
+<span class="kw">void</span>* data = segment.allocate(<span class="nm">size</span>);
+
+<span class="cm">// 세그먼트 내부 힙(free-list)에서 꺼냄</span>
+<span class="cm">// segment.allocate()는 Thread-safe (내부 mutex)</span>
+
+<span class="cm">// 사용 완료 후 반환</span>
+segment.deallocate(data);</pre>
+  </div>
+  <div>
+    <h3>크로스 프로세스 포인터 — 오프셋 변환</h3>
+    <pre><span class="cm">// 포인터 → 오프셋 (SHM에 저장할 때)</span>
+<span class="ty">Offset</span> off = segment.get_offset_from_address(ptr);
+<span class="cm">// = ptr - segment_base_address (이 프로세스 기준)</span>
+
+<span class="cm">// 오프셋 → 포인터 (SHM에서 읽을 때)</span>
+<span class="kw">void</span>* ptr = segment.get_address_from_offset(off);
+<span class="cm">// = other_segment_base_address + off (다른 프로세스 기준)</span></pre>
+    <div class="warn" style="margin-top:8px">
+      <strong>SHM에 절대 포인터를 저장하면 안 됩니다.</strong> 각 프로세스의 매핑 베이스 주소가 다르기 때문에 다른 프로세스에서 역참조하면 segfault. 반드시 오프셋으로 저장해야 합니다.
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<!-- ══════════════ 3. 포트 세그먼트 내부 레이아웃 ══════════════ -->
+<h2>3. 포트 세그먼트 내부 레이아웃</h2>
+<p>이름: <code>{domain}_port{port_id}</code> &nbsp;·&nbsp; 크기: <code>sizeof(PortNode) + sizeof(Cell) × max_buffer_descriptors + 512</code></p>
+
+<div class="mem-block">
+  <div class="mem-header" style="background:var(--blue50);color:var(--blue800)">
+    <span>boost managed_shared_memory &nbsp;·&nbsp; <strong>포트 세그먼트</strong></span>
+    <span style="font-size:11px;font-family:monospace">fastdds_port7412</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">+0x000</span>
+    <span class="mem-label"><strong>boost interprocess 내부 헤더</strong> — 힙 메타데이터, named-object 인덱스</span>
+    <span class="mem-size">~512 B</span>
+    <span class="mem-tag" style="background:var(--gray50);color:var(--gray800)">boost</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">+0x200</span>
+    <span class="mem-label">
+      <strong>PortNode</strong> &nbsp;·&nbsp; <code>construct&lt;PortNode&gt;("port_node_abi5")</code><br>
+      <span style="font-size:11.5px;color:var(--t3)">ref_counter · port_id · uuid · empty_cv · empty_cv_mutex · listeners_status[1024] · is_port_ok · buffer(offset) · buffer_node(offset)</span>
+    </span>
+    <span class="mem-size">~33 KB</span>
+    <span class="mem-tag" style="background:var(--blue50);color:var(--blue800)">named</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">+0x8400</span>
+    <span class="mem-label">
+      <strong>Cell[max_buffer_descriptors]</strong> &nbsp;·&nbsp; <code>construct&lt;Cell&gt;(anonymous_instance)[N]()</code><br>
+      <span style="font-size:11.5px;color:var(--t3)">각 Cell = { atomic&lt;uint32_t&gt; ref_counter_ , BufferDescriptor data_ }</span>
+    </span>
+    <span class="mem-size">N × 20 B</span>
+    <span class="mem-tag" style="background:var(--purple50);color:var(--purple800)">anon</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">+0x8400<br>+N×20</span>
+    <span class="mem-label">
+      <strong>RingBuffer::Node</strong> &nbsp;·&nbsp; <code>construct&lt;Node&gt;(anonymous_instance)()</code><br>
+      <span style="font-size:11.5px;color:var(--t3)">atomic&lt;PtrType&gt; pointer_ { write_p:32 | free_cells:32 } · total_cells_ · registered_listeners_</span>
+    </span>
+    <span class="mem-size">16 B</span>
+    <span class="mem-tag" style="background:var(--purple50);color:var(--purple800)">anon</span>
+  </div>
+</div>
+
+<h3>PortNode 내부 필드 상세</h3>
+<div class="grid-2">
+  <div>
+    <div class="field-row"><span class="field-name">last_listeners_status_check_time_ms</span><span class="field-type">atomic&lt;int64&gt;</span><span class="field-desc">WatchTask 마지막 체크 시각</span></div>
+    <div class="field-row"><span class="field-name">ref_counter</span><span class="field-type">atomic&lt;uint32_t&gt;</span><span class="field-desc">포트를 열고 있는 프로세스 수</span></div>
+    <div class="field-row"><span class="field-name">buffer</span><span class="field-type">Offset</span><span class="field-desc">Cell 배열의 세그먼트 내 오프셋</span></div>
+    <div class="field-row"><span class="field-name">buffer_node</span><span class="field-type">Offset</span><span class="field-desc">RingBuffer::Node 의 오프셋</span></div>
+    <div class="field-row"><span class="field-name">port_id / uuid</span><span class="field-type">uint32 / UUID&lt;8&gt;</span><span class="field-desc">포트 식별자 (포트가 재생성되면 uuid 변경)</span></div>
+    <div class="field-row"><span class="field-name">num_listeners</span><span class="field-type">uint32_t</span><span class="field-desc">현재 등록된 리스너 수</span></div>
+  </div>
+  <div>
+    <div class="field-row"><span class="field-name">empty_cv</span><span class="field-type">SHM condition_variable</span><span class="field-desc">push → wait_pop 깨우기</span></div>
+    <div class="field-row"><span class="field-name">empty_cv_mutex</span><span class="field-type">SHM mutex</span><span class="field-desc">cv와 listeners_status 보호</span></div>
+    <div class="field-row"><span class="field-name">is_port_ok</span><span class="field-type">bit</span><span class="field-desc">0이면 포트 불량, 예외 발생</span></div>
+    <div class="field-row"><span class="field-name">is_opened_read_exclusive</span><span class="field-type">bit</span><span class="field-desc">unicast 모드 여부</span></div>
+    <div class="field-row"><span class="field-name">listeners_status[1024]</span><span class="field-type">ListenerStatus[]</span><span class="field-desc">각 리스너의 waiting/processing 상태</span></div>
+    <div class="field-row"><span class="field-name">domain_name[17]</span><span class="field-type">char[]</span><span class="field-desc">도메인 이름 (lock 파일 경로 계산용)</span></div>
+  </div>
+</div>
+
+<h3 style="margin-top:1rem">Cell 구조 — 링버퍼의 한 칸</h3>
+<pre><span class="kw">struct</span> <span class="ty">Cell</span> {
+    std::atomic&lt;<span class="ty">uint32_t</span>&gt; ref_counter_;   <span class="cm">// 아직 pop하지 않은 Listener 수</span>
+    <span class="ty">T</span>                   data_;            <span class="cm">// = BufferDescriptor (실제 링버퍼 내용물)</span>
+};
+
+<span class="kw">struct</span> <span class="ty">BufferDescriptor</span> {              <span class="cm">// T = BufferDescriptor</span>
+    <span class="ty">SharedMemSegment::Id</span>     source_segment_id;    <span class="cm">// 데이터 세그먼트 UUID</span>
+    <span class="ty">SharedMemSegment::Offset</span> buffer_node_offset;   <span class="cm">// 세그먼트 내 BufferNode 오프셋</span>
+    <span class="ty">uint32_t</span>                 validity_id;          <span class="cm">// 버퍼 무효화 버전 번호</span>
+};</pre>
+
+<div class="note">링버퍼 Cell에는 <strong>실제 메시지가 없습니다</strong>. 오직 "어느 세그먼트의 어느 위치에 메시지가 있는지"를 가리키는 20바이트 참조만 들어갑니다. 이것이 zero-copy의 핵심입니다.</div>
+
+<hr>
+
+<!-- ══════════════ 4. 데이터 세그먼트 내부 레이아웃 ══════════════ -->
+<h2>4. 데이터 세그먼트 내부 레이아웃</h2>
+<p>이름: <code>{domain}_{uuid}</code> &nbsp;·&nbsp; 크기: Publisher가 <code>create_segment(total_size, max_allocations)</code>에서 지정한 크기 + 내부 할당 오버헤드</p>
+
+<div class="mem-block">
+  <div class="mem-header" style="background:var(--teal50);color:var(--teal800)">
+    <span>boost managed_shared_memory &nbsp;·&nbsp; <strong>데이터 세그먼트</strong> (Publisher 소유)</span>
+    <span style="font-size:11px;font-family:monospace">fastdds_a3f2b8c1d4e5f6a7...</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">+0x000</span>
+    <span class="mem-label"><strong>boost 내부 헤더</strong> — 힙 관리 구조 (free-list allocator)</span>
+    <span class="mem-size">~512 B</span>
+    <span class="mem-tag" style="background:var(--gray50);color:var(--gray800)">boost</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">+0x200</span>
+    <span class="mem-label">
+      <strong>BufferNode[max_allocations]</strong> &nbsp;·&nbsp; <code>construct&lt;BufferNode&gt;(anonymous_instance)[N]()</code><br>
+      <span style="font-size:11.5px;color:var(--t3)">N개의 슬롯. 각각 atomic&lt;Status&gt; + data_size + data_offset 보유</span>
+    </span>
+    <span class="mem-size">N × 16 B</span>
+    <span class="mem-tag" style="background:var(--teal50);color:var(--teal800)">anon</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">가변</span>
+    <span class="mem-label">
+      <strong>메시지 데이터 #0</strong> &nbsp;·&nbsp; <code>segment.allocate(msg_size)</code><br>
+      <span style="font-size:11.5px;color:var(--t3)">직렬화된 RTPS 패킷 원본. Publisher가 data() 포인터로 직접 씀</span>
+    </span>
+    <span class="mem-size">가변</span>
+    <span class="mem-tag" style="background:var(--coral50);color:var(--coral800)">alloc</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">가변</span>
+    <span class="mem-label">
+      <strong>메시지 데이터 #1, #2, ...</strong><br>
+      <span style="font-size:11.5px;color:var(--t3)">복수의 메시지가 동시에 존재 가능 (아직 모든 Subscriber가 읽지 않은 것들)</span>
+    </span>
+    <span class="mem-size">가변</span>
+    <span class="mem-tag" style="background:var(--coral50);color:var(--coral800)">alloc</span>
+  </div>
+  <div class="mem-row">
+    <span class="mem-offset">—</span>
+    <span class="mem-label"><strong>free space</strong> — 힙 여유 공간</span>
+    <span class="mem-size">—</span>
+    <span class="mem-tag" style="background:var(--gray50);color:var(--gray800)">free</span>
+  </div>
+</div>
+
+<h3>BufferNode 필드 상세</h3>
+<pre><span class="kw">struct</span> <span class="ty">BufferNode</span> {
+    <span class="kw">struct</span> <span class="ty">Status</span> {
+        <span class="ty">uint64_t</span> validity_id     : <span class="nu">24</span>;  <span class="cm">// 무효화 버전 (BufferDescriptor와 대조)</span>
+        <span class="ty">uint64_t</span> enqueued_count  : <span class="nu">20</span>;  <span class="cm">// 몇 개 포트 큐에 들어가 있는지</span>
+        <span class="ty">uint64_t</span> processing_count: <span class="nu">20</span>;  <span class="cm">// 몇 개 Listener가 처리 중인지</span>
+    };
+    std::atomic&lt;<span class="ty">Status</span>&gt;       status;       <span class="cm">// 64-bit CAS로 세 값을 동시 갱신</span>
+    <span class="ty">uint32_t</span>                  data_size;    <span class="cm">// 메시지 바이트 수</span>
+    <span class="ty">SharedMemSegment::Offset</span>  data_offset;  <span class="cm">// 세그먼트 내 메시지 원본 오프셋</span>
+};</pre>
+
+<div class="grid-2">
+  <div class="card">
+    <span class="badge b-teal">free_buffers_ 리스트</span>
+    <div class="card-title">할당 전 BufferNode 풀</div>
+    <div class="card-body"><code>foonathan::memory::list&lt;BufferNode*&gt;</code><br>세그먼트 생성 시 N개를 모두 여기에 넣음. <code>alloc_buffer()</code>가 뒤에서 꺼냄 (pop_back).</div>
+  </div>
+  <div class="card">
+    <span class="badge b-coral">allocated_buffers_ 리스트</span>
+    <div class="card-title">사용 중 BufferNode 추적</div>
+    <div class="card-body"><code>foonathan::memory::list&lt;BufferNode*&gt;</code><br><code>alloc_buffer()</code> 후 여기에 추가. <code>recover_buffers()</code>가 순회하며 미참조 버퍼를 free_buffers_로 돌려보냄.</div>
+  </div>
+</div>
+
+<hr>
+
+<!-- ══════════════ 5. 전체 메모리 맵 ══════════════ -->
+<h2>5. 프로세스 간 전체 메모리 맵</h2>
+<p>세 프로세스(Publisher, Subscriber A, Subscriber B)가 두 종류의 세그먼트를 어떻게 공유하는지 보여줍니다.</p>
+
+<svg width="100%" viewBox="0 0 680 480" role="img">
+  <title>FastDDS SHM 전체 메모리 맵</title>
+  <desc>Publisher와 두 Subscriber 프로세스가 포트 세그먼트와 데이터 세그먼트를 공유하는 구조</desc>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- OS Physical Memory label -->
+  <rect x="20" y="14" width="640" height="452" rx="14" fill="var(--bg2)" stroke="var(--b2)" stroke-width="0.5" stroke-dasharray="6 4"/>
+  <text x="340" y="36" text-anchor="middle" font-size="12" font-weight="500" fill="var(--t3)" font-family="sans-serif">OS 물리 메모리 (커널이 관리)</text>
+
+  <!-- PORT SEGMENT box -->
+  <rect x="220" y="50" width="240" height="140" rx="10" fill="var(--blue50)" stroke="var(--blue200)" stroke-width="0.5"/>
+  <text x="340" y="72" text-anchor="middle" font-size="12" font-weight="500" fill="var(--blue800)" font-family="sans-serif">포트 세그먼트</text>
+  <text x="340" y="88" text-anchor="middle" font-size="10" fill="var(--blue600)" font-family="monospace">fastdds_port7412</text>
+  <!-- inner cells in port seg -->
+  <rect x="232" y="96" width="216" height="22" rx="4" fill="var(--blue100)" stroke="var(--blue200)" stroke-width="0.5"/>
+  <text x="340" y="111" text-anchor="middle" font-size="10" fill="var(--blue800)" font-family="sans-serif">PortNode (empty_cv, listeners_status...)</text>
+  <rect x="232" y="122" width="216" height="22" rx="4" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="340" y="137" text-anchor="middle" font-size="10" fill="var(--purple800)" font-family="sans-serif">Cell[0]: ref=2 | BufferDescriptor</text>
+  <rect x="232" y="148" width="216" height="22" rx="4" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="340" y="163" text-anchor="middle" font-size="10" fill="var(--purple800)" font-family="sans-serif">Cell[1]: ref=1 | BufferDescriptor</text>
+  <rect x="232" y="174" width="216" height="10" rx="3" fill="var(--bg3)" stroke="var(--b)" stroke-width="0.5"/>
+  <text x="340" y="182" text-anchor="middle" font-size="9" fill="var(--t3)" font-family="sans-serif">RingBuffer::Node (write_p, free_cells)</text>
+
+  <!-- DATA SEGMENT box -->
+  <rect x="220" y="210" width="240" height="130" rx="10" fill="var(--teal50)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="340" y="232" text-anchor="middle" font-size="12" font-weight="500" fill="var(--teal800)" font-family="sans-serif">데이터 세그먼트</text>
+  <text x="340" y="248" text-anchor="middle" font-size="10" fill="var(--teal600)" font-family="monospace">fastdds_a3f2b8c1...</text>
+  <rect x="232" y="256" width="100" height="22" rx="4" fill="var(--teal100)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="282" y="271" text-anchor="middle" font-size="10" fill="var(--teal800)" font-family="sans-serif">BufferNode[0]</text>
+  <rect x="338" y="256" width="106" height="22" rx="4" fill="var(--teal100)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="391" y="271" text-anchor="middle" font-size="10" fill="var(--teal800)" font-family="sans-serif">BufferNode[1]</text>
+  <rect x="232" y="282" width="100" height="28" rx="4" fill="var(--coral50)" stroke="var(--coral200)" stroke-width="0.5"/>
+  <text x="282" y="297" text-anchor="middle" font-size="10" fill="var(--coral800)" font-family="sans-serif">msg data #0</text>
+  <text x="282" y="307" text-anchor="middle" font-size="9" fill="var(--coral600)" font-family="monospace">RTPS bytes</text>
+  <rect x="338" y="282" width="106" height="28" rx="4" fill="var(--coral50)" stroke="var(--coral200)" stroke-width="0.5"/>
+  <text x="391" y="297" text-anchor="middle" font-size="10" fill="var(--coral800)" font-family="sans-serif">msg data #1</text>
+  <text x="391" y="307" text-anchor="middle" font-size="9" fill="var(--coral600)" font-family="monospace">RTPS bytes</text>
+  <rect x="232" y="314" width="216" height="20" rx="3" fill="var(--bg3)" stroke="var(--b)" stroke-width="0.5"/>
+  <text x="340" y="327" text-anchor="middle" font-size="9" fill="var(--t3)" font-family="sans-serif">free space (힙 여유 공간)</text>
+
+  <!-- PROCESS: Publisher -->
+  <rect x="36" y="360" width="148" height="100" rx="8" fill="var(--amber50)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="110" y="380" text-anchor="middle" font-size="12" font-weight="500" fill="var(--amber800)" font-family="sans-serif">Publisher 프로세스</text>
+  <text x="110" y="396" text-anchor="middle" font-size="10" fill="var(--amber600)" font-family="sans-serif">Port (Write 모드)</text>
+  <text x="110" y="412" text-anchor="middle" font-size="10" fill="var(--amber600)" font-family="sans-serif">Segment (데이터 세그먼트 소유)</text>
+  <text x="110" y="428" text-anchor="middle" font-size="10" fill="var(--amber800)" font-family="monospace">VA: 0x7f3a00000000</text>
+  <text x="110" y="444" text-anchor="middle" font-size="9" fill="var(--amber600)" font-family="sans-serif">alloc_buffer() → try_push()</text>
+
+  <!-- PROCESS: Sub A -->
+  <rect x="266" y="360" width="148" height="100" rx="8" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="340" y="380" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple800)" font-family="sans-serif">Subscriber A</text>
+  <text x="340" y="396" text-anchor="middle" font-size="10" fill="var(--purple600)" font-family="sans-serif">Port (ReadShared)</text>
+  <text x="340" y="412" text-anchor="middle" font-size="10" fill="var(--purple600)" font-family="sans-serif">Listener A (read_p 독립)</text>
+  <text x="340" y="428" text-anchor="middle" font-size="10" fill="var(--purple800)" font-family="monospace">VA: 0x7f8b00000000</text>
+  <text x="340" y="444" text-anchor="middle" font-size="9" fill="var(--purple600)" font-family="sans-serif">wait_pop() → pop() → data()</text>
+
+  <!-- PROCESS: Sub B -->
+  <rect x="496" y="360" width="148" height="100" rx="8" fill="var(--green50)" stroke="var(--green200)" stroke-width="0.5"/>
+  <text x="570" y="380" text-anchor="middle" font-size="12" font-weight="500" fill="var(--green800)" font-family="sans-serif">Subscriber B</text>
+  <text x="570" y="396" text-anchor="middle" font-size="10" fill="var(--green600)" font-family="sans-serif">Port (ReadShared)</text>
+  <text x="570" y="412" text-anchor="middle" font-size="10" fill="var(--green600)" font-family="sans-serif">Listener B (read_p 독립)</text>
+  <text x="570" y="428" text-anchor="middle" font-size="10" fill="var(--green800)" font-family="monospace">VA: 0x7fc200000000</text>
+  <text x="570" y="444" text-anchor="middle" font-size="9" fill="var(--green600)" font-family="sans-serif">wait_pop() → pop() → data()</text>
+
+  <!-- Arrows: Publisher → Port Seg -->
+  <path d="M110 360 L110 295 L218 150" fill="none" stroke="#EF9F27" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arr)"/>
+  <!-- Publisher → Data Seg (owns) -->
+  <path d="M184 380 L220 290" fill="none" stroke="#EF9F27" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Arrows: Sub A → Port Seg -->
+  <path d="M340 360 L340 192" fill="none" stroke="#AFA9EC" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arr)"/>
+  <!-- Sub A → Data Seg (reads) -->
+  <path d="M340 360 L340 342" fill="none" stroke="#AFA9EC" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Arrows: Sub B → Port Seg -->
+  <path d="M570 360 L570 295 L462 170" fill="none" stroke="#97C459" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#arr)"/>
+  <!-- Sub B → Data Seg -->
+  <path d="M496 395 L462 310" fill="none" stroke="#97C459" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- descriptor arrow: Cell → BufferNode -->
+  <path d="M282 148 L282 254" fill="none" stroke="#378ADD" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="291" y="208" font-size="10" fill="var(--blue600)" font-family="sans-serif">buffer_node_offset</text>
+
+  <!-- legend -->
+  <rect x="36" y="340" width="9" height="9" rx="2" fill="var(--amber200)"/>
+  <text x="50" y="349" font-size="10" fill="var(--t2)" font-family="sans-serif">소유/쓰기</text>
+  <line x1="92" y1="344" x2="106" y2="344" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+  <text x="110" y="349" font-size="10" fill="var(--t2)" font-family="sans-serif">읽기/매핑</text>
+  <line x1="152" y1="344" x2="166" y2="344" stroke="var(--blue400)" stroke-width="1.5"/>
+  <text x="170" y="349" font-size="10" fill="var(--t2)" font-family="sans-serif">descriptor 참조</text>
+</svg>
+
+<hr>
+
+<!-- ══════════════ 6. 오프셋 기반 주소 변환 상세 ══════════════ -->
+<h2>6. 오프셋 기반 주소 변환 — 왜 필요한가</h2>
+
+<div class="grid-2">
+  <div>
+    <h3>문제: 각 프로세스의 매핑 주소가 다름</h3>
+    <pre><span class="cm">// 물리 메모리 페이지 = 동일</span>
+<span class="cm">// 가상 주소 = 프로세스마다 다름</span>
+
+Publisher  : SHM 베이스 = <span class="nu">0x7f3a_0000</span>
+Subscriber : SHM 베이스 = <span class="nu">0x7f8b_0000</span>
+
+<span class="cm">// Publisher가 SHM에 포인터를 저장하면:</span>
+ptr = <span class="nu">0x7f3a_0200</span>  <span class="cm">// Publisher 기준 주소</span>
+<span class="cm">// Subscriber가 역참조하면:</span>
+<span class="cm">// *0x7f3a_0200 → segfault (자신의 VA 공간에 없음)</span></pre>
+  </div>
+  <div>
+    <h3>해결: 오프셋만 SHM에 저장</h3>
+    <pre><span class="cm">// Publisher가 저장할 때:</span>
+offset = ptr - <span class="nu">0x7f3a_0000</span> = <span class="nu">0x200</span>
+<span class="cm">// SHM에는 offset = 0x200 저장</span>
+
+<span class="cm">// Subscriber가 읽을 때:</span>
+ptr = <span class="nu">0x7f8b_0000</span> + <span class="nu">0x200</span> = <span class="nu">0x7f8b_0200</span>
+<span class="cm">// → 같은 물리 페이지를 자신의 VA로 접근</span>
+
+<span class="cm">// 코드:</span>
+Offset off = seg->get_offset_from_address(ptr);
+<span class="kw">void</span>* local = seg->get_address_from_offset(off);</pre>
+  </div>
+</div>
+
+<p>이 원칙이 코드 전체에 일관되게 적용됩니다:</p>
+<table>
+  <tr><th>저장 위치</th><th>오프셋 필드</th><th>가리키는 대상</th></tr>
+  <tr><td>PortNode (포트 세그먼트 내)</td><td><code>buffer</code></td><td>같은 포트 세그먼트의 Cell 배열 시작</td></tr>
+  <tr><td>PortNode (포트 세그먼트 내)</td><td><code>buffer_node</code></td><td>같은 포트 세그먼트의 RingBuffer::Node</td></tr>
+  <tr><td>BufferNode (데이터 세그먼트 내)</td><td><code>data_offset</code></td><td>같은 데이터 세그먼트의 메시지 원본</td></tr>
+  <tr><td>BufferDescriptor (Cell.data_ 내)</td><td><code>buffer_node_offset</code></td><td>데이터 세그먼트의 BufferNode</td></tr>
+  <tr><td>BufferDescriptor (Cell.data_ 내)</td><td><code>source_segment_id</code></td><td>어느 데이터 세그먼트인지 UUID 식별</td></tr>
+</table>
+
+<hr>
+
+<!-- ══════════════ 7. 한 메시지의 전체 여정 ══════════════ -->
+<h2>7. 한 메시지의 전체 여정 (주소 변환 포함)</h2>
+
+<div class="flow-step"><div class="fs-num">1</div><div class="fs-body">
+  <div class="fs-title">Publisher: 데이터 세그먼트에서 버퍼 할당</div>
+  <div class="fs-desc"><code>Segment::alloc_buffer(msg_size)</code> → free_buffers에서 BufferNode 꺼냄 → <code>segment.allocate(msg_size)</code>로 힙 공간 확보 → <code>buffer_node.data_offset = get_offset_from_address(data_ptr)</code> 저장</div>
+</div></div>
+
+<div class="flow-step"><div class="fs-num">2</div><div class="fs-body">
+  <div class="fs-title">Publisher: SharedMemBuffer.data()로 메시지 직접 쓰기</div>
+  <div class="fs-desc"><code>data_ = segment.get_address_from_offset(buffer_node.data_offset)</code> — 이 포인터로 직접 SHM에 RTPS 패킷 직렬화. memcpy 없음.</div>
+</div></div>
+
+<div class="flow-step"><div class="fs-num">3</div><div class="fs-body">
+  <div class="fs-title">Publisher: Port에 BufferDescriptor push</div>
+  <div class="fs-desc"><code>Port::try_push(buffer)</code> → <code>inc_enqueued_count</code> → <code>Global::Port::try_push(BufferDescriptor{segment_uuid, buffer_node_offset, validity_id})</code> → RingBuffer::push()로 Cell에 기록, ref_counter = registered_listeners → <code>empty_cv.notify</code></div>
+</div></div>
+
+<div class="flow-step"><div class="fs-num">4</div><div class="fs-body">
+  <div class="fs-title">Subscriber: empty_cv 대기 → head() 확인</div>
+  <div class="fs-desc"><code>wait_pop()</code>에서 <code>empty_cv.timed_wait()</code> 깨어남 → <code>global_listener_->head()</code>로 Cell 포인터 획득 (자신의 read_p == write_p면 nullptr) → Cell.data() = BufferDescriptor 복사</div>
+</div></div>
+
+<div class="flow-step"><div class="fs-num">5</div><div class="fs-body">
+  <div class="fs-title">Subscriber: 데이터 세그먼트 찾기 + 매핑</div>
+  <div class="fs-desc"><code>find_segment(descriptor.source_segment_id)</code> → ids_segments_ 캐시 확인 → 없으면 <code>open_only</code>로 매핑 → <code>SegmentWrapper::WatchTask</code>에 등록 → SharedMemSegment 반환</div>
+</div></div>
+
+<div class="flow-step"><div class="fs-num">6</div><div class="fs-body">
+  <div class="fs-title">Subscriber: 오프셋으로 BufferNode 접근 → validity 검증</div>
+  <div class="fs-desc"><code>BufferNode* node = segment.get_address_from_offset(descriptor.buffer_node_offset)</code> → <code>node.is_valid(descriptor.validity_id)</code> 검사 → 불일치시 Publisher가 이미 invalidate → 버퍼 버리고 루프</div>
+</div></div>
+
+<div class="flow-step"><div class="fs-num">7</div><div class="fs-body">
+  <div class="fs-title">Subscriber: SharedMemBuffer 생성 → 메시지 직접 읽기</div>
+  <div class="fs-desc"><code>SharedMemBuffer(segment, segment_id, buffer_node, validity_id)</code> 생성 → <code>data_ = segment.get_address_from_offset(buffer_node.data_offset)</code> → 앱에서 <code>buffer->data()</code>로 포인터 접근. 복사 없음.</div>
+</div></div>
+
+<div class="flow-step"><div class="fs-num">8</div><div class="fs-body">
+  <div class="fs-title">Subscriber: pop() → 카운터 갱신 → 버퍼 자동 반환</div>
+  <div class="fs-desc"><code>Cell.ref_counter_.fetch_sub(1)</code> → 0이 되면 <code>free_cells++</code>(CAS) → SharedMemBuffer 소멸 시 <code>dec_processing_count(validity_id)</code> → <code>enqueued==0 &amp;&amp; processing==0</code>이면 Segment가 다음 <code>recover_buffers()</code>에서 <code>segment.deallocate(data_ptr)</code></div>
+</div></div>
+
+<hr>
+
+<!-- ══════════════ 8. 세그먼트 생명주기 ══════════════ -->
+<h2>8. 세그먼트 생명주기 요약</h2>
+<div class="grid-2">
+  <div class="card">
+    <span class="badge b-blue">포트 세그먼트 생명주기</span>
+    <div class="card-body" style="margin-top:6px">
+      <strong>생성:</strong> <code>open_or_create</code> — 존재하면 열고, 없으면 생성. named_mutex로 경쟁 방지.<br><br>
+      <strong>공유:</strong> ref_counter 증감. 열 때 +1, 닫을 때 -1.<br><br>
+      <strong>소멸:</strong> ref_counter가 0이 되면 마지막 소유자가 <code>SharedMemSegment::remove()</code> 호출.<br><br>
+      <strong>비정상 종료:</strong> WatchTask가 리스너 동결을 감지 → <code>is_port_ok=false</code> → 다음 접근 시 예외 → <code>regenerate_port()</code>로 새 세그먼트 재생성.
+    </div>
+  </div>
+  <div class="card">
+    <span class="badge b-teal">데이터 세그먼트 생명주기</span>
+    <div class="card-body" style="margin-top:6px">
+      <strong>생성:</strong> Publisher가 <code>create_only</code>로 생성. UUID 충돌 시 최대 16회 재시도.<br><br>
+      <strong>생존 표시:</strong> <code>segment_name + "_el"</code> 파일에 RobustExclusiveLock. 프로세스가 살아있는 한 유지.<br><br>
+      <strong>소멸:</strong> Publisher 종료 → Segment 소멸자 → <code>remove()</code> + OS가 마지막 매핑 해제 시 물리 메모리 반환.<br><br>
+      <strong>비정상 종료:</strong> SegmentWrapper::WatchTask가 5초마다 _el 잠금 확인 → 잠금 해제되면 <code>close_and_remove()</code>.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
