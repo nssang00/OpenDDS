@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FastDDS SHM — 전체 관계도</title>
+<style>
+:root {
+  --bg:#fff; --bg2:#f5f4f0; --bg3:#eceae6; --bg4:#e3e1dc;
+  --t1:#181816; --t2:#55544f; --t3:#8a8880; --t4:#b4b2a9;
+  --b:rgba(0,0,0,0.08); --b2:rgba(0,0,0,0.16);
+  --blue50:#E6F1FB; --blue100:#B5D4F4; --blue200:#85B7EB; --blue400:#378ADD; --blue600:#185FA5; --blue800:#0C447C;
+  --teal50:#E1F5EE; --teal100:#9FE1CB; --teal200:#5DCAA5; --teal400:#1D9E75; --teal600:#0F6E56; --teal800:#085041;
+  --purple50:#EEEDFE; --purple100:#CECBF6; --purple200:#AFA9EC; --purple400:#7F77DD; --purple600:#534AB7; --purple800:#3C3489;
+  --amber50:#FAEEDA; --amber100:#FAC775; --amber200:#EF9F27; --amber600:#854F0B; --amber800:#633806;
+  --coral50:#FAECE7; --coral100:#F5C4B3; --coral200:#F0997B; --coral600:#993C1D; --coral800:#712B13;
+  --gray50:#F1EFE8; --gray200:#B4B2A9; --gray600:#5F5E5A; --gray800:#444441;
+  --green50:#EAF3DE; --green200:#97C459; --green400:#639922; --green600:#3B6D11; --green800:#27500A;
+  --r:8px; --rl:12px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:14px; line-height:1.6; color:var(--t1);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#242422;--bg3:#2e2e2c;--bg4:#383836;
+  --t1:#e8e6de;--t2:#a8a69e;--t3:#6e6c66;--t4:#4a4846;
+  --b:rgba(255,255,255,0.06);--b2:rgba(255,255,255,0.14);
+  --blue50:#042C53;--blue100:#0C447C;--blue200:#185FA5;--blue400:#378ADD;--blue600:#85B7EB;--blue800:#B5D4F4;
+  --teal50:#04342C;--teal100:#085041;--teal200:#0F6E56;--teal400:#1D9E75;--teal600:#5DCAA5;--teal800:#9FE1CB;
+  --purple50:#26215C;--purple100:#3C3489;--purple200:#534AB7;--purple400:#7F77DD;--purple600:#AFA9EC;--purple800:#CECBF6;
+  --amber50:#412402;--amber100:#633806;--amber200:#854F0B;--amber600:#EF9F27;--amber800:#FAC775;
+  --coral50:#4A1B0C;--coral100:#712B13;--coral200:#993C1D;--coral600:#F0997B;--coral800:#F5C4B3;
+  --gray50:#2C2C2A;--gray200:#5F5E5A;--gray600:#B4B2A9;--gray800:#D3D1C7;
+  --green50:#173404;--green200:#3B6D11;--green400:#639922;--green600:#97C459;--green800:#C0DD97;
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{max-width:1120px;margin:0 auto;padding:2rem 1.5rem}
+h1{font-size:22px;font-weight:600;margin-bottom:.2rem}
+h2{font-size:16px;font-weight:500;margin:2.2rem 0 .75rem;border-bottom:.5px solid var(--b2);padding-bottom:.35rem}
+p{color:var(--t2);margin-bottom:.6rem;line-height:1.7;font-size:13.5px}
+code{font-family:"SFMono-Regular",Consolas,monospace;font-size:11px;background:var(--bg3);padding:1px 5px;border-radius:4px;color:var(--t1)}
+.subtitle{color:var(--t3);font-size:12.5px;margin-bottom:1.8rem}
+hr{border:none;border-top:.5px solid var(--b2);margin:2rem 0}
+.answer{background:var(--purple50);border:.5px solid var(--purple200);border-radius:var(--r);padding:.75rem 1rem;font-size:13.5px;color:var(--purple800);margin-bottom:1.2rem;line-height:1.75}
+.note{background:var(--teal50);border:.5px solid var(--teal200);border-radius:var(--r);padding:.6rem .85rem;font-size:13px;color:var(--teal800);margin-bottom:1rem}
+.warn{background:var(--amber50);border:.5px solid var(--amber200);border-radius:var(--r);padding:.6rem .85rem;font-size:13px;color:var(--amber800);margin-bottom:1rem}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+</style>
+</head>
+<body>
+
+<h1>Cell·Node·Listener 관계 및 메시지 흐름 전체 구조</h1>
+<p class="subtitle">실제 데이터는 Cell에 없다 &nbsp;·&nbsp; Node/Listener의 위치와 관리 방식 &nbsp;·&nbsp; 토픽 메시지가 개별 구독자에게 전달되는 과정</p>
+
+<div class="answer">
+  <strong>핵심 답변:</strong> Cell에는 실제 데이터가 없습니다. Cell에는 오직 <code>BufferDescriptor</code>(참조값 20바이트)만 있습니다.<br>
+  실제 데이터는 Publisher가 소유한 별도 SHM(데이터 세그먼트)에 있고, Subscriber는 descriptor를 받은 뒤 그 세그먼트에서 직접 읽습니다.<br>
+  <code>RingBuffer::Node</code>는 포트 SHM 안에, <code>Listener</code> C++ 객체는 각 프로세스의 로컬 힙에 존재합니다.
+</div>
+
+<!-- ═══ 다이어그램 1: 객체 위치 지도 ═══ -->
+<h2>① 모든 객체의 위치 지도 — SHM vs 로컬 힙</h2>
+
+<svg width="100%" viewBox="0 0 680 500" role="img">
+  <title>객체 위치 지도</title>
+  <desc>SHM과 로컬 힙에 분산된 객체들의 위치 관계</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- ── 포트 SHM ── -->
+  <rect x="20" y="20" width="300" height="226" rx="12" fill="var(--blue50)" stroke="var(--blue200)" stroke-width="0.5"/>
+  <text x="35" y="44" font-size="11" font-weight="500" fill="var(--blue800)">포트 SHM &nbsp;(fastdds_port7412)</text>
+
+  <!-- PortNode -->
+  <rect x="34" y="54" width="272" height="56" rx="6" fill="var(--blue100)" stroke="var(--blue200)" stroke-width="0.5"/>
+  <text x="170" y="74" text-anchor="middle" font-size="12" font-weight="500" fill="var(--blue800)">PortNode</text>
+  <text x="170" y="90" text-anchor="middle" font-size="10" fill="var(--blue600)">empty_cv · empty_cv_mutex · is_port_ok · listeners_status[1024]</text>
+  <text x="170" y="103" text-anchor="middle" font-size="10" fill="var(--blue600)">buffer(offset) · buffer_node(offset) · ref_counter</text>
+
+  <!-- RingBuffer::Node -->
+  <rect x="34" y="118" width="140" height="52" rx="6" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="104" y="137" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple800)">RingBuffer::Node</text>
+  <text x="104" y="152" text-anchor="middle" font-size="10" fill="var(--purple600)">pointer_ (write_p|free_cells)</text>
+  <text x="104" y="163" text-anchor="middle" font-size="10" fill="var(--purple600)">total_cells_ · registered_listeners_</text>
+
+  <!-- Cell array -->
+  <rect x="184" y="118" width="122" height="52" rx="6" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="245" y="137" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple800)">Cell[N] 배열</text>
+  <text x="245" y="152" text-anchor="middle" font-size="10" fill="var(--purple600)">ref_counter (atomic)</text>
+  <text x="245" y="163" text-anchor="middle" font-size="10" fill="var(--purple600)">data = BufferDescriptor</text>
+
+  <!-- BufferDescriptor detail -->
+  <rect x="34" y="180" width="272" height="52" rx="6" fill="var(--bg2)" stroke="var(--b2)" stroke-width="0.5"/>
+  <text x="170" y="198" text-anchor="middle" font-size="11" font-weight="500" fill="var(--t1)">BufferDescriptor (Cell.data_ 의 실제 내용)</text>
+  <text x="170" y="213" text-anchor="middle" font-size="10" fill="var(--t2)">source_segment_id (UUID)</text>
+  <text x="170" y="225" text-anchor="middle" font-size="10" fill="var(--t2)">buffer_node_offset · validity_id</text>
+
+  <!-- "실제 데이터 없음" label -->
+  <rect x="34" y="242" width="272" height="(-6)" rx="0" fill="none"/>
+  <text x="170" y="255" text-anchor="middle" font-size="10" font-weight="500" fill="var(--coral600)">★ Cell에 실제 메시지 데이터 없음 — 참조만 있음</text>
+
+  <!-- ── 데이터 SHM ── -->
+  <rect x="20" y="272" width="300" height="210" rx="12" fill="var(--teal50)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="35" y="296" font-size="11" font-weight="500" fill="var(--teal800)">데이터 SHM &nbsp;(fastdds_{uuid})</text>
+
+  <!-- BufferNode -->
+  <rect x="34" y="306" width="272" height="52" rx="6" fill="var(--teal100)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="170" y="325" text-anchor="middle" font-size="12" font-weight="500" fill="var(--teal800)">BufferNode</text>
+  <text x="170" y="340" text-anchor="middle" font-size="10" fill="var(--teal600)">validity_id:24 | enqueued_count:20 | processing_count:20</text>
+  <text x="170" y="352" text-anchor="middle" font-size="10" fill="var(--teal600)">data_size · data_offset (오프셋)</text>
+
+  <!-- Actual message data -->
+  <rect x="34" y="366" width="272" height="50" rx="6" fill="var(--coral50)" stroke="var(--coral200)" stroke-width="0.5"/>
+  <text x="170" y="385" text-anchor="middle" font-size="12" font-weight="500" fill="var(--coral800)">실제 메시지 데이터</text>
+  <text x="170" y="400" text-anchor="middle" font-size="10" fill="var(--coral600)">segment.allocate() 로 힙 할당된 RTPS 패킷 바이트</text>
+  <text x="170" y="412" text-anchor="middle" font-size="10" fill="var(--coral600)">★ Publisher가 data() 포인터로 직접 씀 (복사 없음)</text>
+
+  <text x="170" y="464" text-anchor="middle" font-size="10" fill="var(--t3)">free_buffers_ / allocated_buffers_ 리스트 (로컬 힙에 있음)</text>
+  <text x="170" y="478" text-anchor="middle" font-size="9" fill="var(--t4)">↑ 포인터만 로컬, 실제 BufferNode는 이 SHM 안</text>
+
+  <!-- ── 프로세스 로컬 힙 ── -->
+  <rect x="336" y="20" width="324" height="470" rx="12" fill="var(--gray50)" stroke="var(--gray200)" stroke-width="0.5"/>
+  <text x="352" y="44" font-size="11" font-weight="500" fill="var(--gray800)">프로세스 로컬 힙 (각 프로세스마다 독립)</text>
+
+  <!-- MultiProducerConsumerRingBuffer C++ object -->
+  <rect x="350" y="54" width="290" height="72" rx="6" fill="var(--bg2)" stroke="var(--b2)" stroke-width="0.5"/>
+  <text x="495" y="74" text-anchor="middle" font-size="12" font-weight="500" fill="var(--t1)">MultiProducerConsumerRingBuffer</text>
+  <text x="495" y="89" text-anchor="middle" font-size="10" fill="var(--t2)">cells_  → SHM Cell 배열 가리킴 (포인터만 로컬)</text>
+  <text x="495" y="103" text-anchor="middle" font-size="10" fill="var(--t2)">node_  → SHM Node 가리킴 (포인터만 로컬)</text>
+  <text x="495" y="117" text-anchor="middle" font-size="10" fill="var(--t2)">is_node_owned_ = false (SHM 이므로 소유 안 함)</text>
+
+  <!-- Listener A -->
+  <rect x="350" y="142" width="136" height="72" rx="6" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="418" y="162" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple800)">Listener A</text>
+  <text x="418" y="177" text-anchor="middle" font-size="10" fill="var(--purple600)">read_p_ = 3 ← 로컬!</text>
+  <text x="418" y="191" text-anchor="middle" font-size="10" fill="var(--purple600)">buffer_ → RingBuffer</text>
+  <text x="418" y="205" text-anchor="middle" font-size="10" fill="var(--purple600)">listener_index_ = 0</text>
+
+  <!-- Listener B -->
+  <rect x="504" y="142" width="136" height="72" rx="6" fill="var(--teal50)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="572" y="162" text-anchor="middle" font-size="12" font-weight="500" fill="var(--teal800)">Listener B</text>
+  <text x="572" y="177" text-anchor="middle" font-size="10" fill="var(--teal600)">read_p_ = 1 ← 로컬!</text>
+  <text x="572" y="191" text-anchor="middle" font-size="10" fill="var(--teal600)">buffer_ → RingBuffer</text>
+  <text x="572" y="205" text-anchor="middle" font-size="10" fill="var(--teal600)">listener_index_ = 1</text>
+
+  <!-- SharedMemBuffer A -->
+  <rect x="350" y="230" width="136" height="60" rx="6" fill="var(--amber50)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="418" y="250" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">SharedMemBuffer (A)</text>
+  <text x="418" y="265" text-anchor="middle" font-size="10" fill="var(--amber600)">data_ → SHM 메시지</text>
+  <text x="418" y="278" text-anchor="middle" font-size="10" fill="var(--amber600)">RAII: 소멸 시 -processing</text>
+
+  <!-- SharedMemBuffer B -->
+  <rect x="504" y="230" width="136" height="60" rx="6" fill="var(--amber50)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="572" y="250" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">SharedMemBuffer (B)</text>
+  <text x="572" y="265" text-anchor="middle" font-size="10" fill="var(--amber600)">data_ → 같은 SHM 메시지</text>
+  <text x="572" y="278" text-anchor="middle" font-size="10" fill="var(--amber600)">RAII: 소멸 시 -processing</text>
+
+  <!-- ids_segments_ cache -->
+  <rect x="350" y="306" width="290" height="50" rx="6" fill="var(--bg2)" stroke="var(--b2)" stroke-width="0.5"/>
+  <text x="495" y="325" text-anchor="middle" font-size="11" font-weight="500" fill="var(--t1)">ids_segments_ 캐시 (unordered_map)</text>
+  <text x="495" y="340" text-anchor="middle" font-size="10" fill="var(--t2)">UUID → SegmentWrapper (한 번 열면 재사용)</text>
+  <text x="495" y="350" text-anchor="middle" font-size="10" fill="var(--t2)">여기서 데이터 SHM 핸들 관리</text>
+
+  <!-- PortNode listeners_status detail -->
+  <rect x="350" y="370" width="290" height="80" rx="6" fill="var(--blue50)" stroke="var(--blue200)" stroke-width="0.5"/>
+  <text x="495" y="390" text-anchor="middle" font-size="11" font-weight="500" fill="var(--blue800)">PortNode.listeners_status[1024]  ← SHM 안에 있음</text>
+  <text x="495" y="406" text-anchor="middle" font-size="10" fill="var(--blue600)">[0]: is_in_use=1, is_waiting=1, counter=5, is_processing=0</text>
+  <text x="495" y="420" text-anchor="middle" font-size="10" fill="var(--blue600)">[1]: is_in_use=1, is_waiting=0, is_processing=1, descriptor=...</text>
+  <text x="495" y="435" text-anchor="middle" font-size="10" fill="var(--t3)">[2..1023]: is_in_use=0</text>
+  <text x="495" y="447" text-anchor="middle" font-size="9" fill="var(--t3)">Listener의 listener_index_가 여기서 자기 슬롯을 가리킴</text>
+
+  <!-- Arrows: RingBuffer → SHM Node/Cells -->
+  <path d="M350 80 L308 145" fill="none" stroke="var(--blue400)" stroke-width="1" marker-end="url(#a)" stroke-dasharray="4 3"/>
+  <path d="M350 90 L308 168" fill="none" stroke="var(--purple400)" stroke-width="1" marker-end="url(#a)" stroke-dasharray="4 3"/>
+
+  <!-- Arrows: Listener → RingBuffer -->
+  <path d="M418 142 L495 128" fill="none" stroke="var(--purple400)" stroke-width="0.8" marker-end="url(#a)"/>
+  <path d="M572 142 L495 128" fill="none" stroke="var(--teal400)" stroke-width="0.8" marker-end="url(#a)"/>
+
+  <!-- Arrows: SharedMemBuffer → Data SHM -->
+  <path d="M418 290 L250 390" fill="none" stroke="var(--amber200)" stroke-width="1" marker-end="url(#a)"/>
+  <path d="M504 268 L308 390" fill="none" stroke="var(--amber200)" stroke-width="1" marker-end="url(#a)"/>
+
+  <!-- Arrow: Cell descriptor → BufferNode -->
+  <path d="M170 232 L170 306" fill="none" stroke="var(--blue400)" stroke-width="1.2" marker-end="url(#a)"/>
+  <text x="176" y="272" font-size="9" fill="var(--blue600)">offset로 조회</text>
+
+  <!-- Arrow: BufferNode → message data -->
+  <path d="M170 358 L170 366" fill="none" stroke="var(--teal400)" stroke-width="1.2" marker-end="url(#a)"/>
+</svg>
+
+<hr>
+
+<!-- ═══ 다이어그램 2: Node/Listener 생명주기 ═══ -->
+<h2>② Node와 Listener의 생성·삭제 과정</h2>
+
+<svg width="100%" viewBox="0 0 680 320" role="img">
+  <title>Node와 Listener 생명주기</title>
+  <desc>RingBuffer Node와 Listener의 생성 삭제 과정</desc>
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- step boxes -->
+  <!-- init_port -->
+  <rect x="20" y="30" width="148" height="56" rx="8" fill="var(--blue50)" stroke="var(--blue200)" stroke-width="0.5"/>
+  <text x="94" y="51" text-anchor="middle" font-size="12" font-weight="500" fill="var(--blue800)">init_port()</text>
+  <text x="94" y="66" text-anchor="middle" font-size="10" fill="var(--blue600)">포트 SHM 생성</text>
+  <text x="94" y="78" text-anchor="middle" font-size="10" fill="var(--blue600)">Node 초기화 (SHM 내)</text>
+
+  <line x1="168" y1="58" x2="196" y2="58" stroke="var(--t3)" stroke-width="0.8" marker-end="url(#a2)"/>
+
+  <!-- Port constructor -->
+  <rect x="197" y="30" width="150" height="56" rx="8" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="272" y="51" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple800)">Port 생성자</text>
+  <text x="272" y="66" text-anchor="middle" font-size="10" fill="var(--purple600)">RingBuffer C++ 객체 생성</text>
+  <text x="272" y="78" text-anchor="middle" font-size="10" fill="var(--purple600)">(로컬 힙, SHM 가리킴)</text>
+
+  <line x1="347" y1="58" x2="375" y2="58" stroke="var(--t3)" stroke-width="0.8" marker-end="url(#a2)"/>
+
+  <!-- create_listener -->
+  <rect x="376" y="30" width="150" height="56" rx="8" fill="var(--teal50)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="451" y="51" text-anchor="middle" font-size="12" font-weight="500" fill="var(--teal800)">create_listener()</text>
+  <text x="451" y="66" text-anchor="middle" font-size="10" fill="var(--teal600)">Listener 객체 생성 (로컬)</text>
+  <text x="451" y="78" text-anchor="middle" font-size="10" fill="var(--teal600)">read_p_ = 현재 write_p</text>
+
+  <line x1="526" y1="58" x2="554" y2="58" stroke="var(--t3)" stroke-width="0.8" marker-end="url(#a2)"/>
+
+  <!-- Node registered_listeners++ -->
+  <rect x="555" y="30" width="106" height="56" rx="8" fill="var(--amber50)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="608" y="51" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">SHM Node 갱신</text>
+  <text x="608" y="66" text-anchor="middle" font-size="10" fill="var(--amber600)">registered_</text>
+  <text x="608" y="78" text-anchor="middle" font-size="10" fill="var(--amber600)">listeners_++</text>
+
+  <!-- annotation boxes for registration -->
+  <rect x="20" y="110" width="640" height="52" rx="8" fill="var(--bg2)" stroke="var(--b2)" stroke-width="0.5"/>
+  <text x="340" y="129" text-anchor="middle" font-size="11" font-weight="500" fill="var(--t1)">등록 결과</text>
+  <text x="340" y="148" text-anchor="middle" font-size="11" fill="var(--t2)">새 Listener의 read_p_는 현재 write_p — 등록 이전 메시지는 받지 않음. 이후 push()부터 ref_counter에 포함됨.</text>
+
+  <!-- Unregister path -->
+  <text x="340" y="190" text-anchor="middle" font-size="11" font-weight="500" fill="var(--t3)">——— 해제 경로 ———</text>
+
+  <!-- unregister steps -->
+  <rect x="20" y="202" width="148" height="56" rx="8" fill="var(--coral50)" stroke="var(--coral200)" stroke-width="0.5"/>
+  <text x="94" y="223" text-anchor="middle" font-size="12" font-weight="500" fill="var(--coral800)">Listener 소멸자</text>
+  <text x="94" y="238" text-anchor="middle" font-size="10" fill="var(--coral600)">unregister_listener()</text>
+  <text x="94" y="250" text-anchor="middle" font-size="10" fill="var(--coral600)">호출</text>
+
+  <line x1="168" y1="230" x2="196" y2="230" stroke="var(--t3)" stroke-width="0.8" marker-end="url(#a2)"/>
+
+  <rect x="197" y="202" width="200" height="56" rx="8" fill="var(--coral50)" stroke="var(--coral200)" stroke-width="0.5"/>
+  <text x="297" y="223" text-anchor="middle" font-size="12" font-weight="500" fill="var(--coral800)">잔여 Cell ref_counter 정리</text>
+  <text x="297" y="238" text-anchor="middle" font-size="10" fill="var(--coral600)">read_p에서 write_p까지</text>
+  <text x="297" y="250" text-anchor="middle" font-size="10" fill="var(--coral600)">pop()을 반복 호출 (예외로 탈출)</text>
+
+  <line x1="397" y1="230" x2="425" y2="230" stroke="var(--t3)" stroke-width="0.8" marker-end="url(#a2)"/>
+
+  <rect x="426" y="202" width="114" height="56" rx="8" fill="var(--amber50)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="483" y="223" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">SHM Node 갱신</text>
+  <text x="483" y="238" text-anchor="middle" font-size="10" fill="var(--amber600)">registered_</text>
+  <text x="483" y="250" text-anchor="middle" font-size="10" fill="var(--amber600)">listeners_--</text>
+
+  <rect x="20" y="276" width="640" height="34" rx="8" fill="var(--bg2)" stroke="var(--b2)" stroke-width="0.5"/>
+  <text x="340" y="293" text-anchor="middle" font-size="11" fill="var(--t2)">해제 시 잔여 Cell을 강제 pop — ref_counter를 올바르게 감소시켜 다른 Listener가 영향받지 않도록 보장</text>
+  <text x="340" y="305" text-anchor="middle" font-size="10" fill="var(--t3)">주의: 이 과정은 lock-free가 아님 — 상위(Port)가 empty_cv_mutex로 보호</text>
+</svg>
+
+<hr>
+
+<!-- ═══ 다이어그램 3: 메시지 전체 흐름 ═══ -->
+<h2>③ 토픽 메시지 → 개별 구독자 전달 전체 흐름</h2>
+<p>Publisher Process 1개, Subscriber A/B가 같은 포트에 있는 경우 (같은 참가자, 두 DataReader). 포트는 구독자 참가자별로 하나입니다.</p>
+
+<svg width="100%" viewBox="0 0 680 610" role="img">
+  <title>메시지 전체 흐름</title>
+  <desc>토픽 메시지가 Publisher에서 두 Subscriber에게 전달되는 전체 과정</desc>
+  <defs>
+    <marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- Publisher column -->
+  <rect x="20" y="10" width="180" height="580" rx="10" fill="var(--amber50)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="110" y="34" text-anchor="middle" font-size="12" font-weight="500" fill="var(--amber800)">Publisher 프로세스</text>
+
+  <!-- Subscriber column -->
+  <rect x="480" y="10" width="184" height="580" rx="10" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="572" y="34" text-anchor="middle" font-size="12" font-weight="500" fill="var(--purple800)">Subscriber 프로세스</text>
+
+  <!-- SHM column -->
+  <rect x="216" y="10" width="252" height="580" rx="10" fill="var(--bg2)" stroke="var(--b2)" stroke-width="0.5"/>
+  <text x="342" y="34" text-anchor="middle" font-size="12" font-weight="500" fill="var(--t2)">공유 메모리 (SHM)</text>
+
+  <!-- step 1 -->
+  <rect x="30" y="52" width="160" height="44" rx="6" fill="var(--amber100)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="110" y="70" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">① alloc_buffer(msg_size)</text>
+  <text x="110" y="84" text-anchor="middle" font-size="10" fill="var(--amber600)">데이터 SHM에서 메모리 확보</text>
+
+  <!-- step 2 -->
+  <rect x="30" y="106" width="160" height="44" rx="6" fill="var(--amber100)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="110" y="124" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">② data() 포인터로 직접 쓰기</text>
+  <text x="110" y="138" text-anchor="middle" font-size="10" fill="var(--amber600)">RTPS 패킷 SHM에 직렬화</text>
+
+  <!-- data SHM box -->
+  <rect x="226" y="52" width="232" height="98" rx="6" fill="var(--teal50)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="342" y="74" text-anchor="middle" font-size="11" font-weight="500" fill="var(--teal800)">데이터 SHM</text>
+  <rect x="238" y="83" width="100" height="30" rx="4" fill="var(--teal100)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="288" y="100" text-anchor="middle" font-size="10" fill="var(--teal800)">BufferNode</text>
+  <text x="288" y="110" text-anchor="middle" font-size="9" fill="var(--teal600)">proc=1, enq=0</text>
+  <rect x="348" y="83" width="100" height="30" rx="4" fill="var(--coral50)" stroke="var(--coral200)" stroke-width="0.5"/>
+  <text x="398" y="100" text-anchor="middle" font-size="10" fill="var(--coral800)">메시지 바이트</text>
+  <text x="398" y="110" text-anchor="middle" font-size="9" fill="var(--coral600)">"Hello Topic!"</text>
+  <line x1="338" y1="98" x2="348" y2="98" stroke="var(--teal400)" stroke-width="0.8" marker-end="url(#a3)"/>
+
+  <!-- arrow: pub writes to data SHM -->
+  <path d="M190 128 L226 100" fill="none" stroke="var(--amber400)" stroke-width="1.2" marker-end="url(#a3)"/>
+  <text x="206" y="106" text-anchor="middle" font-size="9" fill="var(--amber600)">쓰기</text>
+
+  <!-- step 3 -->
+  <rect x="30" y="162" width="160" height="44" rx="6" fill="var(--amber100)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="110" y="180" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">③ Port::try_push(buffer)</text>
+  <text x="110" y="194" text-anchor="middle" font-size="10" fill="var(--amber600)">inc_enqueued_count</text>
+
+  <!-- step 4: push to ring buffer -->
+  <rect x="30" y="216" width="160" height="44" rx="6" fill="var(--amber100)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="110" y="234" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">④ RingBuffer::push()</text>
+  <text x="110" y="248" text-anchor="middle" font-size="10" fill="var(--amber600)">Cell에 descriptor 기록</text>
+
+  <!-- Port SHM box -->
+  <rect x="226" y="162" width="232" height="160" rx="6" fill="var(--blue50)" stroke="var(--blue200)" stroke-width="0.5"/>
+  <text x="342" y="182" text-anchor="middle" font-size="11" font-weight="500" fill="var(--blue800)">포트 SHM</text>
+
+  <!-- RingBuffer Node -->
+  <rect x="238" y="190" width="100" height="36" rx="4" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="288" y="206" text-anchor="middle" font-size="10" fill="var(--purple800)">RingBuffer::Node</text>
+  <text x="288" y="220" text-anchor="middle" font-size="9" fill="var(--purple600)">write_p=3 free_cells=5</text>
+
+  <!-- Cells -->
+  <rect x="348" y="190" width="98" height="36" rx="4" fill="var(--purple50)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="397" y="206" text-anchor="middle" font-size="10" fill="var(--purple800)">Cell[2]</text>
+  <text x="397" y="220" text-anchor="middle" font-size="9" fill="var(--purple600)">ref=2 | desc{uuid,off,0}</text>
+
+  <!-- empty_cv notify -->
+  <rect x="238" y="236" width="208" height="30" rx="4" fill="var(--bg3)" stroke="var(--b2)" stroke-width="0.5"/>
+  <text x="342" y="256" text-anchor="middle" font-size="10" fill="var(--t1)">empty_cv.notify_all()  →  Sub A·B 깨움</text>
+
+  <!-- PortNode listeners_status -->
+  <rect x="238" y="274" width="208" height="38" rx="4" fill="var(--blue100)" stroke="var(--blue200)" stroke-width="0.5"/>
+  <text x="342" y="290" text-anchor="middle" font-size="10" fill="var(--blue800)">listeners_status</text>
+  <text x="342" y="303" text-anchor="middle" font-size="9" fill="var(--blue600)">[0]:waiting=0 [1]:waiting=0</text>
+
+  <!-- arrows: pub → port SHM -->
+  <path d="M190 220 L226 230" fill="none" stroke="var(--blue400)" stroke-width="1.2" marker-end="url(#a3)"/>
+
+  <!-- step 5: notify -->
+  <rect x="30" y="270" width="160" height="44" rx="6" fill="var(--amber100)" stroke="var(--amber200)" stroke-width="0.5"/>
+  <text x="110" y="288" text-anchor="middle" font-size="11" font-weight="500" fill="var(--amber800)">⑤ empty_cv.notify</text>
+  <text x="110" y="302" text-anchor="middle" font-size="10" fill="var(--amber600)">unicast→notify_one</text>
+  <text x="110" y="312" text-anchor="middle" font-size="9" fill="var(--amber600)">multicast→notify_all</text>
+  <path d="M190 285 L226 258" fill="none" stroke="var(--blue400)" stroke-width="0.8" stroke-dasharray="4 2" marker-end="url(#a3)"/>
+
+  <!-- Sub: wait_pop wake -->
+  <rect x="492" y="162" width="160" height="44" rx="6" fill="var(--purple100)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="572" y="180" text-anchor="middle" font-size="11" font-weight="500" fill="var(--purple800)">⑥ wait_pop() 깨어남</text>
+  <text x="572" y="194" text-anchor="middle" font-size="10" fill="var(--purple600)">A·B 각자 독립적으로</text>
+
+  <!-- arrow: notify → sub wakeup -->
+  <path d="M458 252 L492 180" fill="none" stroke="var(--purple400)" stroke-width="1.2" marker-end="url(#a3)"/>
+
+  <!-- Sub: head() -->
+  <rect x="492" y="216" width="160" height="44" rx="6" fill="var(--purple100)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="572" y="234" text-anchor="middle" font-size="11" font-weight="500" fill="var(--purple800)">⑦ head() 확인</text>
+  <text x="572" y="248" text-anchor="middle" font-size="10" fill="var(--purple600)">read_p ≠ write_p → Cell 획득</text>
+
+  <!-- Sub: pop() -->
+  <rect x="492" y="270" width="160" height="44" rx="6" fill="var(--purple100)" stroke="var(--purple200)" stroke-width="0.5"/>
+  <text x="572" y="288" text-anchor="middle" font-size="11" font-weight="500" fill="var(--purple800)">⑧ global_listener_->pop()</text>
+  <text x="572" y="302" text-anchor="middle" font-size="10" fill="var(--purple600)">Cell.ref_counter-- (CAS)</text>
+  <text x="572" y="312" text-anchor="middle" font-size="9" fill="var(--purple600)">read_p_++ (로컬)</text>
+
+  <path d="M492 238 L458 225" fill="none" stroke="var(--purple400)" stroke-width="0.8" stroke-dasharray="4 2" marker-end="url(#a3)"/>
+
+  <!-- Sub: find_segment -->
+  <rect x="492" y="324" width="160" height="44" rx="6" fill="var(--teal50)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="572" y="342" text-anchor="middle" font-size="11" font-weight="500" fill="var(--teal800)">⑨ find_segment(uuid)</text>
+  <text x="572" y="356" text-anchor="middle" font-size="10" fill="var(--teal600)">데이터 SHM open (캐시)</text>
+  <text x="572" y="366" text-anchor="middle" font-size="9" fill="var(--teal600)">ids_segments_에서 핸들 획득</text>
+
+  <path d="M492 342 L458 100" fill="none" stroke="var(--teal400)" stroke-width="0.8" stroke-dasharray="4 2" marker-end="url(#a3)"/>
+
+  <!-- Sub: SharedMemBuffer -->
+  <rect x="492" y="378" width="160" height="44" rx="6" fill="var(--teal50)" stroke="var(--teal200)" stroke-width="0.5"/>
+  <text x="572" y="396" text-anchor="middle" font-size="11" font-weight="500" fill="var(--teal800)">⑩ SharedMemBuffer 생성</text>
+  <text x="572" y="410" text-anchor="middle" font-size="10" fill="var(--teal600)">data_ = SHM 메시지 포인터</text>
+  <text x="572" y="420" text-anchor="middle" font-size="9" fill="var(--teal600)">inc_processing_count()</text>
+
+  <!-- Sub: app reads -->
+  <rect x="492" y="432" width="160" height="44" rx="6" fill="var(--green50)" stroke="var(--green200)" stroke-width="0.5"/>
+  <text x="572" y="450" text-anchor="middle" font-size="11" font-weight="500" fill="var(--green800)">⑪ buffer->data() 접근</text>
+  <text x="572" y="464" text-anchor="middle" font-size="10" fill="var(--green600)">SHM 메시지 직접 읽기</text>
+  <text x="572" y="474" text-anchor="middle" font-size="9" fill="var(--green600)">복사 없음 (zero-copy)</text>
+
+  <!-- Sub: release -->
+  <rect x="492" y="486" width="160" height="44" rx="6" fill="var(--gray50)" stroke="var(--gray200)" stroke-width="0.5"/>
+  <text x="572" y="504" text-anchor="middle" font-size="11" font-weight="500" fill="var(--gray800)">⑫ SharedMemBuffer 소멸</text>
+  <text x="572" y="518" text-anchor="middle" font-size="10" fill="var(--gray600)">dec_processing_count()</text>
+  <text x="572" y="528" text-anchor="middle" font-size="9" fill="var(--gray600)">RAII 자동 처리</text>
+
+  <!-- vertical flow arrows sub -->
+  <line x1="572" y1="206" x2="572" y2="216" stroke="var(--purple400)" stroke-width="0.8" marker-end="url(#a3)"/>
+  <line x1="572" y1="260" x2="572" y2="270" stroke="var(--purple400)" stroke-width="0.8" marker-end="url(#a3)"/>
+  <line x1="572" y1="314" x2="572" y2="324" stroke="var(--teal400)" stroke-width="0.8" marker-end="url(#a3)"/>
+  <line x1="572" y1="368" x2="572" y2="378" stroke="var(--teal400)" stroke-width="0.8" marker-end="url(#a3)"/>
+  <line x1="572" y1="422" x2="572" y2="432" stroke="var(--green400)" stroke-width="0.8" marker-end="url(#a3)"/>
+  <line x1="572" y1="476" x2="572" y2="486" stroke="var(--gray400)" stroke-width="0.8" marker-end="url(#a3)"/>
+
+  <!-- key point: A and B are independent -->
+  <rect x="226" y="430" width="232" height="66" rx="6" fill="var(--bg3)" stroke="var(--b2)" stroke-width="0.5"/>
+  <text x="342" y="450" text-anchor="middle" font-size="11" font-weight="500" fill="var(--t1)">A와 B는 완전히 독립</text>
+  <text x="342" y="466" text-anchor="middle" font-size="10" fill="var(--t2)">read_p_ : 각자 로컬 변수</text>
+  <text x="342" y="480" text-anchor="middle" font-size="10" fill="var(--t2)">같은 Cell 참조 : ref_counter로 조율</text>
+  <text x="342" y="493" text-anchor="middle" font-size="10" fill="var(--t2)">실행 순서 : 무관, 빠른 쪽이 먼저</text>
+
+  <!-- pub vertical arrows -->
+  <line x1="110" y1="96" x2="110" y2="106" stroke="var(--amber600)" stroke-width="0.8" marker-end="url(#a3)"/>
+  <line x1="110" y1="150" x2="110" y2="162" stroke="var(--amber600)" stroke-width="0.8" marker-end="url(#a3)"/>
+  <line x1="110" y1="206" x2="110" y2="216" stroke="var(--amber600)" stroke-width="0.8" marker-end="url(#a3)"/>
+  <line x1="110" y1="260" x2="110" y2="270" stroke="var(--amber600)" stroke-width="0.8" marker-end="url(#a3)"/>
+</svg>
+
+<hr>
+
+<!-- ═══ 결론 정리 ═══ -->
+<h2>④ 핵심 정리</h2>
+
+<div class="note">
+  <strong>Cell에는 실제 데이터가 없습니다.</strong> Cell.data_ = BufferDescriptor = {UUID, offset, validity_id} — 20바이트짜리 포인터 역할만 합니다.
+  실제 RTPS 메시지 바이트는 Publisher 소유 데이터 SHM에 있고, Subscriber는 SHM을 직접 매핑해서 읽습니다 (zero-copy).
+</div>
+
+<div class="note">
+  <strong>RingBuffer::Node는 포트 SHM 안에</strong>, <strong>Listener C++ 객체는 각 프로세스 로컬 힙에</strong> 있습니다.
+  Node의 <code>pointer_</code>(write_p+free_cells)와 <code>registered_listeners_</code>는 SHM이므로 모든 프로세스가 공유합니다.
+  Listener의 <code>read_p_</code>는 로컬이므로 구독자마다 독립적입니다.
+</div>
+
+<div class="warn">
+  <strong>각 구독자에게 descriptor를 개별로 넣지 않습니다.</strong>
+  Cell 하나에 descriptor 하나를 넣고, <code>ref_counter = registered_listeners</code>로 "아직 안 읽은 수"를 세는 방식입니다.
+  각 구독자는 자신의 <code>read_p_</code>로 같은 Cell을 독립적으로 가리키다가 <code>pop()</code>으로 ref_counter를 1씩 감소시킵니다.
+  마지막 구독자가 pop하면 Cell 슬롯이 재사용 가능해집니다.
+</div>
+
+</body>
+</html>
