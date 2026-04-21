@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+:root {
+    --daemon-bg: #2c3e50;
+    --shm-bg: #f9fffb;
+    --shm-border: #27ae60;
+    --proc-bg: #ecf0f1;
+    --desc-color: #d35400;
+    --producer-color: #8e44ad;
+}
+
+body {
+    font-family: 'Pretendard', sans-serif;
+    background: #f0f2f5;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+.architecture {
+    background: white;
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    width: 1000px;
+}
+
+h2 { text-align: center; margin-bottom: 25px; }
+
+/* DDS */
+.dds-box {
+    text-align: center;
+    margin-bottom: 20px;
+    font-weight: bold;
+    color: #555;
+}
+
+/* Daemon */
+.daemon-box {
+    background: var(--daemon-bg);
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+}
+
+.daemon-box ul {
+    font-size: 0.85em;
+    margin-top: 10px;
+}
+
+/* SHM */
+.shm-layer {
+    border: 3px solid var(--shm-border);
+    background: var(--shm-bg);
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 50px;
+    position: relative;
+}
+
+.shm-label {
+    position: absolute;
+    top: -12px;
+    left: 15px;
+    background: white;
+    padding: 0 10px;
+    color: var(--shm-border);
+    font-weight: bold;
+}
+
+.topic-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.topic-info {
+    width: 140px;
+    font-weight: bold;
+    color: #2980b9;
+    font-size: 0.9em;
+}
+
+.slots {
+    display: flex;
+    gap: 10px;
+}
+
+.slot {
+    width: 80px;
+    height: 55px;
+    border: 1.5px solid var(--shm-border);
+    border-radius: 6px;
+    font-size: 0.7em;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+.active { background: #e8f5e9; }
+
+.ref-tag {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: red;
+    color: white;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+/* Processes */
+.process-layer {
+    display: flex;
+    gap: 20px;
+}
+
+.process-node {
+    flex: 1;
+    background: var(--proc-bg);
+    padding: 15px;
+    border-radius: 12px;
+    border: 2px solid #bdc3c7;
+    position: relative;
+}
+
+.process-node h4 { margin: 0; }
+
+.producer {
+    border-color: var(--producer-color);
+}
+
+/* descriptor */
+.delivery-line {
+    position: absolute;
+    top: -50px;
+    left: 50%;
+    height: 50px;
+    border-left: 2px dashed var(--desc-color);
+}
+
+.delivery-line::after {
+    content: "offset_ptr";
+    position: absolute;
+    top: 10px;
+    left: 5px;
+    font-size: 10px;
+    color: var(--desc-color);
+}
+
+/* extra */
+.note {
+    margin-top: 25px;
+    font-size: 0.85em;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="architecture">
+<h2>Zero-copy Crash-safe SHM + DDS Architecture</h2>
+
+<!-- DDS -->
+<div class="dds-box">
+    📡 DDS Network → Daemon (Ingress)
+</div>
+
+<!-- Daemon -->
+<div class="daemon-box">
+    <b>Daemon (RouDi-like)</b>
+    <ul>
+        <li>Chunk Pool / RingBuffer 관리</li>
+        <li>Topic별 subscriber registry</li>
+        <li>offset_ptr descriptor 전달</li>
+        <li>process crash 감지 및 cleanup</li>
+        <li>producer loan / publish 처리</li>
+    </ul>
+</div>
+
+<!-- SHM -->
+<div class="shm-layer">
+<div class="shm-label">Shared Memory (Boost)</div>
+
+<div class="topic-row">
+    <div class="topic-info">Topic A (P1,P2)</div>
+    <div class="slots">
+        <div class="slot active">Data<div class="ref-tag">Ref:2</div></div>
+        <div class="slot">Free</div>
+        <div class="slot">Free</div>
+    </div>
+</div>
+
+<div class="topic-row">
+    <div class="topic-info">Topic C (P2,P3)</div>
+    <div class="slots">
+        <div class="slot">Free</div>
+        <div class="slot active">Data<div class="ref-tag">Ref:2</div></div>
+        <div class="slot">Free</div>
+    </div>
+</div>
+
+<div style="text-align:center;font-size:0.75em;color:#27ae60;">
+    ※ payload + ref_count는 SHM에 존재 (zero-copy)
+</div>
+
+</div>
+
+<!-- Processes -->
+<div class="process-layer">
+
+<div class="process-node">
+    <div class="delivery-line"></div>
+    <h4>Consumer P1</h4>
+    Topic A 구독<br>
+    <small>read → ref--</small>
+</div>
+
+<div class="process-node producer">
+    <div class="delivery-line"></div>
+    <h4>Producer P2</h4>
+    Topic A,C<br>
+    <small>
+        loan → write → publish<br>
+        (SHM 직접 작성)
+    </small>
+</div>
+
+<div class="process-node">
+    <div class="delivery-line"></div>
+    <h4>Consumer P3</h4>
+    Topic C 구독<br>
+    <small>zero-copy read</small>
+</div>
+
+</div>
+
+<!-- 설명 -->
+<div class="note">
+<b>핵심 동작</b><br><br>
+
+1. DDS → Daemon → SHM에 데이터 1회 write<br>
+2. Daemon은 각 subscriber에게 offset_ptr만 전달<br>
+3. Consumer는 동기화 없이 직접 읽기 (zero-copy)<br>
+4. ref_count 감소 → 0 되면 chunk 재사용<br><br>
+
+<b>Producer 흐름</b><br>
+- daemon에게 chunk loan<br>
+- SHM에 직접 write<br>
+- publish → fan-out 전달<br><br>
+
+<b>Crash-safe</b><br>
+- 프로세스 종료 시 daemon이 ref 강제 감소<br>
+- loan된 chunk도 회수<br>
+</div>
+
+</div>
+
+</body>
+</html>
