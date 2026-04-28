@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h2>WebSocket Test (ws://)</h2>
+
+  <input id="msg" placeholder="메시지 입력" />
+  <button onclick="send()">Send</button>
+
+  <pre id="log"></pre>
+
+  <script>
+    const log = (msg) => {
+      document.getElementById("log").textContent += msg + "\n";
+    };
+
+    const ws = new WebSocket("ws://localhost:8080");
+
+    ws.onopen = () => {
+      log("connected");
+    };
+
+    ws.onmessage = (event) => {
+      log("received: " + event.data);
+    };
+
+    ws.onclose = () => {
+      log("closed");
+    };
+
+    ws.onerror = (err) => {
+      log("error");
+      console.error(err);
+    };
+
+    function send() {
+      const value = document.getElementById("msg").value;
+      ws.send(value);
+      log("sent: " + value);
+    }
+  </script>
+</body>
+</html>
