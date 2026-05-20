@@ -1,0 +1,13 @@
+llama-index
+llama-index-embeddings-huggingface
+llama-index-vector-stores-faiss
+langchain
+sentence-transformers
+transformers
+faiss-cpu
+rank-bm25
+python-docx
+docling
+torch
+numpy
+scikit-learn
