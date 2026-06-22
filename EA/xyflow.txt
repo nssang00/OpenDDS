@@ -1,0 +1,76 @@
+github.com/nssang00/ea_react 프로젝트에 DDS-JSON viewer 개선 코드를 반영해줘.
+
+참고 구현 파일:
+- dds-json-viewer-refactored.jsx
+
+주의:
+이 파일을 그대로 새 페이지나 거대한 컴포넌트로 복사하지 마라.
+ea_react에는 이미 Workbench, DiagramView, ModelDiagram, useDiagramModel, useDesignerStore 구조가 있으므로 그 구조를 유지하면서 필요한 아이디어만 반영해라.
+
+핵심 목표:
+- model과 xyflow diagram 변환 책임을 분리한다.
+- ReactFlow 중심 앱이 아니라 기존 model/store 중심 구조를 유지한다.
+- types/qos/domains/participants를 activeExplorerViewId에 따라 다르게 보여준다.
+- QoS 값 편집은 내부 useState가 아니라 기존 store의 updateQosProperty를 통해 반영한다.
+
+반영할 아이디어:
+1. dds-json-viewer-refactored.jsx의 normalizeDdsJson / viewModel 아이디어
+   - 단, ea_react에 이미 model 구조가 있다면 새 normalize 레이어를 억지로 만들지 말고 기존 model을 우선 사용한다.
+   - 필요하면 기존 model을 diagram builder가 쓰기 쉬운 형태로 변환하는 helper만 추가한다.
+
+2. dds-json-viewer-refactored.jsx의 diagram builder 분리 아이디어
+   - buildTypesGraph, buildDomainsGraph, buildParticipantsGraph 같은 순수 변환 함수를 ea_react 구조에 맞게 옮긴다.
+   - 위치는 우선 src/model/diagramBuilders.js 하나로 한다.
+   - 너무 많은 파일로 나누지 마라.
+
+3. dds-json-viewer-refactored.jsx의 QoS 편집 state 상위 관리 아이디어
+   - QosNode 내부에 const [values, setValues] 같은 실제 데이터 state를 만들지 마라.
+   - QoS 값은 useDesignerStore의 model이 source of truth다.
+   - 값 변경은 기존 updateQosProperty(id, entityKey, path, value)를 사용한다.
+   - QosNode 내부 state는 expand/collapse 같은 UI 상태에만 허용한다.
+
+구체 작업:
+1. src/hooks/useDiagramModel.js를 정리한다.
+   - hook 역할만 남긴다.
+   - useWorkbenchModel 또는 store에서 model, activeExplorerViewId, selectedElementId를 가져온다.
+   - src/model/diagramBuilders.js의 buildDiagram(model, activeExplorerViewId, selectedElementId)을 호출한다.
+   - useNodesState, useEdgesState, selectElement, updateQosProperty 연결은 기존처럼 유지한다.
+
+2. src/model/diagramBuilders.js를 새로 만든다.
+   - 다음 함수를 export한다.
+     - buildDiagram(model, activeExplorerViewId, selectedElementId)
+     - buildTypeDiagram(model)
+     - buildQosDiagram(model, selectedElementId)
+     - buildDomainDiagram(model)
+     - buildParticipantDiagram(model)
+   - 이 파일은 순수 변환 함수만 가진다.
+   - React hook, Zustand store, Ant Design component, React component를 import하지 않는다.
+   - 입력은 model과 필요한 id이고, 출력은 { nodes, edges }다.
+   - dds-json-viewer-refactored.jsx의 buildTypesGraph/buildDomainsGraph/buildParticipantsGraph 로직을 참고하되, ea_react의 기존 model shape에 맞게 작성한다.
+
+3. src/components/ModelDiagram.jsx는 ReactFlow 렌더링 역할만 유지한다.
+   - nodes/edges를 새로 만들지 않는다.
+   - nodeTypes와 노드 컴포넌트는 유지해도 된다.
+   - QosNode가 있다면 값 표시와 onChange만 담당하게 한다.
+   - QosNode가 값을 변경할 때는 props로 받은 updateQosProperty를 호출하게 한다.
+   - 실제 QoS 데이터 state를 QosNode 내부에 두지 않는다.
+
+4. 기존 workbenchPanels.config.js 구조는 유지한다.
+   - explorer의 Types/QoS/Domains/Participants 탭을 그대로 사용한다.
+   - workspace의 Diagram 탭에서 activeExplorerViewId에 따라 다른 diagram이 표시되게 한다.
+   - 새 DDS Viewer 페이지를 만들지 않는다.
+
+5. 스타일/의존성:
+   - 기존 Ant Design theme과 기존 CSS를 우선 사용한다.
+   - 새 패키지를 추가하지 않는다.
+   - @xyflow/react는 이미 있으므로 그대로 사용한다.
+
+완료 기준:
+- npm run build가 통과한다.
+- explorer에서 Types 선택 시 UML 스타일 type diagram이 표시된다.
+- explorer에서 QoS 선택 시 QoS 관련 diagram 또는 profile view가 표시된다.
+- explorer에서 Domains 선택 시 domain/topic 구조가 표시된다.
+- explorer에서 Participants 선택 시 publisher/subscriber 흐름이 표시된다.
+- QoS 값을 변경하면 store의 model이 갱신되고, Raw/QoS JSON view에도 반영된다.
+- useDiagramModel.js 안에 거대한 build 함수들이 남아있지 않다.
+- diagramBuilders.js는 UI 독립적인 순수 변환 파일이다.
