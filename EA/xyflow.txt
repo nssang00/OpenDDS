@@ -1,7 +1,7 @@
 github.com/nssang00/ea_react 프로젝트에 DDS-JSON viewer 개선 코드를 반영해줘.
 
 참고 구현 파일:
-- dds-json-viewer-refactored.jsx
+- https://github.com/nssang00/OpenDDS/blob/master/EA/dds-json-viewer-refactored.jsx
 
 주의:
 이 파일을 그대로 새 페이지나 거대한 컴포넌트로 복사하지 마라.
